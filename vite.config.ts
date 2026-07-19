@@ -1,6 +1,6 @@
 import adapter from '@sveltejs/adapter-auto';
 import { sveltekit } from '@sveltejs/kit/vite';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
 	plugins: [
@@ -16,5 +16,11 @@ export default defineConfig({
 			// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 			adapter: adapter()
 		})
-	]
+	],
+
+	test: {
+		// Engine tests are pure TypeScript with no DOM; adapters get their own path in V1-3.
+		include: ['src/lib/engine/**/*.test.ts'],
+		environment: 'node'
+	}
 });

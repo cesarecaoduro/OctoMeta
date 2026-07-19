@@ -1,5 +1,6 @@
 # OctoMeta — Product Requirements Document (v3)
-*The living engineering document. One mind, eight arms.*
+
+_The living engineering document. One mind, eight arms._
 
 **Status:** Approved for development kickoff · **Date:** 18 July 2026 · **Owner:** Founding team
 
@@ -10,13 +11,14 @@
 **OctoMeta.** An octopus keeps two-thirds of its neurons in its arms — eight limbs sensing and acting semi-independently, coordinated by one mind. That is precisely our architecture: independent projections (the grid, the report, the 3D viewer) each doing real work, coordinated by one typed dependency graph. **"Meta" is the graph above the views.** The name is not decoration; it states the architecture.
 
 **Vision statement (canonical, used verbatim in the hero):**
+
 > OctoMeta is the living engineering document. Your calculations, your report, and your 3D model are arms of a single intelligent graph — edit anywhere, and every arm follows.
 
 ---
 
 ## 1. Problem
 
-Civil/structural engineers split every project across (a) spreadsheets where logic hides behind cell references and unit errors are silent, (b) Word/PDF calc packages disconnected from the numbers that produced them, and (c) CAD/BIM models manually reconciled with the calcs. Recalculation is order-dependent with hidden state (the Jupyter/Excel failure mode — large-scale studies found only ~24% of Jupyter notebooks re-execute without error and ~4% reproduce their results), provenance is weak, and the calc is never the deliverable — it is *transcribed* into one. Industry estimates put ~40% of engineering time into finding, rebuilding, and reconciling calculations.
+Civil/structural engineers split every project across (a) spreadsheets where logic hides behind cell references and unit errors are silent, (b) Word/PDF calc packages disconnected from the numbers that produced them, and (c) CAD/BIM models manually reconciled with the calcs. Recalculation is order-dependent with hidden state (the Jupyter/Excel failure mode — large-scale studies found only ~24% of Jupyter notebooks re-execute without error and ~4% reproduce their results), provenance is weak, and the calc is never the deliverable — it is _transcribed_ into one. Industry estimates put ~40% of engineering time into finding, rebuilding, and reconciling calculations.
 
 ## 2. Product thesis
 
@@ -24,18 +26,18 @@ Civil/structural engineers split every project across (a) spreadsheets where log
 
 **Jupyter-style, with the bug fixed.** The document reads top-to-bottom like a computational notebook — visible inputs and outputs, no hidden state — but evaluation order is the topological order of the graph, never the position of a block on the page (the Observable/Marimo principle applied to engineering values).
 
-**The report is the deliverable.** Paginated PDF *and* schema-valid IFC4X3 export from the same graph. The calc document and the BIM model are one artifact.
+**The report is the deliverable.** Paginated PDF _and_ schema-valid IFC4X3 export from the same graph. The calc document and the BIM model are one artifact.
 
 **AI-ready, not AI-led.** Every edit — human or future agent — flows through one typed mutation API with provenance fields reserved from day one. AI features ship late (M6) into pre-built hooks.
 
 ## 3. Personas & Jobs To Be Done
 
-| Persona | Core job |
-|---|---|
-| **Priya — design engineer** (primary) | "Produce a defensible, unit-safe calc package + model faster, without re-authoring across tools." |
-| **Marcus — checker/verifier** | "Show me how any number was derived, who authored it, and that nothing is stale." |
-| **Aisha — BIM/digital lead** | "Give me ISO 19650-style auditability and IFC4X3 interoperability from the calc itself." |
-| **Tom — computational designer** (secondary) | "Geometry from parameters, inside a documentable, checkable calc." |
+| Persona                                      | Core job                                                                                          |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **Priya — design engineer** (primary)        | "Produce a defensible, unit-safe calc package + model faster, without re-authoring across tools." |
+| **Marcus — checker/verifier**                | "Show me how any number was derived, who authored it, and that nothing is stale."                 |
+| **Aisha — BIM/digital lead**                 | "Give me ISO 19650-style auditability and IFC4X3 interoperability from the calc itself."          |
+| **Tom — computational designer** (secondary) | "Geometry from parameters, inside a documentable, checkable calc."                                |
 
 ## 4. Success metrics
 
@@ -55,31 +57,31 @@ Civil/structural engineers split every project across (a) spreadsheets where log
 
 ## 6. Tech stack
 
-| Layer | Choice | License | Note |
-|---|---|---|---|
-| Framework | SvelteKit + Svelte 5 (runes), TypeScript | MIT | Mandatory |
-| Grid | Univer OSS (`@univerjs`, pin version) | Apache-2.0 | Pre-1.0 API churn → adapter wrap |
-| Editor | TipTap + ProseMirror + `svelte-tiptap`/`edra` patterns | MIT | Svelte NodeViews |
-| Math | KaTeX (render) + MathLive (edit) | MIT | |
-| Geometry | `andymai/occt-wasm` (exact) + `manifold-3d` (preview) | LGPL-wasm / Apache-2.0 | Behind `GeometryKernel`; verify browser matrix in M0 (tail-calls now Baseline — README's "no Firefox" note likely stale) |
-| Viewer | Three.js | MIT | Handle-keyed mesh diff/swap, bidirectional picking |
-| Units | Custom Quantity layer seeded from js-quantities / mathjs units | MIT / Apache-2.0 | |
-| Backend | Convex | — | SvelteKit support experimental → M0 spike; abstract persistence |
-| IFC | Custom "ifc-lite" IFC4X3 writer (reference web-ifc) | — | Validation harness in CI |
-| Tooling | pnpm + Turborepo, Vitest + Playwright | MIT | |
-| Deferred | Better Auth (M5), E2B sandbox (M6), MCP server (M6) | — | Hooks only, early |
+| Layer     | Choice                                                         | License                | Note                                                                                                                     |
+| --------- | -------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Framework | SvelteKit + Svelte 5 (runes), TypeScript                       | MIT                    | Mandatory                                                                                                                |
+| Grid      | Univer OSS (`@univerjs`, pin version)                          | Apache-2.0             | Pre-1.0 API churn → adapter wrap                                                                                         |
+| Editor    | TipTap + ProseMirror + `svelte-tiptap`/`edra` patterns         | MIT                    | Svelte NodeViews                                                                                                         |
+| Math      | KaTeX (render) + MathLive (edit)                               | MIT                    |                                                                                                                          |
+| Geometry  | `andymai/occt-wasm` (exact) + `manifold-3d` (preview)          | LGPL-wasm / Apache-2.0 | Behind `GeometryKernel`; verify browser matrix in M0 (tail-calls now Baseline — README's "no Firefox" note likely stale) |
+| Viewer    | Three.js                                                       | MIT                    | Handle-keyed mesh diff/swap, bidirectional picking                                                                       |
+| Units     | Custom Quantity layer seeded from js-quantities / mathjs units | MIT / Apache-2.0       |                                                                                                                          |
+| Backend   | Convex                                                         | —                      | SvelteKit support experimental → M0 spike; abstract persistence                                                          |
+| IFC       | Custom "ifc-lite" IFC4X3 writer (reference web-ifc)            | —                      | Validation harness in CI                                                                                                 |
+| Tooling   | pnpm + Turborepo, Vitest + Playwright                          | MIT                    |                                                                                                                          |
+| Deferred  | Better Auth (M5), E2B sandbox (M6), MCP server (M6)            | —                      | Hooks only, early                                                                                                        |
 
 ## 7. Milestones
 
-| # | Name | Dur. | Exit criteria |
-|---|---|---|---|
-| **M0** | De-risk spikes | 3 wk | Univer-in-TipTap-in-SvelteKit renders + Convex round-trip; occt-wasm verified in Chrome/Firefox/Safari; Facade array-spill behavior determined |
+| #      | Name                              | Dur. | Exit criteria                                                                                                                                                                  |
+| ------ | --------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **M0** | De-risk spikes                    | 3 wk | Univer-in-TipTap-in-SvelteKit renders + Convex round-trip; occt-wasm verified in Chrome/Firefox/Safari; Facade array-spill behavior determined                                 |
 | **M1** | Graph core + units + grid binding | 5 wk | Mutation API sole write path; topo + content-hash recalc; `#UNIT!`/`#CYCLE!`; named-range → NamedOutputNode; provenance/pending fields serialized (dormant); function registry |
-| **M2** | Geometry + viewer | 5 wk | Kernels behind interface; handle store + sweep; **1,000-recalc no-leak + <16 ms gate**; viewer with bidirectional picking |
-| **M3** | Document canvas + chips + PDF | 5 wk | Full block editor; live value chips; show-steps; provenance inspector (read-only); paginated PDF |
-| **M4** | Polish + templates + IFC | 5 wk | 2,000-node perf pass; beam/column/footing templates; **schema-valid IFC4X3** |
-| **M5** | Pre-beta: collaboration + auth | 5 wk | Better Auth; sharing; concurrent editing over the mutation API |
-| **M6** | Roadmap: AI + sandboxed functions | open | Propose/validate/commit on pending-change slot; ambient suggestions; MCP meta-tools; user functions via shared registry |
+| **M2** | Geometry + viewer                 | 5 wk | Kernels behind interface; handle store + sweep; **1,000-recalc no-leak + <16 ms gate**; viewer with bidirectional picking                                                      |
+| **M3** | Document canvas + chips + PDF     | 5 wk | Full block editor; live value chips; show-steps; provenance inspector (read-only); paginated PDF                                                                               |
+| **M4** | Polish + templates + IFC          | 5 wk | 2,000-node perf pass; beam/column/footing templates; **schema-valid IFC4X3**                                                                                                   |
+| **M5** | Pre-beta: collaboration + auth    | 5 wk | Better Auth; sharing; concurrent editing over the mutation API                                                                                                                 |
+| **M6** | Roadmap: AI + sandboxed functions | open | Propose/validate/commit on pending-change slot; ambient suggestions; MCP meta-tools; user functions via shared registry                                                        |
 
 ## 8. Task graph (IDs → depends-on)
 
@@ -93,17 +95,17 @@ Deferred: AI-1..3 (M1-2, M1-7); SANDBOX-1 (M1-8).
 
 ## 9. Risk register
 
-| Risk | L | I | Mitigation |
-|---|---|---|---|
-| Univer pre-1.0 API churn | H | M | Pin, adapter-wrap, swappable grid |
-| Facade array-spill undocumented | M | M | M0-5 spike; fall back to plugin `BaseFunction` returning `ArrayValueObject` |
-| WASM memory leaks | M | H | Sweep/GC per recalc; M2-6 hard gate; `Symbol.dispose` discipline |
-| occt-wasm browser matrix | M | H | M0-4 empirical test; manifold-only fallback path |
-| ProseMirror-in-Svelte friction | M | M | `edra` patterns; logic in TS, views in Svelte |
-| Recalc→mesh perf | M | H | Content-hash memoization; kernel in worker; preview-then-exact |
-| Convex↔SvelteKit maturity | M | M | M0-3 spike; persistence abstraction |
-| IFC correctness | M | H | Validate vs web-ifc reader; CI regression corpus |
-| Open Calc Studio ships graph+3D | M | M | Speed on IFC + web + spreadsheet UX; monitor |
+| Risk                            | L   | I   | Mitigation                                                                                                             |
+| ------------------------------- | --- | --- | ---------------------------------------------------------------------------------------------------------------------- |
+| Univer pre-1.0 API churn        | H   | M   | Pin exact (0.25.1), adapter-wrap, swappable grid; known landmines recorded in docs/v1-0-findings.md                     |
+| Facade array-spill undocumented | —   | —   | **Resolved by V1-0-3 spike:** Facade functions returning 2D arrays spill natively; no `BaseFunction` fallback needed    |
+| WASM memory leaks (V2)          | M   | H   | Sweep/GC per recalc; V2-2 hard gate; `Symbol.dispose` discipline                                                       |
+| occt-wasm browser matrix (V2)   | M   | H   | V2-0 empirical test; manifold-only fallback path                                                                       |
+| ProseMirror-in-Svelte friction  | L   | M   | **De-risked by V1-0-2 spike:** plain-JS NodeView mounting Svelte 5 `mount()`; logic in TS, views in Svelte             |
+| Recalc→mesh perf (V2)           | M   | H   | Content-hash memoization; kernel in worker; preview-then-exact                                                         |
+| Convex↔SvelteKit maturity       | L   | M   | De-risked by the live waitlist backend; persistence abstraction (V1-4-1)                                               |
+| IFC correctness (V2)            | M   | H   | Validate vs web-ifc reader; CI regression corpus                                                                       |
+| Open Calc Studio ships graph+3D | M   | M   | Speed on IFC + web + spreadsheet UX; monitor                                                                           |
 
 ## 10. Non-functional requirements
 

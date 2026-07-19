@@ -2,11 +2,13 @@
 
 *What is actually built, where it lives, and the decisions behind it. Updated as the codebase grows; the forward-looking plan lives in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) (with [PRD.md](PRD.md) for the why).*
 
-**Last updated:** 19 July 2026 · waitlist backend live on Convex + Resend; V1/V2/V3 version arc adopted (IMPLEMENTATION_PLAN.md v3).
+**Last updated:** 19 July 2026 · V1-0 de-risk spikes complete (GO, see [docs/v1-0-findings.md](docs/v1-0-findings.md)); waitlist backend live on Convex + Resend; V1/V2/V3 version arc adopted (IMPLEMENTATION_PLAN.md v3).
 
 ## Current state
 
-A SvelteKit + Svelte 5 (runes) + TypeScript app containing the marketing landing page, with a **live Convex backend for the waitlist**: idempotent `waitlist.join` mutation, confirmation emails through the Resend component, a delivery-status webhook, and a cleanup cron. No product tables (documents/graph) and no engine code exist yet; V1 work starts with IMPLEMENTATION_PLAN.md V1-0-1 (scaffold) and V1-1-1 (engine types), which can run in parallel.
+A SvelteKit + Svelte 5 (runes) + TypeScript app containing the marketing landing page, with a **live Convex backend for the waitlist**: idempotent `waitlist.join` mutation, confirmation emails through the Resend component, a delivery-status webhook, and a cleanup cron.
+
+**V1-0 is done.** The workspace is scaffolded (exact-pinned Univer 0.25.1 + TipTap 3.28.0, Vitest on `src/lib/engine/`, Playwright e2e against the production build) and both Univer spikes passed: a Univer sheet lives inside a TipTap NodeView (SSR-safe, focus-isolated, move-safe, serializable), and Facade custom functions spill 2D arrays natively with tagged strings as the `TypedValue` display path. Findings, landmines, and the spike-route promotion plan are in `docs/v1-0-findings.md`. No product tables and no engine code yet; next is V1-1-1 (engine types).
 
 ## Stack in use
 
@@ -16,6 +18,9 @@ A SvelteKit + Svelte 5 (runes) + TypeScript app containing the marketing landing
 | Backend | Convex (`convex` + `convex-svelte`) | Waitlist mutation/schema live; product tables not started |
 | Email | Resend via `@convex-dev/resend` | Confirmation email + delivery webhook live |
 | Package manager | pnpm (single package; Turborepo deferred until there's more than one) | In use |
+| Calc grid | Univer OSS via `@univerjs/presets` + `@univerjs/preset-sheets-core` **0.25.1 exact** | Spiked (V1-0-2/3); adapter is V1-3-1 |
+| Block editor | TipTap `@tiptap/{core,starter-kit,pm}` **3.28.0 exact** | Spiked (V1-0-2); document editor is V1-5 |
+| Tests | Vitest 4 (`src/lib/engine/**/*.test.ts`, node env) · Playwright (`e2e/`, prod build, `workers: 1`) | In use (`pnpm test`, `pnpm test:e2e`) |
 | Adapter | `@sveltejs/adapter-auto` | Placeholder; deployment target undecided |
 | Fonts | Inter, Inter Tight, JetBrains Mono via Google Fonts (`src/app.html`) | In use |
 
@@ -33,6 +38,9 @@ src/
     crons.ts                Resend component cleanup schedule
     _generated/             generated stubs
   lib/
+    engine/                   (V1-1+) the typed graph — pure TS, zero UI imports; README stub + test harness
+    adapters/                 (V1-3) third-party bridges; only place allowed to import @univerjs; README stub
+    persistence/              (V1-4) the only path to Convex for UI code; README stub
     styles/
       tokens.css            design tokens, 1:1 with DESIGN.md §3, the single source of truth
       base.css              resets, type primitives (.eyebrow/.sub/.mono), .chip/.err,
@@ -55,8 +63,12 @@ src/
   routes/
     +layout.svelte          setupConvex(PUBLIC_CONVEX_URL) + global CSS imports
     +page.svelte            landing page composition + section-level styles
+    spike/                  V1-0 spike routes (no nav links; kept until V1-3-1 promotes them,
+                            see docs/v1-0-findings.md): index + univer-in-tiptap NodeView spike
+e2e/                        Playwright specs (spike proofs run against `vite preview`)
 static/favicon.svg          the mark
 docs/references/            original static mockups (index.html is the landing reference)
+docs/v1-0-findings.md       V1-0 decision memo: spike outcomes, Univer landmines, go/no-go
 ```
 
 ## Decisions taken
@@ -71,10 +83,12 @@ docs/references/            original static mockups (index.html is the landing r
 - **Convex functions live in `src/convex/`** (`convex.json`), per the Convex Svelte quickstart. Dev deployment: project `octometa`, deployment `amiable-leopard-466` (URLs in `.env.local`, gitignored).
 - **Motion policy enforced globally:** `prefers-reduced-motion` disables all animation *and* the demo auto-loops (checked in JS in `HeroDemo`/`GraphDiagram`).
 
+- **V1-0 spikes: GO** (19 Jul 2026, `docs/v1-0-findings.md`): Univer-in-TipTap works (plain-JS NodeView mounting Svelte 5 `mount()`; `stopEvent`/`ignoreMutation` for isolation; snapshot store keyed by `sid` because block moves recreate the view). Custom functions register through `univerAPI.getFormula().registerFunction` **after lifecycle `Steady`** (earlier throws a redi DI error); 2D returns spill natively; rich values are impossible so `TypedValue` display uses tagged strings intercepted by the adapter. Spike routes stay until V1-3-1 promotes their patterns, then get deleted.
+
 ## Verification
 
-`pnpm check` (0 errors/warnings), `pnpm build` passes, page SSRs correctly at `/`.
+`pnpm check` (0 errors/warnings), `pnpm build` passes, page SSRs correctly at `/`, `pnpm test` (engine harness), `pnpm test:e2e` (spike proofs incl. SSR/hydration, focus isolation, move survival, serialize/restore, custom functions, spill).
 
 ## Next (not started)
 
-V1-0 from IMPLEMENTATION_PLAN.md v3: workspace scaffold + dependency pinning (V1-0-1), Univer-in-TipTap NodeView spike (V1-0-2), Facade custom-function/spill spike (V1-0-3), decision memo (V1-0-4). Engine work (V1-1-1 onward) starts in parallel; nothing in the engine waits on the spikes. The occt-wasm spike moved to V2-0.
+V1-1 from IMPLEMENTATION_PLAN.md v3: engine types (V1-1-1), then units (V1-1-2) and formula AST (V1-1-3) in parallel lanes, function registry (V1-1-4). Pure TypeScript under `src/lib/engine/`, zero UI imports. The occt-wasm spike stays moved to V2-0.
