@@ -7,16 +7,19 @@ import { internalMutation } from './_generated/server';
  * through this instance so queueing, batching, retries, and idempotency are
  * handled in one place.
  *
- * testMode is left at its default (true) until a sending domain is verified
- * in Resend: only `*@resend.dev` test addresses can be enqueued. Flip it to
- * false once the domain is live and RESEND_API_KEY is set in the deployment.
+ * octometa.app is verified in Resend, so testMode is off: real addresses
+ * can be enqueued.
  */
 export const resend: Resend = new Resend(components.resend, {
+	testMode: false,
 	onEmailEvent: internal.emails.handleEmailEvent
 });
 
-/** Sender used for all transactional email until the real domain is verified. */
-export const FROM_ADDRESS = 'OctoMeta <onboarding@resend.dev>';
+/** Sender used for all transactional email. */
+export const FROM_ADDRESS = 'OctoMeta <waitlist@octometa.app>';
+
+/** Recipient for internal notifications (new waitlist signups). */
+export const NOTIFY_ADDRESS = 'cesare.caoduro@gmail.com';
 
 /**
  * Webhook-driven status updates (delivered, bounced, complained, …).

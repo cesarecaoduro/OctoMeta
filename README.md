@@ -50,12 +50,9 @@ vercel deploy --prod --archive=tgz
 
 All email goes through the Convex Resend component: `src/convex/emails.ts` holds the shared client, `waitlist.join` queues the confirmation email, `http.ts` mounts the delivery webhook, and `crons.ts` cleans up old component data.
 
-Until a sending domain is verified, `testMode` stays on (only `*@resend.dev` addresses can be enqueued) and signups save fine without email. To go live, set on the Convex deployment:
+`octometa.app` is verified in Resend (auto-verified via the Resend↔Vercel integration) and `testMode` is off, so real addresses can be enqueued. `RESEND_API_KEY` is set on both the dev and prod Convex deployments. A webhook (`email.bounced`, `.complained`, `.delivered`, `.delivery_delayed`, `.failed`, `.sent`) points at `https://amiable-leopard-466.convex.site/resend-webhook` (the dev deployment, since that's what the live site currently runs on) with `RESEND_WEBHOOK_SECRET` set to match on the dev deployment only.
 
-- `RESEND_API_KEY`: from the Resend dashboard
-- `RESEND_WEBHOOK_SECRET`: create a webhook pointing at `https://<deployment>.convex.site/resend-webhook` with `email.*` events enabled
-
-then set `testMode: false` in `src/convex/emails.ts` and update `FROM_ADDRESS` to the verified domain.
+When production is provisioned (`npx convex deploy`, then repoint `PUBLIC_CONVEX_URL`/`PUBLIC_CONVEX_SITE_URL` in Vercel), create a second Resend webhook pointing at the prod `*.convex.site/resend-webhook` URL and set its own `RESEND_WEBHOOK_SECRET` on the prod deployment with `npx convex env set RESEND_WEBHOOK_SECRET <value> --prod`.
 
 ## Project documents
 

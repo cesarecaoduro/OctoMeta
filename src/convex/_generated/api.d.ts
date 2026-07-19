@@ -9,6 +9,7 @@
  */
 
 import type * as crons from "../crons.js";
+import type * as emailTemplates from "../emailTemplates.js";
 import type * as emails from "../emails.js";
 import type * as http from "../http.js";
 import type * as waitlist from "../waitlist.js";
@@ -21,6 +22,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   crons: typeof crons;
+  emailTemplates: typeof emailTemplates;
   emails: typeof emails;
   http: typeof http;
   waitlist: typeof waitlist;

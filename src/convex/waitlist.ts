@@ -1,6 +1,12 @@
 import { v } from 'convex/values';
 import { mutation } from './_generated/server';
-import { FROM_ADDRESS, resend } from './emails';
+import { FROM_ADDRESS, NOTIFY_ADDRESS, resend } from './emails';
+import {
+	waitlistConfirmationHtml,
+	waitlistConfirmationText,
+	waitlistNotificationHtml,
+	waitlistNotificationText
+} from './emailTemplates';
 
 /**
  * Join the early-access waitlist. Idempotent on email: signing up twice
@@ -40,44 +46,34 @@ export const join = mutation({
 			? (await ctx.db.patch(existing._id, fields), existing._id)
 			: await ctx.db.insert('waitlist', { email, ...fields });
 
-		// Only send the confirmation once per address.
+		// Only send the confirmation (and admin notification) once per address.
 		if (!existing?.confirmationEmailId) {
 			try {
 				const emailId = await resend.sendEmail(ctx, {
 					from: FROM_ADDRESS,
 					to: email,
 					subject: "You're on the OctoMeta waitlist",
-					html: confirmationHtml(fields.name),
-					text: confirmationText(fields.name)
+					html: waitlistConfirmationHtml(fields.name),
+					text: waitlistConfirmationText(fields.name)
 				});
 				await ctx.db.patch(id, { confirmationEmailId: emailId, confirmationStatus: 'queued' });
 			} catch {
 				// Test mode or missing API key: the signup itself must never fail.
+			}
+
+			try {
+				await resend.sendEmail(ctx, {
+					from: FROM_ADDRESS,
+					to: NOTIFY_ADDRESS,
+					subject: `New waitlist signup: ${email}`,
+					html: waitlistNotificationHtml({ email, ...fields }),
+					text: waitlistNotificationText({ email, ...fields })
+				});
+			} catch {
+				// Best-effort: a failed admin notification must never fail the signup.
 			}
 		}
 
 		return { id };
 	}
 });
-
-function confirmationHtml(name?: string): string {
-	const greeting = name ? `Hi ${name},` : 'Hi,';
-	return `
-<p>${greeting}</p>
-<p>You're on the OctoMeta waitlist. A new node just entered the graph.</p>
-<p>Testing invites roll out in cohorts, prioritised by role and use case.
-We'll email you once when your invite is ready. Nothing else.</p>
-<p>— The OctoMeta team</p>`.trim();
-}
-
-function confirmationText(name?: string): string {
-	const greeting = name ? `Hi ${name},` : 'Hi,';
-	return `${greeting}
-
-You're on the OctoMeta waitlist. A new node just entered the graph.
-
-Testing invites roll out in cohorts, prioritised by role and use case.
-We'll email you once when your invite is ready. Nothing else.
-
-— The OctoMeta team`;
-}

@@ -147,7 +147,8 @@
 		</div>
 	{:else}
 		<div class="wl-success" aria-live="polite" bind:this={successEl}>
-			<span class="mark"><Logo size={52} /></span>
+			<span class="mark-badge"><Logo size={22} /></span>
+			<span class="eyebrow">Confirmed</span>
 			<h3>You're on the list.</h3>
 			<p>A new node just entered the graph. We'll email you when your testing invite is ready.</p>
 		</div>
@@ -251,19 +252,34 @@
 	}
 	.wl-success {
 		text-align: center;
-		padding: var(--s4) 0;
+		padding: var(--s3) 0;
+		display: grid;
+		justify-items: center;
+		animation: rise 0.7s var(--ease) both;
 	}
-	.wl-success .mark {
-		display: inline-block;
-		color: var(--accent);
-		margin-bottom: var(--s2);
+	.wl-success .mark-badge {
+		display: grid;
+		place-items: center;
+		width: 72px;
+		height: 72px;
+		border-radius: 50%;
+		background: var(--accent-dim);
+		color: var(--ink);
+		margin-bottom: var(--s3);
+	}
+	.wl-success .mark-badge :global(svg) {
+		transform: scale(1.6);
+	}
+	.wl-success .eyebrow {
+		margin-bottom: var(--s1);
 	}
 	.wl-success h3 {
-		font-size: 1.3rem;
+		font-size: 1.6rem;
 	}
 	.wl-success p {
 		color: var(--grey-1);
-		margin-top: var(--s1);
+		margin-top: var(--s2);
+		max-width: 40ch;
 	}
 	@media (max-width: 900px) {
 		.wl-grid {
