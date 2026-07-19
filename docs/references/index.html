@@ -166,6 +166,28 @@ input[type=range]::-moz-range-thumb{width:12px; height:12px; border-radius:50%; 
 .ai-strip p{color:var(--grey-1); max-width:62ch}
 .audience{color:var(--grey-1); max-width:62ch}
 
+/* pain section */
+.pain-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:var(--s2); margin-top:var(--s4)}
+.pain{border:1px solid var(--grey-3); border-radius:12px; background:var(--surface); padding:var(--s3)}
+.pain .artifact{font-family:var(--font-mono); font-size:.78rem; background:var(--grey-4);
+  border:1px solid var(--grey-3); border-radius:8px; padding:12px 14px; overflow-x:auto; white-space:nowrap}
+.pain .artifact .bad{color:var(--error); font-weight:500}
+.pain .artifact .dimmed{color:var(--grey-2)}
+.pain h3{margin-top:var(--s2); font-size:1.02rem}
+.pain p{font-size:.88rem; color:var(--grey-1); margin-top:8px}
+.stats{display:flex; gap:var(--s5); flex-wrap:wrap; margin-top:var(--s4); padding-top:var(--s3); border-top:1px solid var(--grey-3)}
+.stat .n{font-family:var(--font-display); font-weight:600; font-size:2.1rem; letter-spacing:-.02em}
+.stat .l{font-size:.8rem; color:var(--grey-2); max-width:24ch; margin-top:4px}
+.pain-pivot{margin-top:var(--s4); font-size:1.05rem; color:var(--ink); max-width:52ch}
+.pain-pivot .chip{vertical-align:baseline}
+@media(max-width:900px){.pain-grid{grid-template-columns:1fr}}
+
+/* connectivity */
+.conn-badges{display:flex; flex-wrap:wrap; gap:10px; margin-top:var(--s3)}
+.conn-badge{font-family:var(--font-mono); font-size:.72rem; padding:6px 12px;
+  border:1px solid var(--grey-3); border-radius:999px; color:var(--grey-1); white-space:nowrap}
+.conn-badge.hi{border-color:transparent; background:var(--accent-dim); color:var(--accent)}
+
 /* waitlist */
 .waitlist{margin:var(--s6) 0; padding:var(--s5) var(--s4); border:1px solid var(--grey-3);
   border-radius:16px; background:var(--surface)}
@@ -270,41 +292,41 @@ footer{border-top:1px solid var(--grey-3); padding:var(--s4) 0 var(--s5); margin
     </div>
 
     <!-- ============ SIGNATURE DEMO ============ -->
-    <div class="demo" id="demo" aria-label="Live demo: edit beam.span and watch the moment, the report text, and the 3D beam recompute">
+    <div class="demo" id="demo" aria-label="Live demo: edit footing.width and watch the bearing pressure, the report text, and the 3D footing recompute">
       <div class="demo-chrome">
         <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-        <span class="title">girder-check.octo — edit once, every arm follows</span>
+        <span class="title">footing-check.octo — edit once, every arm follows</span>
       </div>
       <div class="demo-body" id="demoBody">
         <svg class="deps" id="depsSvg" aria-hidden="true"></svg>
         <div class="demo-left">
           <div class="demo-prose">
             <span class="eyebrow blocklabel">§ 3.2 · Report</span>
-            For the simply-supported main girder, the governing midspan moment is
-            <span class="chip" id="chipM">108.0 kN·m</span>, giving a utilisation of
-            <span class="chip" id="chipU">0.43</span> against the ULS capacity of
-            <span class="mono">250 kN·m</span>.
+            For the pad footing under column C3, the applied bearing pressure is
+            <span class="chip" id="chipM">200.0 kPa</span>, giving a utilisation of
+            <span class="chip" id="chipU">0.80</span> against the allowable bearing capacity of
+            <span class="mono">250 kPa</span>.
           </div>
           <div>
-            <span class="eyebrow blocklabel" style="display:block;margin-bottom:8px">Sheet · loads</span>
+            <span class="eyebrow blocklabel" style="display:block;margin-bottom:8px">Sheet · bearing</span>
             <div class="sheet" role="table" aria-label="Calculation sheet">
-              <div class="fbar"><span class="fx">fx</span><span>=loads.udl × beam.span² / 8</span></div>
+              <div class="fbar"><span class="fx">fx</span><span>=column.load / footing.width²</span></div>
               <table>
-                <tr><td class="name">beam.span</td><td class="val" id="cellSpan">6.0</td><td class="unit">m</td></tr>
-                <tr><td class="name">loads.udl</td><td class="val">24.0</td><td class="unit">kN/m</td></tr>
-                <tr><td class="name">M_max</td><td class="val computed" id="cellM">108.0</td><td class="unit">kN·m</td></tr>
+                <tr><td class="name">footing.width</td><td class="val" id="cellSpan">2.0</td><td class="unit">m</td></tr>
+                <tr><td class="name">column.load</td><td class="val">800.0</td><td class="unit">kN</td></tr>
+                <tr><td class="name">q_applied</td><td class="val computed" id="cellM">200.0</td><td class="unit">kPa</td></tr>
               </table>
             </div>
           </div>
           <div class="spanctl">
-            <label for="spanRange">beam.span — drag to edit</label>
-            <input type="range" id="spanRange" min="6.0" max="7.8" step="0.1" value="6.0" aria-label="beam.span in metres" />
+            <label for="spanRange">footing.width — drag to edit</label>
+            <input type="range" id="spanRange" min="1.8" max="2.6" step="0.1" value="2.0" aria-label="footing.width in metres" />
           </div>
         </div>
         <div class="demo-right">
-          <span class="eyebrow" style="display:block;margin-bottom:8px">Viewer · =EXTRUDE(profile, beam.span)</span>
+          <span class="eyebrow" style="display:block;margin-bottom:8px">Viewer · =EXTRUDE(footing.plan, 0.6 m)</span>
           <div class="viewer">
-            <svg id="beamSvg" viewBox="0 0 480 300" role="img" aria-label="Isometric beam whose length follows beam.span">
+            <svg id="beamSvg" viewBox="0 0 480 300" role="img" aria-label="Isometric pad footing whose plan size follows footing.width">
               <polygon id="faceTop" class="beamface" fill="#ECECEA"></polygon>
               <polygon id="faceFront" class="beamface" fill="#DBDBD8"></polygon>
               <polygon id="faceSide" class="beamface" fill="#C9C9C6"></polygon>
@@ -322,6 +344,44 @@ footer{border-top:1px solid var(--grey-3); padding:var(--s4) 0 var(--s5); margin
 
 <main class="wrap">
 
+  <div class="dim-divider" aria-hidden="true"><span class="tag">§ 00</span><span class="line"></span><span class="tag">THE PROBLEM</span></div>
+
+  <section id="why">
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">Why OctoMeta exists</span>
+        <h2>The calc you stamped isn't the calc you have.</h2>
+      </div>
+      <p class="sub">Every engineer knows the Monday: the span changed on Friday, the spreadsheet was updated, the Word report wasn't, and the model belongs to another team. Three artifacts. Three different truths. One signature — yours.</p>
+    </div>
+
+    <div class="pain-grid">
+      <div class="pain">
+        <div class="artifact">=C4*SUM(D6:D12)/B33</div>
+        <h3>Logic you can't review.</h3>
+        <p>That formula is load distribution across a six-pile group — but nothing on screen says so. Cell references hide engineering intent, so checking means reverse-engineering. And reverse-engineering means, on most projects, it doesn't happen.</p>
+      </div>
+      <div class="pain">
+        <div class="artifact">report_FINAL_r3.pdf <span class="dimmed">· issued 08 Nov</span><br/><span class="bad">model updated 12 Nov</span></div>
+        <h3>Deliverables that rot.</h3>
+        <p>The PDF was true the day it was printed. Four days later the founding level changed and the report didn't. Now the stale copy carries your stamp while the truth lives in somebody else's file — and nobody is sure which numbers were checked.</p>
+      </div>
+      <div class="pain">
+        <div class="artifact">234.6 kN + 234.6 <span class="bad">kip</span> = <span class="bad">?</span></div>
+        <h3>Units on the honour system.</h3>
+        <p>Spreadsheets will add anything to anything. A kip that should have been a kilonewton survives every review that doesn't recompute by hand — the exact class of silent error behind some of the industry's most expensive failures.</p>
+      </div>
+    </div>
+
+    <div class="stats" aria-label="The cost of fragmented calculations">
+      <div class="stat"><div class="n">~40%</div><div class="l">of engineering time goes to finding, rebuilding and reconciling calculations</div></div>
+      <div class="stat"><div class="n">~24%</div><div class="l">of computational notebooks re-execute without error — order and hidden state defeat the rest</div></div>
+      <div class="stat"><div class="n">up to 7%</div><div class="l">of contract value on large projects attributed to calculation errors (industry estimates)</div></div>
+    </div>
+
+    <p class="pain-pivot">The root cause is the same in every case: <strong>the calculation, the narrative and the geometry are copies of each other, maintained by hand.</strong> OctoMeta removes the copies. One graph underneath — so there is nothing to reconcile, nothing to go stale, and nothing to take on faith.</p>
+  </section>
+
   <div class="dim-divider" aria-hidden="true"><span class="tag">§ 01</span><span class="line"></span><span class="tag">ONE GRAPH</span></div>
 
   <section id="graph">
@@ -338,11 +398,11 @@ footer{border-top:1px solid var(--grey-3); padding:var(--s4) 0 var(--s5); margin
         <rect class="gnode" x="365" y="55" width="230" height="80" rx="10"></rect>
         <rect class="gnode" x="710" y="55" width="230" height="80" rx="10"></rect>
         <text class="gnode-label" x="40" y="88">§ Report</text>
-        <text class="gnode-sub" x="40" y="110">utilisation chip · 0.43</text>
-        <text class="gnode-label" x="385" y="88">Sheet · loads</text>
-        <text class="gnode-sub" x="385" y="110">beam.span → M_max</text>
+        <text class="gnode-sub" x="40" y="110">utilisation chip · 0.80</text>
+        <text class="gnode-label" x="385" y="88">Sheet · bearing</text>
+        <text class="gnode-sub" x="385" y="110">footing.width → q_applied</text>
         <text class="gnode-label" x="730" y="88">Viewer</text>
-        <text class="gnode-sub" x="730" y="110">=EXTRUDE(profile, span)</text>
+        <text class="gnode-sub" x="730" y="110">=EXTRUDE(plan, thk)</text>
         <path class="gedge" d="M365,95 C320,95 295,95 250,95"></path>
         <path class="gpulse" d="M365,95 C320,95 295,95 250,95"></path>
         <path class="gedge" d="M595,95 C640,95 665,95 710,95"></path>
@@ -362,9 +422,9 @@ footer{border-top:1px solid var(--grey-3); padding:var(--s4) 0 var(--s5); margin
       <p>Dimensional mismatches surface as errors, not silent bugs. Show the full substituted derivation on demand — so a checker reads the logic, not cell references.</p>
     </div>
     <div class="exhibit" aria-label="Show steps example">
-      <div class="steps-line"><span>M_max</span><span>=</span><span>w · L² / 8</span></div>
-      <div class="steps-line"><span>=</span><span>24.0 kN/m × (6.0 m)² / 8</span><span>=</span><span class="chip">108.0 kN·m</span></div>
-      <div class="steps-line"><span>w + L</span><span>→</span><span class="err">#UNIT! kN/m + m</span></div>
+      <div class="steps-line"><span>q_app</span><span>=</span><span>P / B²</span></div>
+      <div class="steps-line"><span>=</span><span>800 kN / (2.0 m)²</span><span>=</span><span class="chip">200.0 kPa</span></div>
+      <div class="steps-line"><span>P + B</span><span>→</span><span class="err">#UNIT! kN + m</span></div>
       <p class="caption">"Show steps" renders the derivation with values and units substituted. Mixing dimensions is a typed error that propagates — never a silent wrong number.</p>
     </div>
   </section>
@@ -373,14 +433,14 @@ footer{border-top:1px solid var(--grey-3); padding:var(--s4) 0 var(--s5); margin
 
   <section id="geometry" class="feature flip">
     <div class="exhibit" aria-label="Geometry as a value example">
-      <div class="steps-line"><span>D4</span><span>=</span><span>EXTRUDE(profile, beam.span)</span></div>
+      <div class="steps-line"><span>D4</span><span>=</span><span>EXTRUDE(footing.plan, footing.thk)</span></div>
       <div class="steps-line"><span>→</span><span class="chip">geom:extrude:9f3a1c</span></div>
       <div class="steps-line"><span>D5</span><span>=</span><span>DISTANCE(D2, D3)</span><span>→</span><span class="chip">4.21 m</span></div>
       <p class="caption">Geometry is a first-class value: formulas return content-addressed handles into a real B-Rep kernel. Scalars unbox straight back into ordinary math.</p>
     </div>
     <div class="copy">
       <span class="eyebrow">Live 3D from your formulas</span>
-      <h2><span class="mono" style="font-size:.85em">=EXTRUDE(profile, h)</span> returns a beam, not a number.</h2>
+      <h2><span class="mono" style="font-size:.85em">=EXTRUDE(profile, h)</span> returns a footing, not a number.</h2>
       <p>Real B-Rep geometry, computed by a proper CAD kernel, live in the viewer. Pick a cell, highlight the object — and back again. No export, no round-trip, no separate tool.</p>
     </div>
   </section>
@@ -403,15 +463,40 @@ footer{border-top:1px solid var(--grey-3); padding:var(--s4) 0 var(--s5); margin
 
   <section id="review" class="feature flip">
     <div class="exhibit" aria-label="Provenance inspector example">
-      <div class="provrow"><span>beam.span = 6.0 m</span><span class="who">input · P. Sharma</span><span class="badge ok">Verified</span></div>
-      <div class="provrow"><span>M_max = w·L²/8</span><span class="who">formula · template AS 5100</span><span class="badge ok">Verified</span></div>
-      <div class="provrow"><span>deck.points = TABLE(A2:C40)</span><span class="who">formula · P. Sharma</span><span class="badge">Unverified</span></div>
+      <div class="provrow"><span>footing.width = 2.0 m</span><span class="who">input · P. Sharma</span><span class="badge ok">Verified</span></div>
+      <div class="provrow"><span>q_applied = P/B²</span><span class="who">formula · template EC7</span><span class="badge ok">Verified</span></div>
+      <div class="provrow"><span>borehole.log = TABLE(A2:C40)</span><span class="who">formula · P. Sharma</span><span class="badge">Unverified</span></div>
       <p class="caption">Every value knows how it was derived, who authored it, and whether it's been checked.</p>
     </div>
     <div class="copy">
       <span class="eyebrow">Built for checking</span>
       <h2>Reviewable by design.</h2>
       <p>Provenance and "show steps" make verification fast and trustworthy — a workflow made for ISO 19650-style checking, not bolted on after.</p>
+    </div>
+  </section>
+
+  <div class="dim-divider" aria-hidden="true"><span class="tag">§ 06</span><span class="line"></span><span class="tag">CONNECTED</span></div>
+
+  <section id="connected" class="feature">
+    <div class="copy">
+      <span class="eyebrow">Your tools, one graph</span>
+      <h2>Connected to the AECO tools you already run.</h2>
+      <p>The numbers you need already exist — in Revit models on Autodesk Construction Cloud, and in the business systems that hold your rates and quantities. OctoMeta binds them into the graph instead of asking you to retype them.</p>
+      <p><strong>Autodesk Platform Services now publishes official MCP server samples for its AEC Data Model API</strong> — hubs, projects, element groups and category-filtered elements from Revit models, queried over GraphQL, no plugins. OctoMeta consumes exactly this class of server: bind an element property as a named value and it enters the graph with provenance, like any other input. The same pattern reaches your business systems — point OctoMeta at the MCP server in front of your ERP, and steel rates land in the same checked graph as steel tonnage.</p>
+      <p style="font-size:.9rem; color:var(--grey-2)">First connectors ship read-only: Revit via APS, plus any MCP server you already run. Exposing the document graph as its own MCP server is on the roadmap, built on the same mutation API.</p>
+      <div class="conn-badges" aria-label="Connectors">
+        <span class="conn-badge hi">Revit · ACC — APS AEC Data Model</span>
+        <span class="conn-badge hi">ERP cost data — via MCP</span>
+        <span class="conn-badge">XLSX import</span>
+        <span class="conn-badge">MCP-native by design</span>
+      </div>
+    </div>
+    <div class="exhibit" aria-label="Live binding example">
+      <div class="steps-line"><span class="dimmed" style="color:var(--grey-2)">aecdm</span><span>·</span><span>GetElementsByElementGroup("Tower-B.rvt", "Structural Foundations")</span></div>
+      <div class="steps-line"><span>footing.width</span><span>←</span><span>Tower-B.rvt · footing F3 · width</span><span class="chip">2.0 m</span></div>
+      <div class="steps-line"><span>rates.concrete</span><span>←</span><span>erp · unit_rate("N40 mix")</span><span class="chip">385 $/m³</span></div>
+      <div class="steps-line"><span>cost.footings</span><span>=</span><span>VOLUME(footing) × rates.concrete</span><span class="chip">22.2 k$</span></div>
+      <p class="caption">Model data and cost data meet inside one graph: bound inputs carry provenance (source, query, pull time), and the whole document — checks, cost, geometry — recomputes when they're refreshed.</p>
     </div>
   </section>
 
@@ -538,7 +623,7 @@ footer{border-top:1px solid var(--grey-3); padding:var(--s4) 0 var(--s5); margin
 <script>
 (function(){
   const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const w = 24.0, CAP = 250.0;
+  const P = 800.0, QA = 250.0;
   const range=document.getElementById('spanRange'),
         cellSpan=document.getElementById('cellSpan'),
         cellM=document.getElementById('cellM'),
@@ -548,12 +633,12 @@ footer{border-top:1px solid var(--grey-3); padding:var(--s4) 0 var(--s5); margin
   /* isometric beam */
   const fT=document.getElementById('faceTop'),fF=document.getElementById('faceFront'),fS=document.getElementById('faceSide');
   const dimL=document.getElementById('dimL'),dimA=document.getElementById('dimA'),dimB=document.getElementById('dimB'),dimT=document.getElementById('dimT');
-  const P0={x:46,y:206},U={x:.955,y:-.296},D={x:.46,y:-.27},H=56,DEPTH=74,K=46;
+  const P0={x:60,y:196},U={x:.955,y:-.296},D={x:.46,y:-.27},H=34;
   const add=(p,v,s)=>({x:p.x+v.x*s,y:p.y+v.y*s});
   const pts=a=>a.map(p=>p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ');
-  function drawBeam(L){
-    const len=L*K,p0=P0,p1={x:p0.x,y:p0.y-H},p2=add(p0,U,len),p3=add(p1,U,len),
-          p1b=add(p1,D,DEPTH),p3b=add(p3,D,DEPTH),p2b=add(p2,D,DEPTH);
+  function drawBeam(B){
+    const len=B*95,dep=B*62,p0=P0,p1={x:p0.x,y:p0.y-H},p2=add(p0,U,len),p3=add(p1,U,len),
+          p1b=add(p1,D,dep),p3b=add(p3,D,dep),p2b=add(p2,D,dep);
     fF.setAttribute('points',pts([p0,p1,p3,p2]));
     fT.setAttribute('points',pts([p1,p1b,p3b,p3]));
     fS.setAttribute('points',pts([p2,p3,p3b,p2b]));
@@ -563,7 +648,7 @@ footer{border-top:1px solid var(--grey-3); padding:var(--s4) 0 var(--s5); margin
     dimA.setAttribute('x1',a.x-t.x);dimA.setAttribute('y1',a.y-t.y);dimA.setAttribute('x2',a.x+t.x);dimA.setAttribute('y2',a.y+t.y);
     dimB.setAttribute('x1',b.x-t.x);dimB.setAttribute('y1',b.y-t.y);dimB.setAttribute('x2',b.x+t.x);dimB.setAttribute('y2',b.y+t.y);
     dimT.setAttribute('x',(a.x+b.x)/2+6);dimT.setAttribute('y',(a.y+b.y)/2+22);
-    dimT.textContent=L.toFixed(1)+' m';
+    dimT.textContent=B.toFixed(1)+' m';
   }
 
   /* dependency lines */
@@ -591,11 +676,11 @@ footer{border-top:1px solid var(--grey-3); padding:var(--s4) 0 var(--s5); margin
     });
   }
   function flash(el,cls){el.classList.remove(cls);void el.getBoundingClientRect();el.classList.add(cls)}
-  function update(L,animate=true){
-    const M=w*L*L/8,U_=M/CAP;
-    cellSpan.textContent=L.toFixed(1);cellM.textContent=M.toFixed(1);
-    chipM.textContent=M.toFixed(1)+' kN·m';chipU.textContent=U_.toFixed(2);
-    drawBeam(L);
+  function update(B,animate=true){
+    const q=P/(B*B),U_=q/QA;
+    cellSpan.textContent=B.toFixed(1);cellM.textContent=q.toFixed(1);
+    chipM.textContent=q.toFixed(1)+' kPa';chipU.textContent=U_.toFixed(2);
+    drawBeam(B);
     if(animate&&!REDUCED){
       flash(cellSpan.parentElement,'cellchange');
       flash(chipM,'pulse');flash(chipU,'pulse');
@@ -607,9 +692,9 @@ footer{border-top:1px solid var(--grey-3); padding:var(--s4) 0 var(--s5); margin
     idleTimer=setTimeout(()=>{looping=true},6000);update(parseFloat(range.value))});
   setInterval(()=>{if(!looping)return;
     let v=parseFloat(range.value)+0.1*loopDir;
-    if(v>=7.8){v=7.8;loopDir=-1}else if(v<=6.0){v=6.0;loopDir=1}
+    if(v>=2.6){v=2.6;loopDir=-1}else if(v<=1.8){v=1.8;loopDir=1}
     range.value=v.toFixed(1);update(v)},1600);
-  drawDeps();update(6.0,false);
+  drawDeps();update(2.0,false);
   addEventListener('resize',drawDeps);
   document.fonts&&document.fonts.ready.then(drawDeps);
 

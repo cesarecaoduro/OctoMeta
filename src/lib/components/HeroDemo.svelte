@@ -256,7 +256,7 @@
 <style>
 	.demo {
 		position: relative;
-		margin-top: var(--s5);
+		margin-top: var(--s4);
 		border: 1px solid var(--grey-3);
 		border-radius: var(--radius-panel);
 		background: var(--surface);
@@ -479,11 +479,14 @@
 
 	@media (max-width: 900px) {
 		.demo-body {
-			grid-template-columns: 1fr;
+			grid-template-columns: minmax(0, 1fr);
 		}
 		.demo-left {
 			border-right: 0;
 			border-bottom: 1px solid var(--grey-3);
+		}
+		.viewer {
+			min-height: 210px;
 		}
 	}
 </style>

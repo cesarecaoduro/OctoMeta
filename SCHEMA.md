@@ -1,5 +1,7 @@
-# OctoMeta — SCHEMA.md (v1)
-*The complete data model: graph, document, geometry, persistence — and the guarantees that make the experience notebook-like without Jupyter's failure modes.*
+# OctoMeta · SCHEMA.md (v1.1)
+*The complete data model: graph, document, geometry, persistence, and the guarantees that make the experience notebook-like without Jupyter's failure modes.*
+
+**Version tags:** this schema is the target for the whole arc (IMPLEMENTATION_PLAN.md v3). Sections marked **V2** (geometry, viewer, equation blocks, export) are defined now so interfaces stay fixed, but implemented in V2; V1 builds their hooks as documented no-ops. Former M5/M6 references now read pre-beta/V3.
 
 ---
 
@@ -51,15 +53,15 @@ type NodeId = string;                     // stable ULID, never positional
 interface GraphNode {
   id: NodeId;
   kind: 'input' | 'computed' | 'namedOutput' | 'geometry' | 'table' | 'error';
-  name?: string;                          // dotted path for published names: "beam.span"
+  name?: string;                          // dotted path for published names: "footing.width"
   formula?: FormulaAST;                   // computed/geometry/table cells
   value: TypedValue;                      // last evaluated value (memoized)
   inputs: NodeId[];                       // DERIVED from formula refs — never authored
   contentHash: string;                    // hash(opId + inputHashes) → memo key
   blockId?: BlockId;                      // which document block hosts/renders it
-  cellRef?: { sheetBlockId: BlockId; a1: string };  // for Univer-hosted cells
+  cellRef?: CellRef;                      // for Univer-hosted cells
   provenance: Provenance;                 // reserved fields, serialized from day one
-  pending?: PendingChange | null;         // reserved for M6 propose→validate→commit
+  pending?: PendingChange | null;         // reserved for V3 propose→validate→commit
 }
 
 interface Provenance {
@@ -73,6 +75,18 @@ interface PendingChange {
   validation: { unit: boolean; type: boolean; geometry: boolean; messages: string[] };
   status: 'proposed' | 'accepted' | 'rejected';
 }
+```
+
+```ts
+// Serializable JSON; parser + canonical printer live in src/lib/engine (V1-1-3).
+type CellRef = { sheetBlockId: BlockId; a1: string };
+type FormulaAST =
+  | { t:'lit';  value: number | string | boolean; unit?: string }   // 5 · "x" · true · 5 kN
+  | { t:'ref';  ref: CellRef | { name: string } }                   // A1 · beam.span
+  | { t:'un';   op: '-' | 'not'; arg: FormulaAST }
+  | { t:'bin';  op: '+'|'-'|'*'|'/'|'^'|'='|'<'|'>'|'<='|'>='|'<>';
+                left: FormulaAST; right: FormulaAST }
+  | { t:'call'; fn: string; args: FormulaAST[] };
 ```
 
 **Edges are derived.** Resolving a formula's references (cell refs, dotted names) yields `inputs`. This is what makes cycles detectable at mutation time and order irrelevant at evaluation time.
@@ -95,7 +109,7 @@ onMutation(m):
   geometryStore.sweep(liveHandles())         // dispose unreferenced WASM objects
 ```
 
-**Budgets.** Scalar propagation < 50 ms @ 500 dirty-adjacent nodes; small-edit mesh < 16 ms (preview path); exact B-Rep may complete async and swap in. **No WASM growth over 1,000 recalcs** (sweep is mandatory, not best-effort).
+**Budgets.** Scalar propagation < 50 ms @ 500 dirty-adjacent nodes (V1, CI-enforced); small-edit mesh < 16 ms (preview path); exact B-Rep may complete async and swap in. **No WASM growth over 1,000 recalcs** (sweep is mandatory, not best-effort). In V1 the `geomQueue`/`geometryStore` lines are documented no-op hooks (IMPLEMENTATION_PLAN.md V1-2-2); V2 fills them and activates the mesh/WASM budgets.
 
 ## 5. The Jupyter-like experience — guarantees, not vibes
 
@@ -121,15 +135,16 @@ interface FnSignature {
   returns: TypedValue['kind'];
   pure: true;                              // v1: all functions pure
   impl: (args: TypedValue[], ctx: FnCtx) => TypedValue;   // built-ins: in-process
-  origin: 'builtin' | 'user';              // 'user' → M6 sandbox (E2B) — SAME signature
+  origin: 'builtin' | 'user';              // 'user' → V3 sandbox (E2B) — SAME signature
 }
 ```
 
-Registered into Univer via the Facade API; geometry built-ins call the GeometryStore through `ctx`. The sandbox is a *hook*: when user functions arrive (M6), only `impl` dispatch changes — signatures, validation, and registration are already shared.
+Registered into Univer via the Facade API; geometry built-ins call the GeometryStore through `ctx`. The sandbox is a *hook*: when user functions arrive (V3), only `impl` dispatch changes — signatures, validation, and registration are already shared.
 
-**v1 built-ins:** arithmetic/aggregation lifted to Quantity · `POINT(x,y,z)` · `LINE(a,b)` · `POLYLINE(tbl)` · `PROFILE(tbl)` · `EXTRUDE(profile,h)` · `DISTANCE(a,b)` · `LENGTH(g)` · `VOLUME(g)` · `SHOWSTEPS(ref)`.
+**V1 built-ins:** arithmetic/comparison lifted to Quantity · `SUM` · `MIN` · `MAX` · `AVERAGE` · `COUNT` · `IF` · `ROUND` · `ABS` · `SQRT` · `POW` · `SHOWSTEPS(ref)`.
+**V2 built-ins (geometry):** `POINT(x,y,z)` · `LINE(a,b)` · `POLYLINE(tbl)` · `PROFILE(tbl)` · `EXTRUDE(profile,h)` · `DISTANCE(a,b)` · `LENGTH(g)` · `VOLUME(g)`.
 
-## 7. GeometryStore
+## 7. GeometryStore (V2 · interface fixed now)
 
 ```ts
 interface GeomEntry {
@@ -148,10 +163,13 @@ Same inputs → same handle → no rebuild (memoization crosses blocks). `sweep(
 type BlockId = string;
 interface Block {
   id: BlockId; docId: string;
-  type: 'text'|'heading'|'image'|'equation'|'sheet'|'viewer';
+  type: 'text'|'heading'|'image'|'sheet'   // V1
+      | 'equation'|'viewer';               // V2
   position: number;                        // layout ONLY (see §5)
   // type-specific:
-  pm?: PMNodeJSON;                         // text/heading/equation content (ProseMirror)
+  pm?: PMNodeJSON;                         // text/heading/equation content (ProseMirror;
+                                           // markdown is an input convention, storage is PM JSON)
+  image?: { storageId: string; alt?: string; caption?: string };   // Convex file storage
   univerSnapshot?: unknown;                // sheet blocks
   viewer?: { boundHandles: 'auto' | NodeId[]; camera?: CameraState };
 }
@@ -170,31 +188,45 @@ type GraphMutation =
   | { op:'removeNode';  id:NodeId }
   | { op:'publishName'; cellRef:CellRef; name:string }
   | { op:'rebindChip';  chipId:string; nodeId:NodeId }
-  | { op:'blockOp';     ... }                             // add/move/remove blocks
+  | { op:'blockOp';     action:'add'|'remove'|'move'|'update';
+                        blockId:BlockId; block?:Partial<Block>; position?:number }
   ;
+type Actor = { kind: 'human' | 'template' | 'agent'; id?: string };  // stamped into Provenance
 applyMutation(m: GraphMutation, actor: Actor): Result<AffectedSet, MutationError>
 ```
 Every call is validated (types, dims, cycles), recorded to the undo log, stamped with provenance, then recalc runs (§4). Humans, templates, and — later — agents are all just `actor`s. **No projection may write around this API.**
 
+```ts
+interface UndoEntry {
+  seq: number;                    // monotonic per document
+  mutation: GraphMutation;        // as applied
+  inverse: GraphMutation[];       // restores prior state incl. provenance (may be several)
+  actor: Actor; at: number;
+}
+```
+**Undo semantics.** One linear history per document, spanning cell edits, formula edits, name publishes, and block ops in a single `seq` order (moving a block and editing a cell undo through the same stack). A cursor marks the boundary: `undo()` applies the inverse of the entry at the cursor and moves it down; `redo()` re-applies the mutation above it. Both run through the same validated apply path but never append entries — only fresh mutations append, and a fresh mutation truncates any redo tail above the cursor. Inverses are captured at apply time with full prior state (`removeNode`'s inverse carries the whole node; `blockOp remove`'s carries the whole block), so undo never depends on external lookups; dependent `#REF!`s heal on their own because edges are derived (§3). The log is serializable JSON, persisted (§10), and capped at the last 200 entries per document, pruned oldest-first. The pre-beta collaboration track revisits per-user vs per-document histories; the linear model is a deliberate single-user simplification.
+
 ## 10. Convex persistence schema
 
 ```
-documents      { _id, title, blocksOrder: BlockId[], createdAt, updatedAt }
-blocks         { _id, docId, type, position, pm?, viewer? }
+documents      { _id, title, blocksOrder: BlockId[], undoCursor: number, createdAt, updatedAt }
+blocks         { _id, docId, type, position, pm?, image?, viewer? }
+undoLog        { _id, docId, seq, mutation, inverse, actor, at }          -- capped: last 200/doc
 sheetSnapshots { _id, blockId, univerSnapshot, updatedAt }
 graphNodes     { _id, docId, ...GraphNode }               // one row per node
 chipBindings   { _id, docId, blockId, nodeId, format }
-versions       { _id, docId, snapshotRef, label, createdAt }
-waitlist       { _id, email, name?, role?, firm?, createdAt, source }   // marketing site
--- deferred (M5/M6): users, memberships, permissions, pendingDiffs
+versions       { _id, docId, snapshotRef, label, createdAt }              -- V2
+waitlist       { _id, email, name?, role?, firm?, tool?, source,          -- live (marketing)
+                 confirmationEmailId?, confirmationStatus? }
+-- deferred (pre-beta auth / V3): users, memberships, permissions, pendingDiffs
 ```
-Single-user early: no auth tables, no ACLs; the persistence layer is abstracted so M5 adds identity without schema surgery. Version snapshots capture `graphNodes + blocks + sheetSnapshots` atomically; reproducibility (§5 "restart & run all") is verified against snapshots in CI.
+**Block order:** `documents.blocksOrder` is canonical; `blocks.position` is a denormalized copy maintained by the same `blockOp` mutation (they may never disagree — assert in tests). Single-user early: no auth tables, no ACLs; the persistence layer is abstracted so the pre-beta auth track adds identity without schema surgery. Version snapshots capture `graphNodes + blocks + sheetSnapshots` atomically; reproducibility (§5 "restart & run all") is verified against snapshots in CI.
 
 ## 11. Error taxonomy & propagation
 
 `#UNIT!` dimensional mismatch · `#DIM!` incompatible table/vector shapes · `#CYCLE!` membership in a rejected cycle (lists members) · `#REF!` dangling reference after delete · `#NAME?` unresolved published name · `#GEOM!` kernel failure (non-manifold, invalid profile) · `#VALUE!` type mismatch. Errors carry `origin` (first failing node) so any downstream chip can deep-link to the root cause.
 
-## 12. Export mapping
+## 12. Export mapping (V2)
 
 **PDF:** blocks render in `position` order; chips render resolved values; show-steps expandable sections included per checker settings.
 **IFC4X3 ("ifc-lite"):** GeometryNodes with exact shapes → IfcProduct subtypes with property sets carrying `name`, provenance, and source formula text (auditability travels with the model); validated against a web-ifc read-back in CI.

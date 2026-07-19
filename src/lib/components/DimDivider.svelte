@@ -20,7 +20,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--s2);
-		margin: var(--s6) 0 var(--s5);
+		margin: var(--s5) 0 var(--s4);
 		user-select: none;
 	}
 	.line {

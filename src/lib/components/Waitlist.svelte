@@ -156,7 +156,7 @@
 
 <style>
 	.waitlist {
-		margin: var(--s6) 0;
+		margin: var(--s5) 0;
 		padding: var(--s5) var(--s4);
 		border: 1px solid var(--grey-3);
 		border-radius: 16px;
@@ -267,10 +267,15 @@
 	}
 	@media (max-width: 900px) {
 		.wl-grid {
-			grid-template-columns: 1fr;
+			grid-template-columns: minmax(0, 1fr);
 		}
 		.wl-row {
-			grid-template-columns: 1fr;
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+	@media (max-width: 600px) {
+		.waitlist {
+			padding: var(--s4) var(--s3);
 		}
 	}
 </style>

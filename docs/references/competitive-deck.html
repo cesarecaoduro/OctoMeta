@@ -1,640 +1,879 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OctoMeta · Pitch</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Inter+Tight:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-<style>
-/* ============ OctoMeta tokens (see DESIGN.md) ============ */
-:root{
-  --paper:#FAFAF9; --ink:#0B0B0C; --grey-1:#55555A; --grey-2:#9A9AA0;
-  --grey-3:#E4E4E1; --grey-4:#F1F1EF; --surface:#FFFFFF;
-  --accent:#0B5FFF; --accent-dim:rgba(11,95,255,.10);
-  --error:#C42B1C; --error-dim:rgba(196,43,28,.08);
-  --font-display:"Inter Tight",sans-serif; --font-body:"Inter",sans-serif;
-  --font-mono:"JetBrains Mono",monospace;
-}
-.reveal-viewport{background:var(--paper)}
-.reveal{font-family:var(--font-body); font-size:26px; color:var(--ink)}
-.reveal .slides section{text-align:left; padding:0 8px}
-.reveal h1,.reveal h2,.reveal h3{
-  font-family:var(--font-display); font-weight:600; letter-spacing:-.02em;
-  color:var(--ink); text-transform:none; margin-bottom:.5em;
-}
-.reveal h1{font-size:2.35em; line-height:1.05}
-.reveal h2{font-size:1.5em; line-height:1.15}
-.reveal h3{font-size:1em; color:var(--grey-1)}
-.reveal p, .reveal li{color:var(--grey-1); line-height:1.5}
-.reveal strong{color:var(--ink)}
-.reveal .eyebrow{
-  font-family:var(--font-mono); font-size:.5em; letter-spacing:.14em;
-  text-transform:uppercase; color:var(--grey-2); display:block; margin-bottom:1.2em;
-}
-.reveal .mono{font-family:var(--font-mono); font-size:.85em}
-.reveal .accent{color:var(--accent)}
-.reveal ul{margin-left:.9em}
-.reveal li{margin:.35em 0}
-.reveal li::marker{color:var(--grey-2)}
-.reveal .small{font-size:.62em; color:var(--grey-2)}
-.reveal .downhint{
-  position:absolute; bottom:-40px; left:8px;
-  font-family:var(--font-mono); font-size:.5em; letter-spacing:.12em; color:var(--grey-2);
-}
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OctoMeta — Competitive Landscape &amp; Pricing</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Inter+Tight:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* ============ OctoMeta tokens (see DESIGN.md) ============ */
+      :root {
+        --paper: #fafaf9;
+        --ink: #0b0b0c;
+        --grey-1: #55555a;
+        --grey-2: #9a9aa0;
+        --grey-3: #e4e4e1;
+        --grey-4: #f1f1ef;
+        --surface: #ffffff;
+        --accent: #0b5fff;
+        --accent-dim: rgba(11, 95, 255, 0.1);
+        --error: #c42b1c;
+        --font-display: "Inter Tight", sans-serif;
+        --font-body: "Inter", sans-serif;
+        --font-mono: "JetBrains Mono", monospace;
+      }
+      .reveal-viewport {
+        background: var(--paper);
+      }
+      .reveal {
+        font-family: var(--font-body);
+        font-size: 26px;
+        color: var(--ink);
+      }
+      .reveal .slides section {
+        text-align: left;
+        padding: 0 8px;
+      }
+      .reveal h1,
+      .reveal h2,
+      .reveal h3 {
+        font-family: var(--font-display);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+        text-transform: none;
+        margin-bottom: 0.5em;
+      }
+      .reveal h1 {
+        font-size: 2.4em;
+        line-height: 1.05;
+      }
+      .reveal h2 {
+        font-size: 1.5em;
+      }
+      .reveal h3 {
+        font-size: 1em;
+        color: var(--grey-1);
+      }
+      .reveal p,
+      .reveal li {
+        color: var(--grey-1);
+        line-height: 1.5;
+      }
+      .reveal strong {
+        color: var(--ink);
+      }
+      .reveal .eyebrow {
+        font-family: var(--font-mono);
+        font-size: 0.5em;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--grey-2);
+        display: block;
+        margin-bottom: 1.2em;
+      }
+      .reveal .mono {
+        font-family: var(--font-mono);
+        font-size: 0.85em;
+      }
+      .reveal .accent {
+        color: var(--accent);
+      }
+      .reveal ul {
+        margin-left: 0.9em;
+      }
+      .reveal li {
+        margin: 0.35em 0;
+      }
+      .reveal li::marker {
+        color: var(--grey-2);
+      }
 
-/* tables */
-.reveal table{border-collapse:collapse; font-size:.62em; width:100%; margin-top:.6em}
-.reveal th{
-  font-family:var(--font-mono); font-size:.82em; letter-spacing:.06em; text-transform:uppercase;
-  color:var(--grey-2); font-weight:500; text-align:left; padding:.5em .7em;
-  border-bottom:1px solid var(--ink);
-}
-.reveal td{padding:.5em .7em; border-bottom:1px solid var(--grey-3); color:var(--grey-1); vertical-align:top}
-.reveal td:first-child{color:var(--ink); font-weight:500}
-.reveal .yes{color:var(--accent); font-weight:500}
-.reveal .no{color:var(--grey-2)}
-.reveal .part{color:var(--grey-1)}
-.reveal tr.us td{background:var(--accent-dim); color:var(--ink)}
+      /* tables */
+      .reveal table {
+        border-collapse: collapse;
+        font-size: 0.62em;
+        width: 100%;
+        margin-top: 0.6em;
+      }
+      .reveal th {
+        font-family: var(--font-mono);
+        font-size: 0.82em;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--grey-2);
+        font-weight: 500;
+        text-align: left;
+        padding: 0.5em 0.7em;
+        border-bottom: 1px solid var(--ink);
+      }
+      .reveal td {
+        padding: 0.5em 0.7em;
+        border-bottom: 1px solid var(--grey-3);
+        color: var(--grey-1);
+        vertical-align: top;
+      }
+      .reveal td:first-child {
+        color: var(--ink);
+        font-weight: 500;
+      }
+      .reveal .yes {
+        color: var(--accent);
+        font-weight: 500;
+      }
+      .reveal .no {
+        color: var(--grey-2);
+      }
+      .reveal .part {
+        color: var(--grey-1);
+      }
+      .reveal tr.us td {
+        background: var(--accent-dim);
+        color: var(--ink);
+      }
 
-/* cards / pills / chips */
-.pill{
-  display:inline-block; font-family:var(--font-mono); font-size:.55em;
-  padding:.25em .8em; border:1px solid var(--grey-3); border-radius:999px; color:var(--grey-1);
-  margin:0 .3em .3em 0;
-}
-.cardrow{display:flex; gap:18px; margin-top:.6em}
-.card{
-  flex:1; background:var(--surface); border:1px solid var(--grey-3); border-radius:12px;
-  padding:18px 20px; font-size:.7em;
-}
-.card .fmt{font-family:var(--font-mono); font-weight:500; color:var(--ink); font-size:1.05em}
-.card .price{font-family:var(--font-display); font-weight:600; font-size:1.9em; color:var(--ink); margin:.15em 0}
-.card .price span{font-size:.45em; color:var(--grey-2); font-weight:400; font-family:var(--font-body)}
-.card p{font-size:.95em; margin-top:.3em}
-.card.hi{border-color:var(--accent)}
-.card.hi .fmt{color:var(--accent)}
-.bignum{font-family:var(--font-display); font-weight:600; font-size:2.2em; color:var(--ink); line-height:1}
-.bignum .u{font-size:.4em; color:var(--grey-2); font-weight:400; font-family:var(--font-body)}
+      /* cards / pills */
+      .pill {
+        display: inline-block;
+        font-family: var(--font-mono);
+        font-size: 0.55em;
+        padding: 0.25em 0.8em;
+        border: 1px solid var(--grey-3);
+        border-radius: 999px;
+        color: var(--grey-1);
+        margin: 0 0.3em 0.3em 0;
+      }
+      .cardrow {
+        display: flex;
+        gap: 18px;
+        margin-top: 0.6em;
+      }
+      .card {
+        flex: 1;
+        background: var(--surface);
+        border: 1px solid var(--grey-3);
+        border-radius: 12px;
+        padding: 18px 20px;
+        font-size: 0.7em;
+      }
+      .card .fmt {
+        font-family: var(--font-mono);
+        font-weight: 500;
+        color: var(--ink);
+        font-size: 1.05em;
+      }
+      .card .price {
+        font-family: var(--font-display);
+        font-weight: 600;
+        font-size: 1.9em;
+        color: var(--ink);
+        margin: 0.15em 0;
+      }
+      .card .price span {
+        font-size: 0.45em;
+        color: var(--grey-2);
+        font-weight: 400;
+        font-family: var(--font-body);
+      }
+      .card p {
+        font-size: 0.95em;
+        margin-top: 0.3em;
+      }
+      .card.hi {
+        border-color: var(--accent);
+      }
+      .card.hi .fmt {
+        color: var(--accent);
+      }
 
-.chip{
-  display:inline-block; font-family:var(--font-mono); font-size:.9em;
-  padding:.1em .5em; border-radius:6px; background:var(--accent-dim); color:var(--accent);
-  transition:background 280ms cubic-bezier(.25,.1,.25,1);
-}
-@keyframes chipflash{0%{background:var(--accent); color:#fff}100%{background:var(--accent-dim); color:var(--accent)}}
-.chip.flash{animation:chipflash 700ms cubic-bezier(.25,.1,.25,1)}
+      /* dimension divider */
+      .dim {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin: 0.2em 0 1em;
+      }
+      .dim .line {
+        flex: 1;
+        height: 1px;
+        background: var(--grey-3);
+        position: relative;
+      }
+      .dim .line::before,
+      .dim .line::after {
+        content: "";
+        position: absolute;
+        top: -4px;
+        width: 1px;
+        height: 9px;
+        background: var(--grey-2);
+      }
+      .dim .line::before {
+        left: 0;
+      }
+      .dim .line::after {
+        right: 0;
+      }
+      .dim .tag {
+        font-family: var(--font-mono);
+        font-size: 0.5em;
+        letter-spacing: 0.12em;
+        color: var(--grey-2);
+      }
 
-/* dimension divider */
-.dim{display:flex; align-items:center; gap:14px; margin:.2em 0 1em}
-.dim .line{flex:1; height:1px; background:var(--grey-3); position:relative}
-.dim .line::before,.dim .line::after{content:""; position:absolute; top:-4px; width:1px; height:9px; background:var(--grey-2)}
-.dim .line::before{left:0}.dim .line::after{right:0}
-.dim .tag{font-family:var(--font-mono); font-size:.5em; letter-spacing:.12em; color:var(--grey-2)}
+      /* fixed footer */
+      .deckfoot {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 10;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 26px;
+        border-top: 1px solid var(--grey-3);
+        font-family: var(--font-mono);
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        color: var(--grey-2);
+        background: var(--paper);
+      }
+      .deckfoot .lockup {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--ink);
+      }
+      .deckfoot svg {
+        width: 16px;
+        height: 16px;
+      }
+      .reveal .progress {
+        color: var(--accent);
+      }
+      .reveal .controls {
+        color: var(--grey-2);
+      }
+      .logo-hero {
+        width: 72px;
+        height: 72px;
+        margin-bottom: 18px;
+        color: var(--ink);
+      }
 
-/* ============ product mockups ============ */
-.mock{
-  background:var(--surface); border:1px solid var(--grey-3); border-radius:12px;
-  overflow:hidden; font-size:15px;
-}
-.mock .bar{
-  display:flex; align-items:center; gap:8px; padding:7px 12px;
-  border-bottom:1px solid var(--grey-3); background:var(--grey-4);
-  font-family:var(--font-mono); font-size:10px; letter-spacing:.1em; color:var(--grey-2);
-}
-.mock .bar i{width:7px; height:7px; border-radius:50%; background:var(--grey-3); display:inline-block}
-.mock .body{padding:12px 14px}
-.mockrow{display:flex; gap:16px; align-items:stretch}
-.mockrow .mock{flex:1}
-
-/* grid mockup */
-.gcell{display:grid; grid-template-columns:52px 1fr 92px; border-bottom:1px solid var(--grey-3)}
-.gcell:last-child{border-bottom:none}
-.gcell span{padding:6px 8px; font-family:var(--font-mono); font-size:12px}
-.gcell .ref{color:var(--grey-2)}
-.gcell .f{color:var(--ink)}
-.gcell .v{text-align:right; color:var(--accent); background:var(--accent-dim); border-radius:6px; margin:3px 2px; padding:3px 8px}
-.gcell.edit .f{outline:2px solid var(--accent); border-radius:4px}
-
-/* report mockup */
-.rline{height:8px; background:var(--grey-4); border-radius:4px; margin:9px 0}
-.rline.w60{width:60%}.rline.w85{width:85%}.rline.w40{width:40%}
-.rformula{font-family:var(--font-mono); font-size:12px; color:var(--ink); margin:8px 0}
-
-/* viewer mockup */
-.viewer{display:flex; align-items:center; justify-content:center; padding:10px 0 2px}
-.beamgrp{transition:transform 700ms cubic-bezier(.25,.1,.25,1); transform-origin:60px 68px}
-.dimlabel{font-family:var(--font-mono); font-size:11px; fill:var(--accent)}
-
-/* demo step states, toggled by fragment JS */
-.demo .after{display:none}
-.demo.step-edit .gcell.editable .f{outline:2px solid var(--accent); border-radius:4px}
-.demo.step-edit .gcell.editable .before{display:none}
-.demo.step-edit .gcell.editable .after{display:inline}
-.demo.step-flash .dep .v{animation:chipflash 700ms cubic-bezier(.25,.1,.25,1)}
-.demo.step-flash .dep .before{display:none}
-.demo.step-flash .dep .after{display:inline}
-.demo.step-geom .beamgrp{transform:scaleX(1.28)}
-.demo.step-geom .dimlabel .before{display:none}
-.demo.step-geom .dimlabel .after{display:inline}
-.demo.step-report .rchip .before{display:none}
-.demo.step-report .rchip .after{display:inline}
-.demo.step-report .rchip .chip{animation:chipflash 700ms cubic-bezier(.25,.1,.25,1)}
-.steps{margin-top:14px; font-family:var(--font-mono); font-size:.55em; color:var(--grey-2)}
-.steps b{color:var(--accent); font-weight:500}
-
-/* ============ interactive revenue model ============ */
-.calc{display:grid; grid-template-columns:1fr 1fr; gap:26px 40px; margin-top:.4em}
-.calc .inputs label{
-  display:block; font-family:var(--font-mono); font-size:.55em; letter-spacing:.08em;
-  text-transform:uppercase; color:var(--grey-2); margin:14px 0 2px;
-}
-.calc .inputs .val{color:var(--ink); font-family:var(--font-mono)}
-.calc input[type=range]{
-  -webkit-appearance:none; appearance:none; width:100%; height:2px;
-  background:var(--grey-3); border-radius:2px; outline:none;
-}
-.calc input[type=range]::-webkit-slider-thumb{
-  -webkit-appearance:none; appearance:none; width:16px; height:16px; border-radius:50%;
-  background:var(--accent); cursor:pointer; border:none;
-}
-.calc input[type=range]::-moz-range-thumb{
-  width:16px; height:16px; border-radius:50%; background:var(--accent); cursor:pointer; border:none;
-}
-.calc .out{display:flex; flex-direction:column; gap:14px; justify-content:center}
-.calc .outcard{background:var(--surface); border:1px solid var(--grey-3); border-radius:12px; padding:14px 18px}
-.calc .outcard .k{font-family:var(--font-mono); font-size:.5em; letter-spacing:.12em; text-transform:uppercase; color:var(--grey-2)}
-.calc .outcard .n{font-family:var(--font-display); font-weight:600; font-size:1.6em; color:var(--ink)}
-.calc .outcard .n.acc{color:var(--accent)}
-.calc .note{font-size:.5em; color:var(--grey-2); font-family:var(--font-mono); letter-spacing:.06em}
-
-/* phases */
-.phases{display:flex; gap:18px; margin-top:.5em}
-.phase{flex:1; background:var(--surface); border:1px solid var(--grey-3); border-radius:12px; padding:16px 18px; font-size:.62em}
-.phase .tag{font-family:var(--font-mono); font-size:.8em; letter-spacing:.12em; color:var(--accent)}
-.phase h4{font-family:var(--font-display); font-weight:600; margin:.3em 0 .4em; color:var(--ink); font-size:1.2em}
-.phase ul{margin-left:1em; font-size:.95em}
-.phase li{margin:.25em 0}
-
-/* fixed footer */
-.deckfoot{
-  position:fixed; left:0; right:0; bottom:0; z-index:10;
-  display:flex; justify-content:space-between; align-items:center;
-  padding:10px 26px; border-top:1px solid var(--grey-3);
-  font-family:var(--font-mono); font-size:11px; letter-spacing:.1em; color:var(--grey-2);
-  background:var(--paper);
-}
-.deckfoot .lockup{display:flex; align-items:center; gap:8px; color:var(--ink)}
-.deckfoot svg{width:16px; height:16px}
-.reveal .progress{color:var(--accent)}
-.reveal .controls{color:var(--grey-2)}
-.logo-hero{width:96px; height:96px; margin-bottom:22px; color:var(--ink)}
-@media (prefers-reduced-motion: reduce){
-  .chip.flash,.demo.step-flash .dep .v,.demo.step-report .rchip .chip{animation:none}
-  .beamgrp{transition:none}
-}
-</style>
-</head>
-<body>
-
-<div class="reveal">
-<div class="slides">
-
-<!-- ═══════════ 1 · TITLE ═══════════ -->
-<section data-auto-animate>
-  <svg class="logo-hero" viewBox="0 0 32 32" fill="none" aria-label="OctoMeta">
-    <circle cx="16" cy="16" r="10.5" stroke="currentColor" stroke-width="2.5"/>
-    <circle cx="23.42" cy="8.58" r="3.3" fill="#0B5FFF" stroke="#FAFAF9" stroke-width="2"/>
-  </svg>
-  <h1 data-id="vision">The engineering document<br/>that computes.</h1>
-  <p style="margin-top:.6em"><strong>OctoMeta</strong>: calc, report and 3D model, one live graph. <span class="accent">Edit once. Everything follows.</span></p>
-  <p class="mono" style="font-size:.55em; color:var(--grey-2); margin-top:2em">SEED PITCH · JULY 2026 · CONFIDENTIAL &nbsp;·&nbsp; PRESS <span class="accent">ESC</span> FOR OVERVIEW · <span class="accent">↓</span> FOR DEEP DIVES</p>
-  <aside class="notes">Open with the demo slide promise: in three slides you'll watch a cell edit move a beam.</aside>
-</section>
-
-<!-- ═══════════ 2 · PROBLEM ═══════════ -->
-<section>
-  <section>
-    <span class="eyebrow">§ 01 · The problem</span>
-    <h2>Every engineering deliverable is built three times.</h2>
-    <ul>
-      <li class="fragment"><strong>The calc</strong> lives in Excel: logic hidden behind cells, units unchecked, unreviewable.</li>
-      <li class="fragment"><strong>The report</strong> lives in Word: numbers pasted in, stale the moment loading changes.</li>
-      <li class="fragment"><strong>The model</strong> lives in CAD: reconciled with the calc by hand, if at all.</li>
-    </ul>
-    <div class="cardrow fragment" style="margin-top:1em">
-      <div class="card"><div class="bignum">~40<span class="u">%</span></div><p>of engineering time spent finding, rebuilding, reconciling calculations</p></div>
-      <div class="card"><div class="bignum">88<span class="u">%</span></div><p>of spreadsheets contain at least one error (Panko, spreadsheet-error research)</p></div>
-      <div class="card"><div class="bignum">3<span class="u">×</span></div><p>the same engineering intent, re-entered in three disconnected tools</p></div>
-    </div>
-    <div class="downhint">↓ WHAT THAT COSTS IN A REAL WEEK</div>
-  </section>
-  <section>
-    <span class="eyebrow">§ 01 · The problem, lived</span>
-    <h2>Friday, 4pm: the wind load changes.</h2>
-    <ul>
-      <li class="fragment"><span class="mono accent">FRI 16:02</span> · Client email: site re-classified, design wind pressure up 18%.</li>
-      <li class="fragment"><span class="mono accent">MON–TUE</span> · Engineer re-traces 47 spreadsheet cells across 3 workbooks to find what depends on <span class="mono">q_wind</span>.</li>
-      <li class="fragment"><span class="mono accent">WED</span> · 12 report pages re-pasted. Two screenshots missed. One table now disagrees with the appendix.</li>
-      <li class="fragment"><span class="mono accent">THU</span> · CAD model updated separately. Beam depth in the model ≠ beam depth in the calc.</li>
-      <li class="fragment"><strong>In OctoMeta this is one edit</strong>: the graph recomputes the calc, restyles the report, re-extrudes the model. Seconds, with an audit trail.</li>
-    </ul>
-  </section>
-</section>
-
-<!-- ═══════════ 3 · WHY NOW ═══════════ -->
-<section>
-  <span class="eyebrow">§ 02 · Why now</span>
-  <h2>Three waves just made this buildable, and buyable.</h2>
-  <ul>
-    <li class="fragment"><strong>Browser CAD came of age.</strong> WASM B-Rep kernels mean real parametric geometry in a web tab: no desktop install, no per-seat CAD license.</li>
-    <li class="fragment"><strong>Digital delivery mandates.</strong> IFC/openBIM requirements are landing in public procurement. Firms must ship structured data, not PDFs of screenshots.</li>
-    <li class="fragment"><strong>AI needs a substrate it can't hallucinate through.</strong> Copilot writing into opaque cells makes the reviewability crisis <em>worse</em>. A typed, unit-safe dependency graph is the surface AI can safely act on, and be audited on.</li>
-  </ul>
-  <p class="fragment" style="margin-top:.8em"><strong>The window:</strong> nobody has combined all three. The first product that does becomes the system of record for engineering intent.</p>
-</section>
-
-<!-- ═══════════ 4 · PRODUCT ═══════════ -->
-<section>
-  <span class="eyebrow">§ 03 · Product</span>
-  <h2>One graph. Three faces of the same document.</h2>
-  <div class="mockrow" style="margin-top:.4em">
-    <div class="mock fragment">
-      <div class="bar"><i></i><i></i><i></i>&nbsp;GRID · UNIT-TYPED</div>
-      <div class="body">
-        <div class="gcell"><span class="ref">L</span><span class="f">= 6.0 m</span><span class="v">6.00 m</span></div>
-        <div class="gcell"><span class="ref">w</span><span class="f">= 14 kN/m</span><span class="v">14.0 kN/m</span></div>
-        <div class="gcell"><span class="ref">M</span><span class="f">= w·L²/8</span><span class="v">63.0 kN·m</span></div>
-        <div class="gcell"><span class="ref">d</span><span class="f">= depth(M, fy)</span><span class="v">450 mm</span></div>
-      </div>
-    </div>
-    <div class="mock fragment">
-      <div class="bar"><i></i><i></i><i></i>&nbsp;REPORT · ALWAYS CURRENT</div>
-      <div class="body">
-        <div class="rline w85"></div>
-        <div class="rformula">M = w·L²/8 = <span class="chip">63.0 kN·m</span></div>
-        <div class="rline w60"></div>
-        <div class="rformula">∴ use 450 mm deep section <span class="chip">OK</span></div>
-        <div class="rline w40"></div>
-      </div>
-    </div>
-    <div class="mock fragment">
-      <div class="bar"><i></i><i></i><i></i>&nbsp;3D · LIVE B-REP → IFC4X3</div>
-      <div class="body viewer">
-        <svg width="200" height="96" viewBox="0 0 200 96" fill="none">
-          <g stroke="var(--ink)" stroke-width="1.5">
-            <path d="M30 44 L150 44 L150 66 L30 66 Z"/>
-            <path d="M30 44 L46 32 L166 32 L150 44"/>
-            <path d="M166 32 L166 54 L150 66"/>
-          </g>
-          <g stroke="var(--accent)" stroke-width="1">
-            <path d="M30 78 L150 78"/><path d="M30 74 L30 82"/><path d="M150 74 L150 82"/>
-          </g>
-          <text x="78" y="92" class="dimlabel">L = 6.0 m</text>
-        </svg>
-      </div>
-    </div>
-  </div>
-  <p class="fragment" style="margin-top:.7em">Not three synced apps. <strong>Three projections of one typed dependency graph</strong>: same node, three renderings. PDF and IFC are exports of the graph, not separate artifacts.</p>
-</section>
-
-<!-- ═══════════ 5 · LIVE DEMO (fragment-driven) ═══════════ -->
-<section>
-  <span class="eyebrow">§ 04 · Watch it work &nbsp;·&nbsp; <span style="color:var(--accent)">advance to run the edit →</span></span>
-  <h2>Edit one cell. The document follows.</h2>
-  <div class="demo" id="demo">
-    <div class="mockrow" style="margin-top:.4em">
-      <div class="mock">
-        <div class="bar"><i></i><i></i><i></i>&nbsp;GRID</div>
-        <div class="body">
-          <div class="gcell editable"><span class="ref">L</span><span class="f">= <span class="before">6.0</span><span class="after">7.5</span> m</span><span class="v"><span class="before">6.00</span><span class="after">7.50</span> m</span></div>
-          <div class="gcell"><span class="ref">w</span><span class="f">= 14 kN/m</span><span class="v">14.0 kN/m</span></div>
-          <div class="gcell dep"><span class="ref">M</span><span class="f">= w·L²/8</span><span class="v"><span class="before">63.0</span><span class="after">98.4</span> kN·m</span></div>
-          <div class="gcell dep"><span class="ref">d</span><span class="f">= depth(M, fy)</span><span class="v"><span class="before">450</span><span class="after">550</span> mm</span></div>
-        </div>
-      </div>
-      <div class="mock">
-        <div class="bar"><i></i><i></i><i></i>&nbsp;3D VIEWER</div>
-        <div class="body viewer">
-          <svg width="230" height="104" viewBox="0 0 230 104" fill="none">
-            <g class="beamgrp">
-              <g stroke="var(--ink)" stroke-width="1.5">
-                <path d="M30 48 L150 48 L150 70 L30 70 Z"/>
-                <path d="M30 48 L46 36 L166 36 L150 48"/>
-                <path d="M166 36 L166 58 L150 70"/>
-              </g>
+      /* "why for me" row on the title slide */
+      .whyrow {
+        display: flex;
+        gap: 22px;
+        margin-top: 0.5em;
+      }
+      .why {
+        flex: 1;
+        border-top: 1px solid var(--grey-3);
+        padding-top: 12px;
+        font-size: 0.62em;
+      }
+      .why .who {
+        font-family: var(--font-mono);
+        font-size: 0.78em;
+        letter-spacing: 0.12em;
+        color: var(--accent);
+      }
+      .why p {
+        margin-top: 0.3em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="reveal">
+      <div class="slides">
+        <!-- 1 · TITLE -->
+        <section>
+          <svg
+            class="logo-hero"
+            viewBox="0 0 64 64"
+            fill="none"
+            aria-label="OctoMeta"
+          >
+            <g stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+              <path d="M32 23 C30 17 36 11 37 9" />
+              <path d="M38.4 25.6 C41.2 20 49.7 20 51.8 19.3" />
+              <path d="M41 32 C47 30 53 36 55 37" />
+              <path d="M38.4 38.4 C44 41.2 44 49.7 44.7 51.8" />
+              <path d="M32 41 C34 47 28 53 27 55" />
+              <path d="M25.6 38.4 C22.8 44 14.3 44 12.2 44.7" />
+              <path d="M23 32 C17 34 11 28 9 27" />
+              <path d="M25.6 25.6 C20 22.8 20 14.3 19.3 12.2" />
             </g>
-            <g stroke="var(--accent)" stroke-width="1">
-              <path d="M30 84 L150 84"/><path d="M30 80 L30 88"/><path d="M150 80 L150 88"/>
-            </g>
-            <text x="72" y="100" class="dimlabel"><tspan class="before">L = 6.0 m</tspan><tspan class="after">L = 7.5 m</tspan></text>
+            <circle cx="32" cy="32" r="6.5" fill="currentColor" />
+            <circle cx="37" cy="9" r="2.4" fill="currentColor" />
+            <circle cx="51.8" cy="19.3" r="2.4" fill="#0B5FFF" />
+            <circle cx="55" cy="37" r="2.4" fill="currentColor" />
+            <circle cx="44.7" cy="51.8" r="2.4" fill="currentColor" />
+            <circle cx="27" cy="55" r="2.4" fill="currentColor" />
+            <circle cx="12.2" cy="44.7" r="2.4" fill="currentColor" />
+            <circle cx="9" cy="27" r="2.4" fill="currentColor" />
+            <circle cx="19.3" cy="12.2" r="2.4" fill="currentColor" />
           </svg>
-        </div>
+          <span class="eyebrow"
+            >Competitive landscape &amp; pricing · Founding team · July 2026 ·
+            Confidential</span
+          >
+          <h1>The living engineering document.</h1>
+          <p style="max-width: 40ch">
+            Your calculations, your report and your 3D model are arms of a
+            single intelligent graph.
+            <strong>Edit anywhere, every arm follows.</strong>
+            <em>One mind. Eight arms.</em>
+          </p>
+          <div class="dim">
+            <span class="tag">WHY FOR ME</span><span class="line"></span>
+          </div>
+          <div class="whyrow">
+            <div class="why">
+              <span class="who">DESIGN ENGINEER</span>
+              <p>
+                Edit once: the sheet, the report and the model follow. The
+                reconciling week disappears.
+              </p>
+            </div>
+            <div class="why">
+              <span class="who">CHECKER</span>
+              <p>
+                Every value carries units, derivation and author. Review the
+                logic, not cell references.
+              </p>
+            </div>
+            <div class="why">
+              <span class="who">BIM LEAD</span>
+              <p>
+                The geometry in the calc is the geometry delivered: IFC4X3
+                from the same graph.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2 · PROBLEM -->
+        <section>
+          <span class="eyebrow">§ 01 · Why now</span>
+          <h2>The calc you stamped isn't the calc you have.</h2>
+          <ul>
+            <li>
+              <span class="mono accent">=C4*SUM(D6:D12)/B33</span> — engineering
+              intent hidden behind cell references.
+              <strong
+                >Checking means reverse-engineering, so it mostly doesn't
+                happen.</strong
+              >
+            </li>
+            <li>
+              <span class="mono">report_FINAL_r3.pdf · issued 08 Nov</span> vs
+              <span class="mono" style="color: var(--error)"
+                >model updated 12 Nov</span
+              >
+              — <strong>the deliverable rots the moment it's printed</strong>,
+              and the stale copy carries the signature.
+            </li>
+            <li>
+              <span class="mono"
+                >234.6 kN + 234.6
+                <span style="color: var(--error)">kip</span></span
+              >
+              — <strong>units on the honour system.</strong> Silent, and behind
+              some of the industry's costliest failures.
+            </li>
+          </ul>
+          <p style="margin-top: 0.8em">
+            ~<strong>40%</strong> of engineering time reconciling calcs ·
+            ~<strong>24%</strong> of notebooks re-execute cleanly · up to
+            <strong>7%</strong> of contract value lost to calc errors.
+            <strong
+              >Root cause: three hand-maintained copies of one truth.</strong
+            >
+          </p>
+        </section>
+
+        <!-- 3 · MARKET MAP -->
+        <section>
+          <span class="eyebrow">§ 02 · Market map</span>
+          <h2>Five clusters circle the problem. None covers it.</h2>
+          <table>
+            <tr>
+              <th>Cluster</th>
+              <th>Players</th>
+              <th>Has</th>
+              <th>Lacks</th>
+            </tr>
+            <tr>
+              <td>Calc documents</td>
+              <td>CalcTree · Blockpad · Mathcad · Open Calc Studio</td>
+              <td>Units, readable calcs</td>
+              <td>Real geometry, live 3D, (mostly) IFC</td>
+            </tr>
+            <tr>
+              <td>Structural suites</td>
+              <td>SkyCiv · ClearCalcs · Tedds</td>
+              <td>Verified templates, code clauses</td>
+              <td>General documents, parametric geometry</td>
+            </tr>
+            <tr>
+              <td>Reactive notebooks</td>
+              <td>Observable · Marimo · Pluto</td>
+              <td>Order-independence (we borrow it)</td>
+              <td>Units, geometry, deliverables, grid UX</td>
+            </tr>
+            <tr>
+              <td>Horizontal giants</td>
+              <td>Excel + Copilot · Notion/Coda</td>
+              <td>Distribution, AI momentum</td>
+              <td>Units, geometry, reviewability, IFC</td>
+            </tr>
+            <tr>
+              <td>Parametric geometry</td>
+              <td>Grasshopper · Dynamo</td>
+              <td>The geometry</td>
+              <td>The document</td>
+            </tr>
+          </table>
+        </section>
+
+        <!-- 4 · MATRIX -->
+        <section>
+          <span class="eyebrow">§ 03 · Head to head</span>
+          <h2>The combination is the moat.</h2>
+          <table>
+            <tr>
+              <th></th>
+              <th>Units</th>
+              <th>3D B-Rep</th>
+              <th>IFC export</th>
+              <th>Grid UX</th>
+              <th>Order-free</th>
+              <th>AI</th>
+            </tr>
+            <tr class="us">
+              <td>OctoMeta</td>
+              <td class="yes">●</td>
+              <td class="yes">●</td>
+              <td class="yes">●</td>
+              <td class="yes">●</td>
+              <td class="yes">●</td>
+              <td class="part">hooked</td>
+            </tr>
+            <tr>
+              <td>CalcTree</td>
+              <td class="yes">●</td>
+              <td class="no">—</td>
+              <td class="no">—</td>
+              <td class="part">◐</td>
+              <td class="part">◐</td>
+              <td class="yes">●</td>
+            </tr>
+            <tr>
+              <td>Blockpad</td>
+              <td class="yes">●</td>
+              <td class="no">2D</td>
+              <td class="no">—</td>
+              <td class="yes">●</td>
+              <td class="part">◐</td>
+              <td class="no">—</td>
+            </tr>
+            <tr>
+              <td>Mathcad Prime</td>
+              <td class="yes">●</td>
+              <td class="no">—</td>
+              <td class="no">—</td>
+              <td class="no">—</td>
+              <td class="part">◐</td>
+              <td class="no">—</td>
+            </tr>
+            <tr>
+              <td>SkyCiv / ClearCalcs / Tedds</td>
+              <td class="yes">●</td>
+              <td class="part">FEA</td>
+              <td class="no">—</td>
+              <td class="part">◐</td>
+              <td class="no">—</td>
+              <td class="part">◐</td>
+            </tr>
+            <tr>
+              <td>Excel + Copilot</td>
+              <td class="no">—</td>
+              <td class="no">—</td>
+              <td class="no">—</td>
+              <td class="yes">●</td>
+              <td class="no">—</td>
+              <td class="yes">●</td>
+            </tr>
+            <tr>
+              <td>Grasshopper / Dynamo</td>
+              <td class="part">◐</td>
+              <td class="yes">●</td>
+              <td class="part">◐</td>
+              <td class="no">—</td>
+              <td class="yes">●</td>
+              <td class="part">◐</td>
+            </tr>
+            <tr>
+              <td>Open Calc Studio</td>
+              <td class="yes">●</td>
+              <td class="no">SVG</td>
+              <td class="yes">●</td>
+              <td class="no">—</td>
+              <td class="no">—</td>
+              <td class="no">—</td>
+            </tr>
+          </table>
+        </section>
+
+        <!-- 5 · CALCTREE -->
+        <section>
+          <span class="eyebrow">§ 04 · Closest philosophical rival</span>
+          <h2>CalcTree</h2>
+          <p>
+            Cloud calc pages (MathJS + Python), templates, collaboration, AI
+            generate-and-verify. A$3.8M pre-seed; users at Arup, Jacobs,
+            Aurecon, WSP; $24–34 /user/mo.
+          </p>
+          <div class="dim">
+            <span class="tag">READ</span><span class="line"></span>
+          </div>
+          <ul>
+            <li>
+              <strong>Respect:</strong> collaboration, enterprise traction,
+              human-verified AI philosophy.
+            </li>
+            <li>
+              <strong>Gap we attack:</strong> parameters on pages, not a typed
+              graph. No geometry, no live 3D, <strong>no IFC</strong> — their
+              answer to geometry is "round-trip through Grasshopper."
+            </li>
+          </ul>
+        </section>
+
+        <!-- 6 · BLOCKPAD & MATHCAD -->
+        <section>
+          <span class="eyebrow">§ 05 · The units incumbents</span>
+          <h2>Blockpad &amp; Mathcad Prime</h2>
+          <ul>
+            <li>
+              <strong>Blockpad</strong> (~$18/mo): best-in-class units UX,
+              readable calcs, 2D sketches. Ceiling: no 3D, no IFC, no AI,
+              desktop-first.
+            </li>
+            <li>
+              <strong>Mathcad Prime 12</strong> (~$735–860/yr): the trust
+              anchor. Ceiling: desktop, price, no geometry-from-calc, weak
+              collaboration.
+            </li>
+            <li>
+              <strong>Table stakes they set for us:</strong> unit parity,
+              show-steps, readable derivations. We must match before we
+              differentiate.
+            </li>
+          </ul>
+        </section>
+
+        <!-- 7 · NOTEBOOKS -->
+        <section>
+          <span class="eyebrow">§ 06 · The ancestors</span>
+          <h2>Reactive notebooks solved our document model.</h2>
+          <ul>
+            <li>
+              Observable &amp; Marimo:
+              <strong
+                >the DAG decides execution order, not cell position</strong
+              >
+              — "similar to a spreadsheet."
+            </li>
+            <li>
+              We inherit: dependency-derived edges, stale-impossibility, no
+              hidden state, delete-scrubs semantics.
+            </li>
+            <li>
+              They can't follow us: no units, no B-Rep geometry, no stamped
+              deliverable, no grid muscle memory.
+            </li>
+          </ul>
+          <p class="mono" style="font-size: 0.6em; color: var(--grey-2)">
+            POSITIONING LINE → "A notebook where order doesn't matter — for
+            engineers."
+          </p>
+        </section>
+
+        <!-- 8 · THREATS -->
+        <section>
+          <span class="eyebrow">§ 07 · Live threats</span>
+          <h2>Two fronts to watch.</h2>
+          <ul>
+            <li>
+              <strong>Excel + Copilot</strong> (~$21/user/mo add-on): AI
+              momentum on the tool everyone owns. But Copilot writes into
+              <em>opaque cells</em> — it amplifies the reviewability problem we
+              solve. Their anchor sets buyer psychology.
+            </li>
+            <li>
+              <strong>Open Calculations Studio</strong> (OpenAEC, ex-CalcPAD,
+              v0.1.x, free/LGPL): already ships
+              <strong>live IFC4x3 export from calcs</strong>. Desktop, no graph,
+              no 3D viewer, no grid — but it proves our headline thesis in the
+              open. Trigger: if they add a dependency graph + viewer, we
+              accelerate.
+            </li>
+          </ul>
+        </section>
+
+        <!-- 9 · PILLARS -->
+        <section>
+          <span class="eyebrow">§ 08 · Differentiation</span>
+          <h2>Six pillars. Nobody combines them.</h2>
+          <ul>
+            <li>
+              <span class="accent mono">01</span> Geometry as a first-class
+              value — live 3D B-Rep from formulas.
+            </li>
+            <li>
+              <span class="accent mono">02</span> The report
+              <strong>is</strong> the deliverable — PDF + IFC4X3 from one graph.
+            </li>
+            <li>
+              <span class="accent mono">03</span> Real spreadsheet UX bound to a
+              typed, unit-safe, reviewable graph.
+            </li>
+            <li>
+              <span class="accent mono">04</span> Notebook semantics,
+              order-independent by construction.
+            </li>
+            <li>
+              <span class="accent mono">05</span> Connected by MCP — AECO model
+              data in, document graph out as tools.
+            </li>
+            <li>
+              <span class="accent mono">06</span> AI-ready by architecture — one
+              mutation API + provenance. Honest: AI ships later.
+            </li>
+          </ul>
+        </section>
+
+        <!-- 9b · CONNECTED -->
+        <section>
+          <span class="eyebrow">§ 09 · Connected</span>
+          <h2>Model data and cost data, in the same checked graph.</h2>
+          <ul>
+            <li>
+              <strong>What exists today:</strong> Autodesk Platform Services
+              publishes <em>official MCP server samples</em> for its AEC Data
+              Model API —
+              <span class="mono"
+                >GetHubs · GetProjects · GetElementGroupsByProject ·
+                GetElementsByElementGroup</span
+              >
+              — Revit data on ACC over GraphQL, with reference implementations
+              in .NET, Python and JavaScript and published best-practice
+              guidance.
+            </li>
+            <li>
+              <strong>Example 1 — model data:</strong> bind
+              <span class="mono"
+                >footing.width ← Tower-B.rvt · footing F3 · width</span
+              >
+              through an APS MCP server. It enters the graph as a typed,
+              provenance-stamped input; re-pull and the whole document
+              recomputes.
+            </li>
+            <li>
+              <strong>Example 2 — cost data:</strong>
+              <span class="mono"
+                >rates.concrete ← erp · unit_rate("N40 mix")</span
+              >
+              via the MCP server in front of your ERP — so
+              <span class="mono">cost = VOLUME(footing) × rates.concrete</span>
+              lives beside the engineering, unit-checked and reviewable.
+            </li>
+            <li>
+              <strong>Scope honesty:</strong> first connectors are read-only
+              (APS + any MCP server you run). Exposing the document graph as an
+              MCP server is roadmap, on the same mutation API.
+            </li>
+          </ul>
+          <p class="mono" style="font-size: 0.6em; color: var(--grey-2)">
+            POSITIONING LINE → "Connect your AECO tools and ERPs. Stop retyping
+            your own model."
+          </p>
+        </section>
+
+        <!-- 10 · PRICING LANDSCAPE -->
+        <section>
+          <span class="eyebrow">§ 10 · Pricing landscape</span>
+          <h2>Calc-document value clusters at $18–35.</h2>
+          <table>
+            <tr>
+              <th>Product</th>
+              <th>Price</th>
+              <th>Signal</th>
+            </tr>
+            <tr>
+              <td>Blockpad</td>
+              <td>~$18 /mo</td>
+              <td>Low anchor for calc docs</td>
+            </tr>
+            <tr>
+              <td>Excel Copilot add-on</td>
+              <td>~$21 /user/mo</td>
+              <td>Buyer psychology anchor</td>
+            </tr>
+            <tr>
+              <td>CalcTree Business</td>
+              <td>$24–34 /user/mo</td>
+              <td>Our direct band</td>
+            </tr>
+            <tr>
+              <td>ClearCalcs</td>
+              <td>$35–119 /mo</td>
+              <td>Verified-template premium</td>
+            </tr>
+            <tr>
+              <td>Mathcad Prime</td>
+              <td>≈$61–72 /mo eq.</td>
+              <td>Single-seat tolerance ceiling</td>
+            </tr>
+            <tr>
+              <td>SkyCiv Professional</td>
+              <td>≈$104 /mo eq.</td>
+              <td>Suite band, not ours</td>
+            </tr>
+            <tr>
+              <td>Open Calc Studio</td>
+              <td>Free</td>
+              <td>Low-end pressure → our free tier answers</td>
+            </tr>
+          </table>
+        </section>
+
+        <!-- 11 · OUR PRICING -->
+        <section>
+          <span class="eyebrow">§ 11 · Recommended pricing</span>
+          <h2>Top of the calc-doc band — justified by 3D + IFC.</h2>
+          <div class="cardrow">
+            <div class="card">
+              <span class="fmt">Explorer</span>
+              <div class="price">$0</div>
+              <p>
+                Single user · 3 docs · full graph, units &amp; geometry · PDF w/
+                footer
+              </p>
+            </div>
+            <div class="card hi">
+              <span class="fmt">Pro</span>
+              <div class="price">$29<span> /user/mo · $24 annual</span></div>
+              <p>
+                Unlimited docs · <strong>IFC4X3 export</strong> · show-steps
+                exports · templates · XLSX import
+              </p>
+            </div>
+            <div class="card">
+              <span class="fmt">Team</span>
+              <div class="price">$49<span> /user/mo · $41 annual</span></div>
+              <p>
+                Collaboration · verification workflow · org template governance
+                <em>(ships M5)</em>
+              </p>
+            </div>
+            <div class="card">
+              <span class="fmt">Enterprise</span>
+              <div class="price">Custom</div>
+              <p>SSO · audit exports · standards packs</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- 12 · MOTION -->
+        <section>
+          <span class="eyebrow">§ 12 · Launch motion</span>
+          <h2>Waitlist → beta → founding price.</h2>
+          <ul>
+            <li>
+              Private beta <strong>free</strong>; qualify testers by role and
+              firm at signup.
+            </li>
+            <li>
+              <strong>Founding Engineer offer:</strong> Pro at
+              <span class="accent">$19 /user/mo, locked 24 months</span>, for
+              beta users who convert.
+            </li>
+            <li>
+              AI (M6) launches <strong>included</strong> in Pro/Team —
+              architecture-native AI is a claim, not an add-on.
+            </li>
+            <li>
+              Price-integrity: never price-fight OCS (compete on web + graph +
+              3D); never exceed the ~$65/mo Mathcad-equivalent single-seat
+              ceiling.
+            </li>
+          </ul>
+        </section>
+
+        <!-- 13 · CLOSE -->
+        <section>
+          <span class="eyebrow">§ 13 · The line we ship</span>
+          <h2 style="max-width: 24ch">
+            Your calculations, your report, and your 3D model are arms of a
+            single intelligent graph.
+          </h2>
+          <p>Edit anywhere, every arm follows. <em>One mind. Eight arms.</em></p>
+          <p
+            class="mono"
+            style="font-size: 0.55em; color: var(--grey-2); margin-top: 2em"
+          >
+            OCTOMETA.APP · JOIN THE WAITLIST
+          </p>
+        </section>
       </div>
-      <div class="mock">
-        <div class="bar"><i></i><i></i><i></i>&nbsp;REPORT</div>
-        <div class="body">
-          <div class="rline w85"></div>
-          <div class="rformula rchip">M = <span class="chip"><span class="before">63.0</span><span class="after">98.4</span> kN·m</span></div>
-          <div class="rformula rchip">∴ section depth <span class="chip"><span class="before">450</span><span class="after">550</span> mm</span></div>
-          <div class="rline w60"></div>
-        </div>
-      </div>
     </div>
-    <div class="steps">
-      <span class="fragment" data-action="step-edit" data-fragment-index="1"><b>01</b> ENGINEER TYPES L = 7.5 m &nbsp;·&nbsp;</span>
-      <span class="fragment" data-action="step-flash" data-fragment-index="2"><b>02</b> GRAPH RECOMPUTES M, d · UNITS CHECKED &nbsp;·&nbsp;</span>
-      <span class="fragment" data-action="step-geom" data-fragment-index="3"><b>03</b> BEAM RE-EXTRUDES &nbsp;·&nbsp;</span>
-      <span class="fragment" data-action="step-report" data-fragment-index="4"><b>04</b> REPORT UPDATES. NOTHING STALE.</span>
+
+    <div class="deckfoot">
+      <span class="lockup">
+        <svg viewBox="0 0 64 64" fill="none">
+          <g stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+            <path d="M32 23 C30 17 36 11 37 9" />
+            <path d="M38.4 25.6 C41.2 20 49.7 20 51.8 19.3" />
+            <path d="M41 32 C47 30 53 36 55 37" />
+            <path d="M38.4 38.4 C44 41.2 44 49.7 44.7 51.8" />
+            <path d="M32 41 C34 47 28 53 27 55" />
+            <path d="M25.6 38.4 C22.8 44 14.3 44 12.2 44.7" />
+            <path d="M23 32 C17 34 11 28 9 27" />
+            <path d="M25.6 25.6 C20 22.8 20 14.3 19.3 12.2" />
+          </g>
+          <circle cx="32" cy="32" r="6.5" fill="currentColor" />
+          <circle cx="51.8" cy="19.3" r="2.4" fill="#0B5FFF" />
+        </svg>
+        OCTOMETA
+      </span>
+      <span>COMPETITIVE LANDSCAPE · 2026</span>
     </div>
-  </div>
-  <aside class="notes">Advance four times slowly. Narrate: no macro ran, no sync job; the three panes are the same graph.</aside>
-</section>
 
-<!-- ═══════════ 6 · VISION ═══════════ -->
-<section data-auto-animate>
-  <span class="eyebrow">§ 05 · Vision</span>
-  <h1 data-id="vision" style="max-width:22ch">Engineering deliverables should be computed, not assembled.</h1>
-  <p style="margin-top:1em; max-width:60ch">The PDF, the IFC model, the review package: all projections of one source of truth. OctoMeta becomes the <strong>system of record for engineering intent</strong>: the place where the decision lives, not where it gets copied to.</p>
-</section>
-
-<!-- ═══════════ 7 · MARKET ═══════════ -->
-<section>
-  <span class="eyebrow">§ 06 · Market</span>
-  <h2>A wedge into a $2B calc-tooling problem.</h2>
-  <div class="cardrow" style="margin-top:.8em">
-    <div class="card fragment"><span class="fmt">TAM</span><div class="bignum">$2.1<span class="u">B /yr</span></div>
-      <p>~6M practicing civil, structural &amp; MEP engineers worldwide producing calculation deliverables × ~$350/yr tooling spend</p></div>
-    <div class="card fragment"><span class="fmt">SAM</span><div class="bignum">$420<span class="u">M /yr</span></div>
-      <p>~1.2M web-reachable calc authors in EN-speaking + EU markets where IFC mandates are landing first</p></div>
-    <div class="card hi fragment"><span class="fmt">SOM · 3YR</span><div class="bignum">$3.3<span class="u">M ARR</span></div>
-      <p>~9,000 paid seats, under 1% of SAM, bottom-up via free tier → Pro → Team</p></div>
-  </div>
-  <p class="small" style="margin-top:1em">Sizing is illustrative, built bottom-up from seat counts and observed calc-tool price bands (next sections). The wedge is calcs; the prize is the deliverable pipeline.</p>
-</section>
-
-<!-- ═══════════ 8 · COMPETITIVE LANDSCAPE (vertical deep-dive) ═══════════ -->
-<section>
-  <section>
-    <span class="eyebrow">§ 07 · Competitive landscape</span>
-    <h2>Five clusters circle the problem. None covers it.</h2>
-    <table>
-      <tr><th>Cluster</th><th>Players</th><th>Has</th><th>Lacks</th></tr>
-      <tr><td>Calc documents</td><td>CalcTree · Blockpad · Mathcad · Open Calc Studio</td><td>Units, readable calcs</td><td>Real geometry, live 3D, (mostly) IFC</td></tr>
-      <tr><td>Structural suites</td><td>SkyCiv · ClearCalcs · Tedds</td><td>Verified templates, code clauses</td><td>General documents, parametric geometry</td></tr>
-      <tr><td>Reactive notebooks</td><td>Observable · Marimo · Pluto</td><td>Order-independence (we borrow it)</td><td>Units, geometry, deliverables, grid UX</td></tr>
-      <tr><td>Horizontal giants</td><td>Excel + Copilot · Notion/Coda</td><td>Distribution, AI momentum</td><td>Units, geometry, reviewability, IFC</td></tr>
-      <tr><td>Parametric geometry</td><td>Grasshopper · Dynamo</td><td>The geometry</td><td>The document</td></tr>
-    </table>
-    <div class="downhint">↓ HEAD-TO-HEAD MATRIX · RIVAL DEEP DIVES</div>
-  </section>
-  <section>
-    <span class="eyebrow">§ 07 · Head to head</span>
-    <h2>The combination is the moat.</h2>
-    <table>
-      <tr><th></th><th>Units</th><th>3D B-Rep</th><th>IFC export</th><th>Grid UX</th><th>Order-free</th><th>AI</th></tr>
-      <tr class="us"><td>OctoMeta</td><td class="yes">●</td><td class="yes">●</td><td class="yes">●</td><td class="yes">●</td><td class="yes">●</td><td class="part">hooked</td></tr>
-      <tr><td>CalcTree</td><td class="yes">●</td><td class="no">—</td><td class="no">—</td><td class="part">◐</td><td class="part">◐</td><td class="yes">●</td></tr>
-      <tr><td>Blockpad</td><td class="yes">●</td><td class="no">2D</td><td class="no">—</td><td class="yes">●</td><td class="part">◐</td><td class="no">—</td></tr>
-      <tr><td>Mathcad Prime</td><td class="yes">●</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="part">◐</td><td class="no">—</td></tr>
-      <tr><td>SkyCiv / ClearCalcs / Tedds</td><td class="yes">●</td><td class="part">FEA</td><td class="no">—</td><td class="part">◐</td><td class="no">—</td><td class="part">◐</td></tr>
-      <tr><td>Excel + Copilot</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="yes">●</td><td class="no">—</td><td class="yes">●</td></tr>
-      <tr><td>Grasshopper / Dynamo</td><td class="part">◐</td><td class="yes">●</td><td class="part">◐</td><td class="no">—</td><td class="yes">●</td><td class="part">◐</td></tr>
-      <tr><td>Open Calc Studio</td><td class="yes">●</td><td class="no">SVG</td><td class="yes">●</td><td class="no">—</td><td class="no">—</td><td class="no">—</td></tr>
-    </table>
-  </section>
-  <section>
-    <span class="eyebrow">§ 07 · Closest rivals, honestly</span>
-    <h2>Respect them. Then attack the gap.</h2>
-    <table>
-      <tr><th>Rival</th><th>What we respect</th><th>The gap we attack</th></tr>
-      <tr><td>CalcTree<br/><span class="small">A$3.8M pre-seed · $24–34/user/mo · users at Arup, Jacobs, WSP</span></td>
-        <td>Collaboration, enterprise traction, human-verified AI philosophy</td>
-        <td>Parameters on pages, not a typed graph. No geometry, no live 3D, <strong>no IFC</strong>; their geometry answer is "round-trip through Grasshopper".</td></tr>
-      <tr><td>Blockpad &amp; Mathcad<br/><span class="small">~$18/mo · ~$735–860/yr</span></td>
-        <td>Units UX (Blockpad), decades of trust (Mathcad). They set our table stakes: unit parity, show-steps.</td>
-        <td>Desktop-first, no 3D, no geometry-from-calc, weak collaboration.</td></tr>
-      <tr><td>Excel + Copilot<br/><span class="small">~$21/user/mo add-on</span></td>
-        <td>Distribution and AI momentum; anchors buyer psychology.</td>
-        <td>Copilot writes into <em>opaque cells</em>; it amplifies the reviewability problem we solve.</td></tr>
-      <tr><td>Open Calc Studio<br/><span class="small">free / LGPL, v0.1.x</span></td>
-        <td>Already ships live IFC4x3 from calcs, proving our thesis in the open.</td>
-        <td>Desktop, no graph, no 3D viewer, no grid. We never price-fight it; our free tier answers it. Trigger to accelerate: they add a graph + viewer.</td></tr>
-    </table>
-  </section>
-</section>
-
-<!-- ═══════════ 9 · DIFFERENTIATOR ═══════════ -->
-<section>
-  <span class="eyebrow">§ 08 · The real differentiator</span>
-  <h2>Everyone owns a piece. Nobody owns the graph.</h2>
-  <p style="max-width:62ch">Our differentiator is not a feature; it's the substrate: <strong>one typed, unit-safe dependency graph that spans number → geometry → document.</strong> Everything else falls out of it:</p>
-  <ul>
-    <li class="fragment"><span class="accent mono">01</span> Geometry is a first-class value: a beam is a node, computed from formulas, rendered as live B-Rep.</li>
-    <li class="fragment"><span class="accent mono">02</span> The deliverable is a <strong>projection, not a file</strong>: PDF and IFC4X3 export from the same graph, so they cannot disagree.</li>
-    <li class="fragment"><span class="accent mono">03</span> Spreadsheet muscle memory on top; typed, reviewable, order-independent semantics underneath.</li>
-    <li class="fragment"><span class="accent mono">04</span> AI-ready by architecture: one mutation API + provenance on every node. Honest: AI ships later, on rails.</li>
-  </ul>
-  <p class="fragment"><strong>Why it compounds:</strong> every template, every verified calc, every firm standard encoded in the graph raises switching costs. Copying one feature doesn't copy the substrate.</p>
-</section>
-
-<!-- ═══════════ 10 · PRICING ═══════════ -->
-<section>
-  <section>
-    <span class="eyebrow">§ 09 · Pricing</span>
-    <h2>Top of the calc-doc band, justified by 3D + IFC.</h2>
-    <div class="cardrow">
-      <div class="card fragment"><span class="fmt">Explorer</span><div class="price">$0</div>
-        <p>Single user · 3 docs · full graph, units &amp; geometry · PDF w/ footer · <em>answers free/OSS pressure</em></p></div>
-      <div class="card hi fragment"><span class="fmt">Pro</span><div class="price">$29<span> /user/mo · $24 annual</span></div>
-        <p>Unlimited docs · <strong>IFC4X3 export</strong> · show-steps exports · templates · XLSX import</p></div>
-      <div class="card fragment"><span class="fmt">Team</span><div class="price">$49<span> /user/mo · $41 annual</span></div>
-        <p>Collaboration · verification workflow · org template governance <em>(ships M5)</em></p></div>
-      <div class="card fragment"><span class="fmt">Enterprise</span><div class="price">Custom</div>
-        <p>SSO · audit exports · standards packs</p></div>
-    </div>
-    <p class="small fragment" style="margin-top:.8em">Guardrails: never price-fight free OSS (compete on web + graph + 3D); never exceed the ~$65/mo Mathcad-equivalent single-seat ceiling. Founding Engineer offer: Pro at <span class="accent">$19/user/mo locked 24 months</span> for converting beta users.</p>
-    <div class="downhint">↓ WHERE THE MARKET PRICES</div>
-  </section>
-  <section>
-    <span class="eyebrow">§ 09 · Pricing landscape</span>
-    <h2>Calc-document value clusters at $18–35.</h2>
-    <table>
-      <tr><th>Product</th><th>Price</th><th>Signal</th></tr>
-      <tr><td>Blockpad</td><td>~$18 /mo</td><td>Low anchor for calc docs</td></tr>
-      <tr><td>Excel Copilot add-on</td><td>~$21 /user/mo</td><td>Buyer psychology anchor</td></tr>
-      <tr class="us"><td>OctoMeta Pro</td><td>$29 /user/mo ($24 annual)</td><td>Top of band, the only one with 3D + IFC</td></tr>
-      <tr><td>CalcTree Business</td><td>$24–34 /user/mo</td><td>Our direct band</td></tr>
-      <tr><td>ClearCalcs</td><td>$35–119 /mo</td><td>Verified-template premium</td></tr>
-      <tr><td>Mathcad Prime</td><td>≈$61–72 /mo eq.</td><td>Single-seat tolerance ceiling</td></tr>
-      <tr><td>SkyCiv Professional</td><td>≈$104 /mo eq.</td><td>Suite band, not ours</td></tr>
-      <tr><td>Open Calc Studio</td><td>Free</td><td>Low-end pressure → Explorer tier answers</td></tr>
-    </table>
-  </section>
-</section>
-
-<!-- ═══════════ 11 · REVENUE MODEL (interactive) ═══════════ -->
-<section>
-  <section>
-    <span class="eyebrow">§ 10 · Revenue model &nbsp;·&nbsp; <span style="color:var(--accent)">this slide is a live graph: drag the inputs</span></span>
-    <h2>MRR is a formula. So we shipped it as one.</h2>
-    <div class="calc">
-      <div class="inputs">
-        <label>Registered users <span class="val" id="usersVal">20,000</span></label>
-        <input type="range" id="users" min="1000" max="120000" step="1000" value="20000" aria-label="Registered users" />
-        <label>Free → paid conversion <span class="val" id="convVal">8%</span></label>
-        <input type="range" id="conv" min="2" max="15" step="1" value="8" aria-label="Conversion percent" />
-        <label>Blended ARPU <span class="val" id="arpuVal">$28 /mo</span></label>
-        <input type="range" id="arpu" min="20" max="45" step="1" value="28" aria-label="Blended ARPU" />
-        <p class="note" style="margin-top:14px">BLENDED ARPU = MIX OF PRO $24–29 &amp; TEAM $41–49 SEATS</p>
-      </div>
-      <div class="out">
-        <div class="outcard"><div class="k">Paid seats</div><div class="n" id="seatsOut">1,600</div></div>
-        <div class="outcard"><div class="k">MRR</div><div class="n acc" id="mrrOut">$44,800</div></div>
-        <div class="outcard"><div class="k">ARR run-rate</div><div class="n acc" id="arrOut">$537,600</div></div>
-      </div>
-    </div>
-    <div class="downhint">↓ 3-YEAR SCENARIOS</div>
-  </section>
-  <section>
-    <span class="eyebrow">§ 10 · Projections</span>
-    <h2>Three years, three scenarios.</h2>
-    <table>
-      <tr><th>Exit of</th><th>Registered</th><th>Conv.</th><th>Paid seats</th><th>ARPU</th><th>MRR</th><th>ARR run-rate</th></tr>
-      <tr><td>Year 1 · beta → launch</td><td>6,000</td><td>5%</td><td>300</td><td>$26</td><td>$7.8k</td><td><strong>~$94k</strong></td></tr>
-      <tr><td>Year 2 · PLG engine</td><td>30,000</td><td>8%</td><td>2,400</td><td>$28</td><td>$67k</td><td><strong>~$0.8M</strong></td></tr>
-      <tr class="us"><td>Year 3 · base case</td><td>90,000</td><td>10%</td><td>9,000</td><td>$31</td><td>$279k</td><td><strong>~$3.3M</strong></td></tr>
-      <tr><td>Year 3 · conservative</td><td>50,000</td><td>8%</td><td>4,000</td><td>$28</td><td>$112k</td><td>~$1.3M</td></tr>
-      <tr><td>Year 3 · upside</td><td>150,000</td><td>12%</td><td>18,000</td><td>$32</td><td>$576k</td><td>~$6.9M</td></tr>
-    </table>
-    <p class="small" style="margin-top:.8em">Drivers, not hopes: Team-tier mix lifts ARPU after M5; verification workflow converts whole review chains, not individuals; annual plans (–17%) tighten retention. Assumes ~2.5% monthly logo churn, offset by seat expansion inside firms.</p>
-  </section>
-</section>
-
-<!-- ═══════════ 12 · GTM ═══════════ -->
-<section>
-  <span class="eyebrow">§ 11 · Go-to-market</span>
-  <h2>Bottom-up, engineer by engineer, then the firm.</h2>
-  <div class="phases">
-    <div class="phase fragment">
-      <span class="tag">PHASE 1 · M0–6 · LAND</span>
-      <h4>Design partners</h4>
-      <ul>
-        <li>Waitlist, qualified by role &amp; firm</li>
-        <li>10 design-partner firms (structural, 20–200 seats), private beta free</li>
-        <li>Seed 50 verified templates: steel / concrete / timber code checks (EC · AISC · AS)</li>
-        <li>Weekly calc-teardown content on LinkedIn/YouTube</li>
-      </ul>
-    </div>
-    <div class="phase fragment">
-      <span class="tag">PHASE 2 · M6–18 · EXPAND</span>
-      <h4>PLG engine</h4>
-      <ul>
-        <li>Public launch + Founding Engineer $19 lock</li>
-        <li><strong>XLSX importer as trojan horse</strong>: bring your spreadsheet, see its graph</li>
-        <li>Shared PDFs carry live review links → every deliverable recruits its reviewer</li>
-        <li>Template gallery SEO; community (Eng-Tips, r/StructuralEngineering)</li>
-      </ul>
-    </div>
-    <div class="phase fragment">
-      <span class="tag">PHASE 3 · M18+ · OWN</span>
-      <h4>The firm</h4>
-      <ul>
-        <li>Team tier: verification workflow is the wedge into firms</li>
-        <li>Enterprise: SSO, audit exports, org standards packs</li>
-        <li>IFC story → BIM managers become internal champions</li>
-        <li>University program seeds the next cohort</li>
-      </ul>
-    </div>
-  </div>
-  <p class="small fragment" style="margin-top:.8em">North-star metric: <strong>documents that survive a review cycle</strong>: a doc reviewed by a second engineer predicts team conversion better than seats or sessions.</p>
-</section>
-
-<!-- ═══════════ 13 · HOW WE WIN ═══════════ -->
-<section>
-  <span class="eyebrow">§ 12 · Addressing the competition</span>
-  <h2>Every rival has a move. We have the counter.</h2>
-  <table>
-    <tr><th>Their move</th><th>Our counter</th></tr>
-    <tr class="fragment"><td>Excel + Copilot leans on AI + distribution</td><td>Import their XLSX, render its hidden graph, show the first <span class="mono" style="color:var(--error)">#UNIT!</span> error Copilot wrote. Reviewability is the demo.</td></tr>
-    <tr class="fragment"><td>CalcTree adds collaboration features</td><td>We demo geometry-from-calc + IFC: a capability, not a feature. They must rebuild their core to follow.</td></tr>
-    <tr class="fragment"><td>Mathcad / Blockpad hold the trust anchor</td><td>Match their table stakes (units, show-steps), then win on web, collaboration and live 3D. Their desktop model can't follow.</td></tr>
-    <tr class="fragment"><td>Open Calc Studio grows free/OSS</td><td>Explorer tier absorbs price pressure; we compete on web + graph + viewer. If they add a graph, we accelerate, never price-fight.</td></tr>
-    <tr class="fragment"><td>A suite (SkyCiv et al.) bolts on documents</td><td>Suites project FEA results into pages; we make the document primary. Different DNA, and buyers feel it in review.</td></tr>
-  </table>
-</section>
-
-<!-- ═══════════ 14 · CLOSE ═══════════ -->
-<section data-auto-animate>
-  <span class="eyebrow">§ 13 · The line we ship</span>
-  <h1 style="max-width:24ch">Edit once.<br/>Everything follows.</h1>
-  <p style="margin-top:.8em; max-width:56ch">The calc, the report and the 3D model: one live, typed, reviewable graph. We're raising to ship the graph to its first thousand engineers.</p>
-  <p class="mono" style="font-size:.55em; color:var(--grey-2); margin-top:2em">OCTOMETA.APP · JOIN THE WAITLIST · FOUNDERS@OCTOMETA.APP</p>
-</section>
-
-</div>
-</div>
-
-<div class="deckfoot">
-  <span class="lockup">
-    <svg viewBox="0 0 32 32" fill="none">
-      <circle cx="16" cy="16" r="10.5" stroke="currentColor" stroke-width="2.5"/>
-      <circle cx="23.42" cy="8.58" r="3.3" fill="#0B5FFF" stroke="#FAFAF9" stroke-width="2"/>
-    </svg>
-    OCTOMETA
-  </span>
-  <span>SEED PITCH · 2026</span>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
-<script>
-  Reveal.initialize({
-    hash:true, transition:'fade', transitionSpeed:'fast',
-    progress:true, controls:true, center:false,
-    width:1200, height:700, margin:0.08,
-    plugins:[ RevealNotes ]
-  });
-
-  /* -- demo slide: fragments toggle step classes on the demo container -- */
-  var demo = document.getElementById('demo');
-  Reveal.on('fragmentshown', function(e){
-    var a = e.fragment.dataset.action;
-    if(a && demo) demo.classList.add(a);
-  });
-  Reveal.on('fragmenthidden', function(e){
-    var a = e.fragment.dataset.action;
-    if(a && demo) demo.classList.remove(a);
-  });
-
-  /* -- interactive revenue model -- */
-  var $ = function(id){ return document.getElementById(id); };
-  var fmt = function(n){ return '$' + Math.round(n).toLocaleString('en-US'); };
-  function recompute(){
-    var users = +$('users').value, conv = +$('conv').value, arpu = +$('arpu').value;
-    var seats = users * conv / 100, mrr = seats * arpu;
-    $('usersVal').textContent = users.toLocaleString('en-US');
-    $('convVal').textContent  = conv + '%';
-    $('arpuVal').textContent  = '$' + arpu + ' /mo';
-    $('seatsOut').textContent = Math.round(seats).toLocaleString('en-US');
-    $('mrrOut').textContent   = fmt(mrr);
-    $('arrOut').textContent   = fmt(mrr * 12);
-    ['seatsOut','mrrOut','arrOut'].forEach(function(id){
-      var el = $(id); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
-    });
-  }
-  ['users','conv','arpu'].forEach(function(id){
-    var el = $(id);
-    el.addEventListener('input', recompute);
-    /* arrow keys should drive the slider, not slide navigation */
-    el.addEventListener('focus', function(){ Reveal.configure({ keyboard:false }); });
-    el.addEventListener('blur',  function(){ Reveal.configure({ keyboard:true }); });
-  });
-  recompute();
-</script>
-<style>
-  @keyframes numflash{0%{color:var(--accent)}100%{}}
-  .calc .outcard .n.flash{animation:numflash 700ms cubic-bezier(.25,.1,.25,1)}
-</style>
-</body>
+    <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+    <script>
+      Reveal.initialize({
+        hash: true,
+        transition: "fade",
+        transitionSpeed: "fast",
+        progress: true,
+        controls: true,
+        center: false,
+        width: 1200,
+        height: 700,
+        margin: 0.08,
+      });
+    </script>
+  </body>
 </html>

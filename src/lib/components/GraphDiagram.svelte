@@ -65,8 +65,14 @@
 </div>
 
 <style>
+	/* keep labels legible on phones: the drawing scrolls instead of shrinking */
+	.graphdiagram {
+		overflow-x: auto;
+		-webkit-overflow-scrolling: touch;
+	}
 	.graphdiagram svg {
 		width: 100%;
+		min-width: 640px;
 		height: auto;
 		display: block;
 	}

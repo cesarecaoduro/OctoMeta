@@ -16,7 +16,7 @@
 	}: { href?: string; size?: number; fontSize?: string } = $props();
 </script>
 
-<a class="lockup orbit-hover" {href} aria-label="OctoMeta home">
+<a class="lockup mark-hover" {href} aria-label="OctoMeta home">
 	<Logo {size} />
 	<span class="wm" style:font-size={fontSize}>OctoMeta</span>
 </a>
