@@ -2,13 +2,15 @@
 
 *What is actually built, where it lives, and the decisions behind it. Updated as the codebase grows; the forward-looking plan lives in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) (with [PRD.md](PRD.md) for the why).*
 
-**Last updated:** 19 July 2026 · V1-0 de-risk spikes complete (GO, see [docs/v1-0-findings.md](docs/v1-0-findings.md)); waitlist backend live on Convex + Resend; V1/V2/V3 version arc adopted (IMPLEMENTATION_PLAN.md v3).
+**Last updated:** 19 July 2026 · V1-1 engine core (values, units, formulas) implemented and unit-tested; V1-0 de-risk spikes complete (GO, see [docs/v1-0-findings.md](docs/v1-0-findings.md)); waitlist backend live on Convex + Resend; V1/V2/V3 version arc adopted (IMPLEMENTATION_PLAN.md v3).
 
 ## Current state
 
 A SvelteKit + Svelte 5 (runes) + TypeScript app containing the marketing landing page, with a **live Convex backend for the waitlist**: idempotent `waitlist.join` mutation, confirmation emails through the Resend component, a delivery-status webhook, and a cleanup cron.
 
-**V1-0 is done.** The workspace is scaffolded (exact-pinned Univer 0.25.1 + TipTap 3.28.0, Vitest on `src/lib/engine/`, Playwright e2e against the production build) and both Univer spikes passed: a Univer sheet lives inside a TipTap NodeView (SSR-safe, focus-isolated, move-safe, serializable), and Facade custom functions spill 2D arrays natively with tagged strings as the `TypedValue` display path. Findings, landmines, and the spike-route promotion plan are in `docs/v1-0-findings.md`. No product tables and no engine code yet; next is V1-1-1 (engine types).
+**V1-0 is done.** The workspace is scaffolded (exact-pinned Univer 0.25.1 + TipTap 3.28.0, Vitest on `src/lib/engine/`, Playwright e2e against the production build) and both Univer spikes passed: a Univer sheet lives inside a TipTap NodeView (SSR-safe, focus-isolated, move-safe, serializable), and Facade custom functions spill 2D arrays natively with tagged strings as the `TypedValue` display path. Findings, landmines, and the spike-route promotion plan are in `docs/v1-0-findings.md`.
+
+**V1-1 is done.** The typed core of SCHEMA.md §2–3 + §6 lives in `src/lib/engine/` as pure TypeScript (zero UI imports, enforced by a boundary test): `types.ts` (TypedValue union, Dimension, error taxonomy, ULID ids, cyrb53 content hashing, exhaustive guards), `node.ts` (GraphNode with Provenance/PendingChange stamped from day one), `units.ts` (SI + engineering unit table, canonical-SI quantity storage, dimension algebra, `#UNIT!` checks, `format`/`convert` display conversion that never touches stored values), `formula.ts` (v1 grammar parser with unit literals/cell refs/dotted names, canonical printer, `resolveInputs` deriving edges, `#REF!`/`#NAME?` as values), and `registry.ts` (FnSignature registry with the builtin/user origin seam, quantity-lifted operators, the V1 built-ins, `SHOWSTEPS` stubbed until V1-5-4). 193 Vitest cases including a seeded property test over dimension algebra. `5 kN * 2` → `10 kN` and `kN + m` → `#UNIT!` hold in tests; evaluation/recalc wiring is V1-2. No product tables yet; next is V1-2-1 (mutation API + undo log).
 
 ## Stack in use
 
@@ -38,7 +40,13 @@ src/
     crons.ts                Resend component cleanup schedule
     _generated/             generated stubs
   lib/
-    engine/                   (V1-1+) the typed graph — pure TS, zero UI imports; README stub + test harness
+    engine/                   the typed graph — pure TS, zero UI imports (boundary-tested)
+      types.ts              TypedValue, Dimension, ErrCode, ULID ids, content hashing, guards
+      node.ts               GraphNode + Provenance + PendingChange (V3 hook, stamped never read)
+      units.ts              unit table, dimension algebra, parse/format/convert, quantity ops
+      formula.ts            FormulaAST, parser, canonical printer, resolveInputs (edges derived)
+      registry.ts           FnSignature registry, quantity-lifted operators, V1 built-ins
+      index.ts              public engine surface (import from here, not internals)
     adapters/                 (V1-3) third-party bridges; only place allowed to import @univerjs; README stub
     persistence/              (V1-4) the only path to Convex for UI code; README stub
     styles/
@@ -85,10 +93,13 @@ docs/v1-0-findings.md       V1-0 decision memo: spike outcomes, Univer landmines
 
 - **V1-0 spikes: GO** (19 Jul 2026, `docs/v1-0-findings.md`): Univer-in-TipTap works (plain-JS NodeView mounting Svelte 5 `mount()`; `stopEvent`/`ignoreMutation` for isolation; snapshot store keyed by `sid` because block moves recreate the view). Custom functions register through `univerAPI.getFormula().registerFunction` **after lifecycle `Steady`** (earlier throws a redi DI error); 2D returns spill natively; rich values are impossible so `TypedValue` display uses tagged strings intercepted by the adapter. Spike routes stay until V1-3-1 promotes their patterns, then get deleted.
 
+- **Units deferred to V2 in the product** (user decision, 19 Jul 2026): the V1-1-2 quantity/units engine layer stays built, tested, and **dormant** — same pattern as the geometry hooks. No V1 surface (Univer adapter, chips, show-steps, fixtures) parses, renders, or converts units; V1 numbers are plain scalars and `#UNIT!` never surfaces before V2. IMPLEMENTATION_PLAN.md V1-3/V1-5 acceptance was re-tagged accordingly and units surfacing is task V2-U.
+- **Engine conventions (V1-1, 19 Jul 2026):** quantities are stored as canonical SI magnitudes; `Dimension.display` is presentation only, so display-unit switches never change stored values or hashes. A dimensionless arithmetic result collapses to `scalar` (a ratio is a bare number). Formula grammar: juxtaposition after a number always means a unit literal (`5 m2` is 5 m²; write `5 * M2` for the cell), `^` right after a unit extends the unit (`(5 m)^2` to square a quantity), `*` is always arithmetic (compound units use `·` or `/`), and in denominators cell-ref lookalikes stay cell refs (`5 kN/m2` divides by M2; write `kN/m^2`). Unary minus binds tighter than `^` (Excel). Errors are values with `origin`; units-layer errors carry `origin: ''` until the evaluator (V1-2-2) stamps the failing node.
+
 ## Verification
 
-`pnpm check` (0 errors/warnings), `pnpm build` passes, page SSRs correctly at `/`, `pnpm test` (engine harness), `pnpm test:e2e` (spike proofs incl. SSR/hydration, focus isolation, move survival, serialize/restore, custom functions, spill).
+`pnpm check` (0 errors/warnings), `pnpm build` passes, page SSRs correctly at `/`, `pnpm test` (193 engine cases: types/hashing, units corpus + property test, formula parse/print round-trips, registry built-ins, engine import boundary), `pnpm test:e2e` (spike proofs incl. SSR/hydration, focus isolation, move survival, serialize/restore, custom functions, spill).
 
 ## Next (not started)
 
-V1-1 from IMPLEMENTATION_PLAN.md v3: engine types (V1-1-1), then units (V1-1-2) and formula AST (V1-1-3) in parallel lanes, function registry (V1-1-4). Pure TypeScript under `src/lib/engine/`, zero UI imports. The occt-wasm spike stays moved to V2-0.
+V1-2 from IMPLEMENTATION_PLAN.md v3: mutation API + undo log (V1-2-1), topological + content-hash incremental recalc (V1-2-2), cycle detection (V1-2-3). The occt-wasm spike stays moved to V2-0.

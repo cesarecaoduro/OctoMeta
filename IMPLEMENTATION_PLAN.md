@@ -32,10 +32,10 @@ Do not implement anything beyond this task's scope.
 
 1. **Schema working.** SCHEMA.md §2–§6, §9, §11 as a pure-TypeScript engine: typed values, dimensions, formula AST, mutation API as the sole write path, topological + content-hash recalc, cycle detection, function registry, error taxonomy.
 2. **Persistence.** Convex (already wired in this repo for the waitlist) behind a thin `src/lib/persistence/` interface. Reload restores the exact document, verified by hash in CI.
-3. **The main editor.** A TipTap block document at `/app/[docId]` where **text (markdown input), headings, images, and Univer sheet blocks coexist**. Univer is the calculation engine: cells carry units, formulas evaluate through the graph, named ranges publish dotted names (`beam.span`), and prose references results via live chips. Edit a cell anywhere and every dependent block follows.
+3. **The main editor.** A TipTap block document at `/app/[docId]` where **text (markdown input), headings, images, and Univer sheet blocks coexist**. Univer is the calculation engine: cells carry numbers, formulas evaluate through the graph, named ranges publish dotted names (`beam.span`), and prose references results via live chips. Edit a cell anywhere and every dependent block follows. (Units surface in V2; see below.)
 4. **Not a black box.** Show-steps derivations on every computed quantity, a read-only provenance inspector (who/what authored a value, its inputs and dependents), and the full error taxonomy rendered inline with deep-links to the origin. This is the QAQC/handover story and it ships in V1.
 
-**Deliberately out of V1:** the geometry viewer and kernels (V2, per decision 19 Jul 2026), equation blocks (KaTeX/MathLive), PDF export, templates, version snapshots, IFC, auth, collaboration. The graph's geometry hooks are built dormant so V2 plugs in without engine changes.
+**Deliberately out of V1:** the geometry viewer and kernels (V2, per decision 19 Jul 2026), **units in the product** (V2, per decision 19 Jul 2026: the engine quantity/units layer shipped in V1-1-2 and stays dormant — no V1 surface parses, renders, or converts units; V1 numbers are plain scalars), equation blocks (KaTeX/MathLive), PDF export, templates, version snapshots, IFC, auth, collaboration. The graph's geometry hooks and units layer are built dormant so V2 plugs in without engine changes.
 
 **V2 · Connect the viewer.** Geometry kernels behind `GeometryKernel`, geometry built-ins (`EXTRUDE` in a cell drives a solid), the Three.js viewer block with bidirectional picking, plus the report/deliverable surface: equations, PDF export, templates, versions, performance at 2,000 nodes, IFC.
 
@@ -50,9 +50,9 @@ Do not implement anything beyond this task's scope.
 | # | Name | Duration | User-visible checkpoint at exit |
 |---|---|---|---|
 | **V1-0** | De-risk spikes (Univer) | 1.5–2 wk | (internal) Univer-in-TipTap and custom functions proven; go/no-go recorded |
-| **V1-1** | Engine: values, units, formulas | 2 wk (starts during V1-0) | (internal) `5 kN * 2` → `10 kN`; `kN + m` → `#UNIT!`, all in tests |
+| **V1-1** | Engine: values, units, formulas | 2 wk (starts during V1-0) | ✅ done · (internal) `5 kN * 2` → `10 kN`; `kN + m` → `#UNIT!`, all in tests. Units layer stays engine-only/dormant until V2 (decision 19 Jul 2026) |
 | **V1-2** | Engine: mutations + reactive recalc | 1.5 wk | (internal) Edit an input, dependents recompute in order; undo/redo; `#CYCLE!` |
-| **V1-3** | Univer adapter | 2 wk | Standalone sheet: unit-safe formulas, named ranges publish to the graph |
+| **V1-3** | Univer adapter | 2 wk | Standalone sheet: graph-evaluated formulas, named ranges publish to the graph |
 | **V1-4** | Persistence | 1 wk (parallel with V1-3/V1-5) | Documents survive reload bit-for-bit; reproducibility test in CI |
 | **V1-5** | The document | 3 wk | **The prototype:** prose + images + sheets + chips + show-steps + provenance, all reactive |
 
@@ -88,6 +88,8 @@ Engine work (V1-1/V1-2) overlaps the spikes; persistence overlaps the adapter an
 ## 4. V1-1 — Engine: values, units, formulas (2 weeks, starts during V1-0)
 
 **Goal:** the typed core of SCHEMA.md, pure TypeScript with **zero UI imports** (`src/lib/engine/`), fully unit-tested. This layer is the product; every block type is a projection of it. Nothing here depends on the spikes, so it starts day one.
+
+> **Status: done (19 Jul 2026).** All four tasks shipped and tested. Per the same-day decision, the V1-1-2 quantity/units layer stays **engine-only and dormant until V2** — no V1 surface parses, renders, or converts units.
 
 ### Parallel lanes
 
@@ -140,9 +142,9 @@ Engine work (V1-1/V1-2) overlaps the spikes; persistence overlaps the adapter an
 ## 6. V1-3 — Univer adapter (2 weeks)
 
 **V1-3-1 · Univer adapter: custom functions, cell↔node binding, named-range lift** · *Size XL · Deps: V1-2-3, V1-0-3*
-- **In:** `src/lib/adapters/univer/`: the **only** place allowed to import `@univerjs`. (a) Register all registry functions into Univer via the V1-0-3-chosen mechanism; unit literals and `TypedValue` display (quantities with units, error codes `#UNIT!` etc.) render in cells. (b) Cell edit → `setInput`/`setFormula` mutation; graph notification → cell display update; **no write path around `applyMutation`** (Univer's own recalc is demoted to display). (c) Named range creation/rename/delete → `publishName` → `NamedOutputNode` with dotted name; dotted names usable in formulas across sheets through the graph (no second formula engine, PRD §5.4). (d) Display-unit conversion surfaced per cell/named value (`format`/`convert` from V1-1-2; stored value unchanged). (e) Adapter-wrap every Univer API touched (pre-1.0 churn risk). (f) Boot order per docs/v1-0-findings.md landmine 1: `setInitialFormulaComputing(NO_CALCULATION)` before workbook creation, register functions at lifecycle `Steady`, then one explicit recalc — otherwise loaded snapshots referencing custom functions paint `#NAME?`.
-- **Out:** No document canvas hosting (V1-5-2); a single standalone sheet page is fine here; no geometry functions.
-- **Acceptance:** Playwright: type `=5 kN * 2` → cell shows `10 kN`; `=beam.span` in another sheet resolves; rename the named range → dependents update; `kN + m` cell shows `#UNIT!`; switch a cell's display unit `kN·m` ↔ `N·m` without changing the stored value; a cell edit reaches the graph *only* through `applyMutation` (spy in a unit test of the adapter layer).
+- **In:** `src/lib/adapters/univer/`: the **only** place allowed to import `@univerjs`. (a) Register all registry functions into Univer via the V1-0-3-chosen mechanism; `TypedValue` display (scalars, error codes `#CYCLE!`/`#REF!`/`#VALUE!` etc.) renders in cells. (b) Cell edit → `setInput`/`setFormula` mutation; graph notification → cell display update; **no write path around `applyMutation`** (Univer's own recalc is demoted to display). (c) Named range creation/rename/delete → `publishName` → `NamedOutputNode` with dotted name; dotted names usable in formulas across sheets through the graph (no second formula engine, PRD §5.4). (d) Adapter-wrap every Univer API touched (pre-1.0 churn risk). (e) Boot order per docs/v1-0-findings.md landmine 1: `setInitialFormulaComputing(NO_CALCULATION)` before workbook creation, register functions at lifecycle `Steady`, then one explicit recalc — otherwise loaded snapshots referencing custom functions paint `#NAME?`.
+- **Out:** No document canvas hosting (V1-5-2); a single standalone sheet page is fine here; no geometry functions; **no unit literals, unit rendering, or display-unit conversion in cells** (units surface in V2 · decision 19 Jul 2026; the engine layer already exists in V1-1-2).
+- **Acceptance:** Playwright: type `=5 * 2` → cell shows `10`; `=beam.span` in another sheet resolves; rename the named range → dependents update; a self-referencing formula shows `#CYCLE!`; a cell edit reaches the graph *only* through `applyMutation` (spy in a unit test of the adapter layer).
 
 ---
 
@@ -177,11 +179,11 @@ Engine work (V1-1/V1-2) overlaps the spikes; persistence overlaps the adapter an
 - **Acceptance:** Playwright: two sheets in one doc; sheet A publishes `beam.span`, sheet B consumes it; block move never changes values (SCHEMA.md §5); reload restores both snapshots and all graph state; mount time + memory at 2/4/8 sheet blocks measured and recorded in ARCHITECTURE.md with the mount strategy decision (eager vs lazy).
 
 **V1-5-3 · Inline live value chips** · *Size L · Deps: V1-5-1, V1-3-1*
-- **In:** Inline TipTap node + `ChipBinding` (SCHEMA.md §8): insert-by-name picker (`@beam.span`), renders live value with unit per `format`, recompute flash per DESIGN.md §5 (accent → dim, 700 ms; reduced-motion honored), busy state during recalc, error chips show the code and **deep-link to `origin`** (click scrolls to the failing block/cell, SCHEMA.md §11). `rebindChip` through `applyMutation` only. Deleted node → chip shows `#REF!`. Labeled for screen readers (PRD §10).
+- **In:** Inline TipTap node + `ChipBinding` (SCHEMA.md §8): insert-by-name picker (`@beam.span`), renders live value per `format` (plain numbers in V1; units V2), recompute flash per DESIGN.md §5 (accent → dim, 700 ms; reduced-motion honored), busy state during recalc, error chips show the code and **deep-link to `origin`** (click scrolls to the failing block/cell, SCHEMA.md §11). `rebindChip` through `applyMutation` only. Deleted node → chip shows `#REF!`. Labeled for screen readers (PRD §10).
 - **Acceptance:** Playwright: chip in prose updates on cell edit with flash; error chip navigates to root cause; chips survive copy/paste within the doc; Vitest: rebind through `applyMutation` only.
 
-**V1-5-4 · Show-steps rendering** · *Size M · Deps: V1-1-2, V1-1-4, V1-5-3*
-- **In:** For any computed quantity node: substituted derivation from the stored AST via the V1-1-3 printer — formula with names, then values-with-units substituted, then intermediate results, then final (PRD §4: 100% of computed quantity nodes). Surfaces: chip expansion in-canvas and `SHOWSTEPS(ref)` (un-stub from V1-1-4) rendering as a block. Plain-text representation available (accessibility, PRD §10). Mono for all computational text (DESIGN.md §4).
+**V1-5-4 · Show-steps rendering** · *Size M · Deps: V1-1-4, V1-5-3*
+- **In:** For any computed node: substituted derivation from the stored AST via the V1-1-3 printer — formula with names, then values substituted (units in the substitution arrive with V2), then intermediate results, then final (PRD §4: 100% of computed nodes). Surfaces: chip expansion in-canvas and `SHOWSTEPS(ref)` (un-stub from V1-1-4) rendering as a block. Plain-text representation available (accessibility, PRD §10). Mono for all computational text (DESIGN.md §4).
 - **Acceptance:** Vitest: derivation corpus over the V1-5-6 fixture (every computed node yields well-formed steps); Playwright: expand chip → steps.
 
 **V1-5-5 · Provenance inspector (read-only)** · *Size S · Deps: V1-1-1, V1-5-3*
@@ -189,7 +191,7 @@ Engine work (V1-1/V1-2) overlaps the spikes; persistence overlaps the adapter an
 - **Acceptance:** Playwright: select chip → inspector; walk inputs to a source input; walk dependents back down; template-authored fixture displays attribution.
 
 **V1-5-6 · V1 checkpoint: the prototype demo** · *Size S · Deps: all V1-5, V1-4-1*
-- **In:** A scripted fixture document (also a CI fixture for V1-4-1's reproducibility test): a short beam calc authored as prose + image + two sheets + chips + show-steps. One Playwright scenario end-to-end: create doc → markdown prose → sheet with unit-safe inputs/formulas and published names → chips in prose → edit a cell, chips flash and follow → cross-sheet reference → introduce and fix a `#UNIT!` and a `#CYCLE!` → expand a chip to show-steps → open the inspector and walk the dependency chain → convert a display unit → reload, state intact → undo/redo across the whole session, including undoing a pre-reload edit after the reload.
+- **In:** A scripted fixture document (also a CI fixture for V1-4-1's reproducibility test): a short beam calc authored as prose + image + two sheets + chips + show-steps. One Playwright scenario end-to-end: create doc → markdown prose → sheet with inputs/formulas and published names → chips in prose → edit a cell, chips flash and follow → cross-sheet reference → introduce and fix a `#CYCLE!` and a `#VALUE!` → expand a chip to show-steps → open the inspector and walk the dependency chain → reload, state intact → undo/redo across the whole session, including undoing a pre-reload edit after the reload.
 - **Acceptance:** The scenario passes in CI and takes < 3 minutes to demo live. This is the V1 exit gate.
 
 ---
@@ -199,6 +201,7 @@ Engine work (V1-1/V1-2) overlaps the spikes; persistence overlaps the adapter an
 Geometry updating from calculation results is the V2 headline. The deferred spikes run first, because that's when their answers are needed:
 
 - **V2-0 · Spike:** occt-wasm browser matrix + disposal behavior (former M0-4, verbatim; decides the exact-kernel path).
+- **V2-U · Units surfaced in the product** (deferred from V1, decision 19 Jul 2026): unit literals and quantity display in cells, display-unit conversion per cell/named value (`format`/`convert` from V1-1-2; stored value unchanged), `#UNIT!` rendered inline with deep-links, chips and show-steps with units. Adapter + UI only — the engine layer already exists and is tested (V1-1-2).
 - **V2-1 · Geometry core:** `GeometryKernel` interface + content-addressed `GeometryStore` with sweep (SCHEMA.md §7); manifold-3d preview adapter; occt-wasm exact adapter in a Worker. (Former M2-1..M2-3.)
 - **V2-2 · Geometry as a value:** `POINT/LINE/POLYLINE/PROFILE/EXTRUDE/DISTANCE/LENGTH/VOLUME` built-ins with dimension checks (`EXTRUDE(profile, 5 kg)` → `#UNIT!`); recalc integration filling the V1-2-2 hook (preview-then-exact, mandatory sweep); hard gates in CI: no WASM growth over 1,000 recalcs, p95 small-edit preview < 16 ms. (Former M2-4..M2-6.)
 - **V2-3 · Viewer block:** Three.js viewer as a canvas block with bidirectional picking (click solid → node; `highlight(nodeId)` in); parametric-beam demo: edit `beam.span` in a sheet, the solid re-extrudes, chips update. (Former M2-7/M2-8.)

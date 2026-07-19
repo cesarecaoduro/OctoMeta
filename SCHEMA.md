@@ -43,7 +43,7 @@ type GeomHandle = `geom:${string}:${string}`;
 type ErrCode = '#UNIT!' | '#DIM!' | '#CYCLE!' | '#REF!' | '#NAME?' | '#GEOM!' | '#VALUE!';
 ```
 
-**Rules.** Quantities are the default numeric type; a bare number is `scalar` only when explicitly dimensionless. Errors are *values* — they flow through edges and render wherever the node projects. Geometry never enters the graph as an object; only the handle string does.
+**Rules.** Quantities are the default numeric type; a bare number is `scalar` only when explicitly dimensionless. Errors are *values* — they flow through edges and render wherever the node projects. Geometry never enters the graph as an object; only the handle string does. **V2 note (decision 19 Jul 2026):** the quantity/units layer is implemented in the engine (V1-1-2) but stays dormant in the V1 product — V1 surfaces plain scalars; unit literals, quantity display, conversion, and `#UNIT!` UX arrive in V2 (task V2-U).
 
 ## 3. Graph model
 
