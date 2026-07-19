@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OctoMeta — One mind. Eight arms. | The living engineering document</title>
+<meta name="description" content="OctoMeta is the living engineering document: your calculations, your report, and your 3D model are arms of a single intelligent graph. Unit-safe reactive calcs, live 3D geometry from formulas, IFC4X3 export. Join the waitlist." />
+<meta property="og:title" content="OctoMeta — One mind. Eight arms." />
+<meta property="og:description" content="The living engineering document: calculations, report and 3D model as arms of one intelligent graph. Join the waitlist." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Inter+Tight:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="icon" type="image/svg+xml" href='data:image/svg+xml,<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none"><g stroke="%230B0B0C" stroke-width="3" stroke-linecap="round"><path d="M32 23 C30 17 36 11 37 9"/><path d="M38.4 25.6 C41.2 20 49.7 20 51.8 19.3"/><path d="M41 32 C47 30 53 36 55 37"/><path d="M38.4 38.4 C44 41.2 44 49.7 44.7 51.8"/><path d="M32 41 C34 47 28 53 27 55"/><path d="M25.6 38.4 C22.8 44 14.3 44 12.2 44.7"/><path d="M23 32 C17 34 11 28 9 27"/><path d="M25.6 25.6 C20 22.8 20 14.3 19.3 12.2"/></g><circle cx="32" cy="32" r="7" fill="%230B0B0C"/><circle cx="51.8" cy="19.3" r="3" fill="%230B5FFF"/></svg>' />
+<style>
+/* ============ OCTOMETA TOKENS (see DESIGN.md) ============ */
+:root{
+  --paper:#FAFAF9; --ink:#0B0B0C; --grey-1:#55555A; --grey-2:#9A9AA0;
+  --grey-3:#E4E4E1; --grey-4:#F1F1EF; --surface:#FFFFFF;
+  --accent:#0B5FFF; --accent-dim:rgba(11,95,255,.10);
+  --error:#C42B1C; --error-dim:rgba(196,43,28,.08);
+  --font-display:"Inter Tight",system-ui,sans-serif;
+  --font-body:"Inter",system-ui,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,monospace;
+  --s1:8px; --s2:16px; --s3:24px; --s4:40px; --s5:64px; --s6:96px;
+  --max:1200px; --prose:720px;
+  --t-fast:180ms; --t-med:280ms; --ease:cubic-bezier(.25,.1,.25,1);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--paper); color:var(--ink); font-family:var(--font-body);
+  font-size:17px; line-height:1.6; -webkit-font-smoothing:antialiased}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:2px}
+::selection{background:var(--accent-dim)}
+.wrap{max-width:var(--max); margin:0 auto; padding:0 var(--s3)}
+h1,h2,h3{font-family:var(--font-display); font-weight:600; letter-spacing:-.025em; line-height:1.08}
+h1{font-size:clamp(2.7rem,6.4vw,4.6rem)}
+h2{font-size:clamp(1.8rem,3.6vw,2.6rem); letter-spacing:-.02em}
+.sub{color:var(--grey-1); font-size:clamp(1.05rem,1.6vw,1.3rem); line-height:1.55}
+.mono{font-family:var(--font-mono); font-size:.82em}
+.eyebrow{font-family:var(--font-mono); font-size:.72rem; font-weight:500;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--grey-2)}
+.hairline{border:0; border-top:1px solid var(--grey-3)}
+.dim-divider{display:flex; align-items:center; gap:var(--s2); margin:var(--s6) 0 var(--s5); user-select:none}
+.dim-divider .line{flex:1; height:1px; background:var(--grey-3); position:relative}
+.dim-divider .line::before,.dim-divider .line::after{content:""; position:absolute; top:-4px; width:1px; height:9px; background:var(--grey-2)}
+.dim-divider .line::before{left:0}.dim-divider .line::after{right:0}
+.dim-divider .tag{font-family:var(--font-mono); font-size:.72rem; letter-spacing:.12em; color:var(--grey-2)}
+
+/* nav */
+nav{position:sticky; top:0; z-index:50;
+  background:color-mix(in srgb,var(--paper) 88%,transparent);
+  backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--grey-3)}
+.nav-inner{display:flex; align-items:center; justify-content:space-between; height:62px}
+.lockup{display:flex; align-items:center; gap:10px; text-decoration:none}
+.lockup svg{width:26px; height:26px; color:var(--ink)}
+.lockup .wm{font-family:var(--font-display); font-weight:600; font-size:1.05rem; letter-spacing:-.02em}
+.lockup .wm span{color:var(--grey-1)}
+.nav-links{display:flex; gap:var(--s4); align-items:center; list-style:none}
+.nav-links a{font-size:.9rem; color:var(--grey-1); text-decoration:none; transition:color var(--t-fast)}
+.nav-links a:hover{color:var(--ink)}
+
+/* buttons */
+.btn{display:inline-flex; align-items:center; gap:10px; font-family:var(--font-body);
+  font-weight:500; font-size:.95rem; padding:12px 22px; border-radius:999px;
+  border:1px solid transparent; cursor:pointer; text-decoration:none;
+  transition:all var(--t-fast) var(--ease)}
+.btn-primary{background:var(--ink); color:var(--paper)}
+.btn-primary:hover{background:var(--accent)}
+.btn-ghost{border-color:var(--grey-3); color:var(--ink); background:transparent}
+.btn-ghost:hover{border-color:var(--ink)}
+.btn-sm{padding:8px 16px; font-size:.85rem}
+
+/* hero */
+.hero{padding:calc(var(--s6) - 8px) 0 var(--s5)}
+.hero-mark{width:64px; height:64px; color:var(--ink); margin-bottom:var(--s3)}
+.hero .eyebrow{display:block; margin-bottom:var(--s2)}
+.hero h1{max-width:13ch}
+.hero .vision{max-width:58ch; margin-top:var(--s3)}
+.hero .vision strong{color:var(--ink); font-weight:500}
+.hero-ctas{display:flex; gap:var(--s2); margin-top:var(--s4); flex-wrap:wrap}
+
+/* demo */
+.demo{position:relative; margin-top:var(--s5); border:1px solid var(--grey-3);
+  border-radius:14px; background:var(--surface); overflow:hidden}
+.demo-chrome{display:flex; align-items:center; gap:var(--s2); padding:10px var(--s2);
+  border-bottom:1px solid var(--grey-3)}
+.demo-chrome .dot{width:9px;height:9px;border-radius:50%;background:var(--grey-3)}
+.demo-chrome .title{font-family:var(--font-mono); font-size:.72rem; color:var(--grey-2); letter-spacing:.08em}
+.demo-body{position:relative; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.1fr)}
+.demo-left{padding:var(--s3); display:flex; flex-direction:column; gap:var(--s3); border-right:1px solid var(--grey-3)}
+.demo-right{padding:var(--s3); display:flex; flex-direction:column}
+.demo-prose{font-size:.95rem; line-height:1.7; color:var(--grey-1)}
+.demo-prose .blocklabel{display:block; margin-bottom:var(--s1)}
+.chip{display:inline-block; font-family:var(--font-mono); font-size:.85em; font-weight:500;
+  padding:1px 7px; border-radius:6px; background:var(--accent-dim); color:var(--accent);
+  transition:background var(--t-med) var(--ease)}
+.chip.pulse{animation:chipflash .7s var(--ease)}
+@keyframes chipflash{0%{background:var(--accent); color:#fff}100%{background:var(--accent-dim); color:var(--accent)}}
+.sheet{border:1px solid var(--grey-3); border-radius:8px; overflow:hidden; background:var(--surface)}
+.fbar{display:flex; gap:10px; align-items:center; padding:7px 10px; border-bottom:1px solid var(--grey-3);
+  background:var(--grey-4); font-family:var(--font-mono); font-size:.74rem; color:var(--grey-1)}
+.fbar .fx{color:var(--grey-2); font-style:italic}
+.sheet table{width:100%; border-collapse:collapse; font-size:.82rem}
+.sheet td{padding:7px 10px; border-top:1px solid var(--grey-3)}
+.sheet tr:first-child td{border-top:0}
+.sheet td.name{font-family:var(--font-mono); font-size:.74rem; color:var(--grey-1)}
+.sheet td.val{font-family:var(--font-mono); text-align:right; font-weight:500; white-space:nowrap}
+.sheet td.unit{color:var(--grey-2); font-family:var(--font-mono); font-size:.74rem; width:1%}
+.cellchange{animation:cellflash .7s var(--ease)}
+@keyframes cellflash{0%{background:var(--accent-dim)}100%{background:transparent}}
+td.val.computed{color:var(--accent)}
+.spanctl{display:flex; flex-direction:column; gap:6px}
+.spanctl label{font-family:var(--font-mono); font-size:.72rem; color:var(--grey-2); letter-spacing:.06em}
+input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:22px; background:transparent; cursor:ew-resize}
+input[type=range]::-webkit-slider-runnable-track{height:1px; background:var(--grey-3)}
+input[type=range]::-moz-range-track{height:1px; background:var(--grey-3)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:15px; height:15px; margin-top:-7px;
+  border-radius:50%; background:var(--paper); border:2px solid var(--accent)}
+input[type=range]::-moz-range-thumb{width:12px; height:12px; border-radius:50%; background:var(--paper); border:2px solid var(--accent)}
+.viewer{flex:1; display:flex; align-items:center; justify-content:center; min-height:280px; position:relative}
+.viewer svg{width:100%; height:auto; max-width:480px; display:block}
+.dimline{stroke:var(--accent); stroke-width:1}
+.dimtick{stroke:var(--accent); stroke-width:1}
+.dimtext{font-family:var(--font-mono); font-size:13px; fill:var(--accent); font-weight:500}
+.beamface{stroke:rgba(11,11,12,.45); stroke-width:1; stroke-linejoin:round}
+.deps{position:absolute; inset:0; pointer-events:none; overflow:visible}
+.dep{fill:none; stroke:var(--grey-3); stroke-width:1}
+.dep-pulse{fill:none; stroke:var(--accent); stroke-width:1.5; stroke-dasharray:6 120; stroke-dashoffset:126; opacity:0}
+.dep-pulse.run{animation:deprun .9s var(--ease)}
+@keyframes deprun{0%{opacity:1; stroke-dashoffset:126}85%{opacity:1}100%{opacity:0; stroke-dashoffset:-40}}
+
+/* sections */
+.section-head{display:grid; gap:var(--s2); margin-bottom:var(--s4); max-width:var(--prose)}
+.section-head .eyebrow{margin-bottom:var(--s1)}
+.feature{display:grid; grid-template-columns:minmax(0,5fr) minmax(0,7fr); gap:var(--s5); align-items:center; padding:var(--s4) 0}
+.feature.flip{grid-template-columns:minmax(0,7fr) minmax(0,5fr)}
+.feature .copy p{color:var(--grey-1); margin-top:var(--s2)}
+.exhibit{border:1px solid var(--grey-3); border-radius:12px; background:var(--surface); padding:var(--s3);
+  font-family:var(--font-mono); font-size:.84rem}
+.exhibit .caption{font-family:var(--font-body); font-size:.78rem; color:var(--grey-2); margin-top:var(--s2)}
+.graphdiagram svg{width:100%; height:auto; display:block}
+.gnode{fill:var(--surface); stroke:var(--grey-3)}
+.gnode-label{font-family:var(--font-mono); font-size:12px; fill:var(--ink)}
+.gnode-sub{font-family:var(--font-body); font-size:10.5px; fill:var(--grey-2)}
+.gedge{stroke:var(--grey-3); stroke-width:1; fill:none}
+.gpulse{stroke:var(--accent); stroke-width:1.5; fill:none; stroke-dasharray:6 200; stroke-dashoffset:206; opacity:0}
+.inview .gpulse{animation:deprun 1.2s var(--ease) forwards}
+.inview .gpulse.d2{animation-delay:.35s}
+.inview .gpulse.d3{animation-delay:.7s}
+.steps-line{display:flex; flex-wrap:wrap; gap:6px 12px; align-items:baseline}
+.steps-line + .steps-line{margin-top:10px; padding-top:10px; border-top:1px dashed var(--grey-3)}
+.err{color:var(--error); background:var(--error-dim); padding:1px 7px; border-radius:6px; font-weight:500}
+.provrow{display:flex; justify-content:space-between; gap:var(--s2); padding:9px 0; border-top:1px solid var(--grey-3); font-size:.8rem}
+.provrow:first-child{border-top:0}
+.provrow .who{color:var(--grey-1)}
+.badge{font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; padding:2px 8px; border-radius:999px; border:1px solid var(--grey-3); color:var(--grey-1)}
+.badge.ok{border-color:transparent; background:var(--accent-dim); color:var(--accent)}
+.deliv{display:flex; gap:var(--s2); flex-wrap:wrap}
+.deliv .card{flex:1; min-width:180px; border:1px solid var(--grey-3); border-radius:12px; padding:var(--s3); background:var(--surface)}
+.deliv .card .fmt{font-family:var(--font-mono); font-weight:500; font-size:1.05rem}
+.deliv .card p{font-size:.85rem; color:var(--grey-1); margin-top:6px}
+.ai-strip{border-top:1px solid var(--grey-3); border-bottom:1px solid var(--grey-3); padding:var(--s4) 0; margin:var(--s5) 0}
+.ai-strip .inner{display:flex; gap:var(--s4); align-items:baseline; flex-wrap:wrap}
+.ai-strip p{color:var(--grey-1); max-width:62ch}
+.audience{color:var(--grey-1); max-width:62ch}
+
+/* waitlist */
+.waitlist{margin:var(--s6) 0; padding:var(--s5) var(--s4); border:1px solid var(--grey-3);
+  border-radius:16px; background:var(--surface)}
+.wl-grid{display:grid; grid-template-columns:minmax(0,5fr) minmax(0,6fr); gap:var(--s5); align-items:start}
+.waitlist h2{max-width:16ch}
+.waitlist .lead{color:var(--grey-1); margin-top:var(--s2); max-width:44ch}
+.wl-points{list-style:none; margin-top:var(--s3); display:grid; gap:10px}
+.wl-points li{display:flex; gap:10px; font-size:.9rem; color:var(--grey-1)}
+.wl-points li::before{content:""; width:7px; height:7px; border-radius:50%; background:var(--accent); margin-top:7px; flex:none}
+.wl-form{display:grid; gap:var(--s2)}
+.field{display:grid; gap:6px}
+.field label{font-family:var(--font-mono); font-size:.72rem; letter-spacing:.08em; color:var(--grey-2); text-transform:uppercase}
+.field input,.field select{font:inherit; font-size:.95rem; padding:12px 16px;
+  border:1px solid var(--grey-3); border-radius:10px; background:var(--paper); color:var(--ink); width:100%}
+.field input:focus,.field select:focus{border-color:var(--accent); outline:none}
+.wl-row{display:grid; grid-template-columns:1fr 1fr; gap:var(--s2)}
+.wl-consent{display:flex; gap:10px; align-items:flex-start; font-size:.8rem; color:var(--grey-2)}
+.wl-consent input{margin-top:3px; accent-color:var(--accent)}
+.wl-note{font-family:var(--font-mono); font-size:.72rem; color:var(--grey-2)}
+.wl-success{display:none; text-align:center; padding:var(--s4) 0}
+.wl-success .mark{width:56px; height:56px; color:var(--accent); margin-bottom:var(--s2)}
+.wl-success h3{font-size:1.3rem}
+.wl-success p{color:var(--grey-1); margin-top:var(--s1)}
+.waitlist.done .wl-grid{display:none}
+.waitlist.done .wl-success{display:block}
+
+/* footer */
+footer{border-top:1px solid var(--grey-3); padding:var(--s4) 0 var(--s5); margin-top:var(--s5)}
+.foot{display:flex; justify-content:space-between; gap:var(--s3); flex-wrap:wrap; align-items:center}
+.foot .links{display:flex; gap:var(--s3); list-style:none}
+.foot a{font-size:.85rem; color:var(--grey-1); text-decoration:none}
+.foot a:hover{color:var(--ink)}
+.foot .fine{font-family:var(--font-mono); font-size:.72rem; color:var(--grey-2)}
+
+@media(max-width:900px){
+  .demo-body{grid-template-columns:1fr}
+  .demo-left{border-right:0; border-bottom:1px solid var(--grey-3)}
+  .feature,.feature.flip{grid-template-columns:1fr; gap:var(--s3)}
+  .feature.flip .exhibit{order:2}
+  .nav-links li.hide-m{display:none}
+  .wl-grid{grid-template-columns:1fr}
+  .wl-row{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important; transition:none!important}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<nav>
+  <div class="wrap nav-inner">
+    <a class="lockup" href="#top" aria-label="OctoMeta home">
+      <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
+        <g stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+          <path d="M32 23 C30 17 36 11 37 9"/><path d="M38.4 25.6 C41.2 20 49.7 20 51.8 19.3"/>
+          <path d="M41 32 C47 30 53 36 55 37"/><path d="M38.4 38.4 C44 41.2 44 49.7 44.7 51.8"/>
+          <path d="M32 41 C34 47 28 53 27 55"/><path d="M25.6 38.4 C22.8 44 14.3 44 12.2 44.7"/>
+          <path d="M23 32 C17 34 11 28 9 27"/><path d="M25.6 25.6 C20 22.8 20 14.3 19.3 12.2"/>
+        </g>
+        <circle cx="32" cy="32" r="6.5" fill="currentColor"/>
+        <circle cx="37" cy="9" r="2.4" fill="currentColor"/><circle cx="51.8" cy="19.3" r="2.4" fill="#0B5FFF"/>
+        <circle cx="55" cy="37" r="2.4" fill="currentColor"/><circle cx="44.7" cy="51.8" r="2.4" fill="currentColor"/>
+        <circle cx="27" cy="55" r="2.4" fill="currentColor"/><circle cx="12.2" cy="44.7" r="2.4" fill="currentColor"/>
+        <circle cx="9" cy="27" r="2.4" fill="currentColor"/><circle cx="19.3" cy="12.2" r="2.4" fill="currentColor"/>
+      </svg>
+      <span class="wm">Octo<span>Meta</span></span>
+    </a>
+    <ul class="nav-links">
+      <li class="hide-m"><a href="#graph">The graph</a></li>
+      <li class="hide-m"><a href="#geometry">Geometry</a></li>
+      <li class="hide-m"><a href="#deliverable">Deliverables</a></li>
+      <li><a href="#waitlist" class="btn btn-primary btn-sm">Join the waitlist</a></li>
+    </ul>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<header class="hero" id="top">
+  <div class="wrap">
+    <svg class="hero-mark" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <g stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+        <path d="M32 23 C30 17 36 11 37 9"/><path d="M38.4 25.6 C41.2 20 49.7 20 51.8 19.3"/>
+        <path d="M41 32 C47 30 53 36 55 37"/><path d="M38.4 38.4 C44 41.2 44 49.7 44.7 51.8"/>
+        <path d="M32 41 C34 47 28 53 27 55"/><path d="M25.6 38.4 C22.8 44 14.3 44 12.2 44.7"/>
+        <path d="M23 32 C17 34 11 28 9 27"/><path d="M25.6 25.6 C20 22.8 20 14.3 19.3 12.2"/>
+      </g>
+      <circle cx="32" cy="32" r="6.5" fill="currentColor"/>
+      <circle cx="37" cy="9" r="2.4" fill="currentColor"/><circle cx="51.8" cy="19.3" r="2.4" fill="#0B5FFF"/>
+      <circle cx="55" cy="37" r="2.4" fill="currentColor"/><circle cx="44.7" cy="51.8" r="2.4" fill="currentColor"/>
+      <circle cx="27" cy="55" r="2.4" fill="currentColor"/><circle cx="12.2" cy="44.7" r="2.4" fill="currentColor"/>
+      <circle cx="9" cy="27" r="2.4" fill="currentColor"/><circle cx="19.3" cy="12.2" r="2.4" fill="currentColor"/>
+    </svg>
+    <span class="eyebrow">The living engineering document · Early access</span>
+    <h1>One mind. Eight arms.</h1>
+    <p class="sub vision"><strong>OctoMeta is the living engineering document.</strong> Your calculations, your report, and your 3D model are arms of a single intelligent graph — edit anywhere, and every arm follows. No stale cells. No hidden state. A notebook where order doesn't matter.</p>
+    <div class="hero-ctas">
+      <a class="btn btn-primary" href="#waitlist">Join the waitlist</a>
+      <a class="btn btn-ghost" href="#demo">See a document compute</a>
+    </div>
+
+    <!-- ============ SIGNATURE DEMO ============ -->
+    <div class="demo" id="demo" aria-label="Live demo: edit beam.span and watch the moment, the report text, and the 3D beam recompute">
+      <div class="demo-chrome">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <span class="title">girder-check.octo — edit once, every arm follows</span>
+      </div>
+      <div class="demo-body" id="demoBody">
+        <svg class="deps" id="depsSvg" aria-hidden="true"></svg>
+        <div class="demo-left">
+          <div class="demo-prose">
+            <span class="eyebrow blocklabel">§ 3.2 · Report</span>
+            For the simply-supported main girder, the governing midspan moment is
+            <span class="chip" id="chipM">108.0 kN·m</span>, giving a utilisation of
+            <span class="chip" id="chipU">0.43</span> against the ULS capacity of
+            <span class="mono">250 kN·m</span>.
+          </div>
+          <div>
+            <span class="eyebrow blocklabel" style="display:block;margin-bottom:8px">Sheet · loads</span>
+            <div class="sheet" role="table" aria-label="Calculation sheet">
+              <div class="fbar"><span class="fx">fx</span><span>=loads.udl × beam.span² / 8</span></div>
+              <table>
+                <tr><td class="name">beam.span</td><td class="val" id="cellSpan">6.0</td><td class="unit">m</td></tr>
+                <tr><td class="name">loads.udl</td><td class="val">24.0</td><td class="unit">kN/m</td></tr>
+                <tr><td class="name">M_max</td><td class="val computed" id="cellM">108.0</td><td class="unit">kN·m</td></tr>
+              </table>
+            </div>
+          </div>
+          <div class="spanctl">
+            <label for="spanRange">beam.span — drag to edit</label>
+            <input type="range" id="spanRange" min="6.0" max="7.8" step="0.1" value="6.0" aria-label="beam.span in metres" />
+          </div>
+        </div>
+        <div class="demo-right">
+          <span class="eyebrow" style="display:block;margin-bottom:8px">Viewer · =EXTRUDE(profile, beam.span)</span>
+          <div class="viewer">
+            <svg id="beamSvg" viewBox="0 0 480 300" role="img" aria-label="Isometric beam whose length follows beam.span">
+              <polygon id="faceTop" class="beamface" fill="#ECECEA"></polygon>
+              <polygon id="faceFront" class="beamface" fill="#DBDBD8"></polygon>
+              <polygon id="faceSide" class="beamface" fill="#C9C9C6"></polygon>
+              <line id="dimA" class="dimtick"></line>
+              <line id="dimB" class="dimtick"></line>
+              <line id="dimL" class="dimline"></line>
+              <text id="dimT" class="dimtext" text-anchor="middle"></text>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="dim-divider" aria-hidden="true"><span class="tag">§ 01</span><span class="line"></span><span class="tag">ONE GRAPH</span></div>
+
+  <section id="graph">
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">Reactive by construction</span>
+        <h2>Runs in any order — the graph decides.</h2>
+      </div>
+      <p class="sub">Position is for humans. Order is for the graph. OctoMeta evaluates by dependency, not by where a block sits — your document reads top-to-bottom while it computes edge-by-edge, like an octopus moving eight arms with one mind.</p>
+    </div>
+    <div class="graphdiagram" id="graphDiagram">
+      <svg viewBox="0 0 960 190" role="img" aria-label="Prose, grid and 3D panels linked by dependency lines">
+        <rect class="gnode" x="20" y="55" width="230" height="80" rx="10"></rect>
+        <rect class="gnode" x="365" y="55" width="230" height="80" rx="10"></rect>
+        <rect class="gnode" x="710" y="55" width="230" height="80" rx="10"></rect>
+        <text class="gnode-label" x="40" y="88">§ Report</text>
+        <text class="gnode-sub" x="40" y="110">utilisation chip · 0.43</text>
+        <text class="gnode-label" x="385" y="88">Sheet · loads</text>
+        <text class="gnode-sub" x="385" y="110">beam.span → M_max</text>
+        <text class="gnode-label" x="730" y="88">Viewer</text>
+        <text class="gnode-sub" x="730" y="110">=EXTRUDE(profile, span)</text>
+        <path class="gedge" d="M365,95 C320,95 295,95 250,95"></path>
+        <path class="gpulse" d="M365,95 C320,95 295,95 250,95"></path>
+        <path class="gedge" d="M595,95 C640,95 665,95 710,95"></path>
+        <path class="gpulse d2" d="M595,95 C640,95 665,95 710,95"></path>
+        <path class="gedge" d="M480,135 C480,175 135,175 135,135"></path>
+        <path class="gpulse d3" d="M480,135 C480,175 135,175 135,135"></path>
+      </svg>
+    </div>
+  </section>
+
+  <div class="dim-divider" aria-hidden="true"><span class="tag">§ 02</span><span class="line"></span><span class="tag">UNITS</span></div>
+
+  <section id="units" class="feature">
+    <div class="copy">
+      <span class="eyebrow">Unit-safe by default</span>
+      <h2>Every number carries its units.</h2>
+      <p>Dimensional mismatches surface as errors, not silent bugs. Show the full substituted derivation on demand — so a checker reads the logic, not cell references.</p>
+    </div>
+    <div class="exhibit" aria-label="Show steps example">
+      <div class="steps-line"><span>M_max</span><span>=</span><span>w · L² / 8</span></div>
+      <div class="steps-line"><span>=</span><span>24.0 kN/m × (6.0 m)² / 8</span><span>=</span><span class="chip">108.0 kN·m</span></div>
+      <div class="steps-line"><span>w + L</span><span>→</span><span class="err">#UNIT! kN/m + m</span></div>
+      <p class="caption">"Show steps" renders the derivation with values and units substituted. Mixing dimensions is a typed error that propagates — never a silent wrong number.</p>
+    </div>
+  </section>
+
+  <div class="dim-divider" aria-hidden="true"><span class="tag">§ 03</span><span class="line"></span><span class="tag">GEOMETRY</span></div>
+
+  <section id="geometry" class="feature flip">
+    <div class="exhibit" aria-label="Geometry as a value example">
+      <div class="steps-line"><span>D4</span><span>=</span><span>EXTRUDE(profile, beam.span)</span></div>
+      <div class="steps-line"><span>→</span><span class="chip">geom:extrude:9f3a1c</span></div>
+      <div class="steps-line"><span>D5</span><span>=</span><span>DISTANCE(D2, D3)</span><span>→</span><span class="chip">4.21 m</span></div>
+      <p class="caption">Geometry is a first-class value: formulas return content-addressed handles into a real B-Rep kernel. Scalars unbox straight back into ordinary math.</p>
+    </div>
+    <div class="copy">
+      <span class="eyebrow">Live 3D from your formulas</span>
+      <h2><span class="mono" style="font-size:.85em">=EXTRUDE(profile, h)</span> returns a beam, not a number.</h2>
+      <p>Real B-Rep geometry, computed by a proper CAD kernel, live in the viewer. Pick a cell, highlight the object — and back again. No export, no round-trip, no separate tool.</p>
+    </div>
+  </section>
+
+  <div class="dim-divider" aria-hidden="true"><span class="tag">§ 04</span><span class="line"></span><span class="tag">DELIVERABLES</span></div>
+
+  <section id="deliverable" class="feature">
+    <div class="copy">
+      <span class="eyebrow">The report is the deliverable</span>
+      <h2>From calc to PDF and IFC — one artifact.</h2>
+      <p>Your calculation isn't transcribed into a deliverable. It <em>is</em> one. Export a paginated report and a schema-valid IFC4X3 model from the same graph — nothing to reconcile.</p>
+    </div>
+    <div class="deliv">
+      <div class="card"><span class="fmt">report.pdf</span><p>Paginated, submission-ready. Show-steps included where the checker needs them.</p></div>
+      <div class="card"><span class="fmt">model.ifc <span style="color:var(--grey-2)">· IFC4X3</span></span><p>The geometry you calculated is the geometry you deliver — straight into the BIM workflow.</p></div>
+    </div>
+  </section>
+
+  <div class="dim-divider" aria-hidden="true"><span class="tag">§ 05</span><span class="line"></span><span class="tag">REVIEW</span></div>
+
+  <section id="review" class="feature flip">
+    <div class="exhibit" aria-label="Provenance inspector example">
+      <div class="provrow"><span>beam.span = 6.0 m</span><span class="who">input · P. Sharma</span><span class="badge ok">Verified</span></div>
+      <div class="provrow"><span>M_max = w·L²/8</span><span class="who">formula · template AS 5100</span><span class="badge ok">Verified</span></div>
+      <div class="provrow"><span>deck.points = TABLE(A2:C40)</span><span class="who">formula · P. Sharma</span><span class="badge">Unverified</span></div>
+      <p class="caption">Every value knows how it was derived, who authored it, and whether it's been checked.</p>
+    </div>
+    <div class="copy">
+      <span class="eyebrow">Built for checking</span>
+      <h2>Reviewable by design.</h2>
+      <p>Provenance and "show steps" make verification fast and trustworthy — a workflow made for ISO 19650-style checking, not bolted on after.</p>
+    </div>
+  </section>
+
+  <div class="ai-strip">
+    <div class="inner">
+      <span class="eyebrow">AI-ready by architecture</span>
+      <p>Every edit flows through one typed API, with provenance built in — so when AI arrives, it's just another careful reviewer, not a bolt-on.</p>
+    </div>
+  </div>
+
+  <section>
+    <p class="audience"><strong>For structural, civil &amp; infrastructure engineers</strong> — design engineers, checkers, and BIM leads who are done reconciling spreadsheets, Word calcs, and models by hand.</p>
+  </section>
+
+  <!-- ============ WAITLIST ============ -->
+  <section class="waitlist" id="waitlist">
+    <div class="wl-grid">
+      <div>
+        <span class="eyebrow">Early access</span>
+        <h2>Test the platform first.</h2>
+        <p class="lead">We're onboarding a small group of structural and civil teams. Bring a real calc package; leave with a document that recalculates, verifies, and exports.</p>
+        <ul class="wl-points">
+          <li>Private beta is free — we ask only for honest feedback on real work.</li>
+          <li>Founding Engineer pricing locked for beta users who continue.</li>
+          <li>One email when your invite is ready. Nothing else.</li>
+        </ul>
+      </div>
+      <form class="wl-form" id="wlForm" novalidate>
+        <div class="field">
+          <label for="wlEmail">Work email *</label>
+          <input id="wlEmail" name="email" type="email" placeholder="you@practice.com" required autocomplete="email" />
+        </div>
+        <div class="wl-row">
+          <div class="field">
+            <label for="wlName">Name</label>
+            <input id="wlName" name="name" type="text" placeholder="Priya Sharma" autocomplete="name" />
+          </div>
+          <div class="field">
+            <label for="wlRole">Role</label>
+            <select id="wlRole" name="role">
+              <option value="">Select…</option>
+              <option>Design engineer</option>
+              <option>Senior / checking engineer</option>
+              <option>BIM / digital practice lead</option>
+              <option>Computational designer</option>
+              <option>Engineering manager</option>
+              <option>Other</option>
+            </select>
+          </div>
+        </div>
+        <div class="wl-row">
+          <div class="field">
+            <label for="wlFirm">Firm size</label>
+            <select id="wlFirm" name="firm">
+              <option value="">Select…</option>
+              <option>Independent / 1–5</option>
+              <option>6–50</option>
+              <option>51–500</option>
+              <option>500+</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="wlTool">Today you mostly use</label>
+            <select id="wlTool" name="tool">
+              <option value="">Select…</option>
+              <option>Excel</option>
+              <option>Mathcad</option>
+              <option>CalcTree / Blockpad</option>
+              <option>Grasshopper / Dynamo</option>
+              <option>Python / notebooks</option>
+              <option>Other</option>
+            </select>
+          </div>
+        </div>
+        <label class="wl-consent">
+          <input type="checkbox" id="wlConsent" required />
+          <span>Email me about early access and beta onboarding. No marketing lists, unsubscribe anytime.</span>
+        </label>
+        <button class="btn btn-primary" type="submit" id="wlBtn">Join the waitlist</button>
+        <p class="wl-note" id="wlNote">Testing invites roll out in cohorts, prioritised by role and use case.</p>
+      </form>
+    </div>
+    <div class="wl-success" aria-live="polite">
+      <svg class="mark" viewBox="0 0 64 64" fill="none">
+        <g stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+          <path d="M32 23 C30 17 36 11 37 9"/><path d="M38.4 25.6 C41.2 20 49.7 20 51.8 19.3"/>
+          <path d="M41 32 C47 30 53 36 55 37"/><path d="M38.4 38.4 C44 41.2 44 49.7 44.7 51.8"/>
+          <path d="M32 41 C34 47 28 53 27 55"/><path d="M25.6 38.4 C22.8 44 14.3 44 12.2 44.7"/>
+          <path d="M23 32 C17 34 11 28 9 27"/><path d="M25.6 25.6 C20 22.8 20 14.3 19.3 12.2"/>
+        </g>
+        <circle cx="32" cy="32" r="6.5" fill="currentColor"/>
+      </svg>
+      <h3>You're on the list.</h3>
+      <p>One arm of the graph just updated. We'll email you when your testing invite is ready.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <a class="lockup" href="#top" aria-label="OctoMeta">
+      <svg viewBox="0 0 64 64" fill="none" aria-hidden="true" style="width:22px;height:22px">
+        <g stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+          <path d="M32 23 C30 17 36 11 37 9"/><path d="M38.4 25.6 C41.2 20 49.7 20 51.8 19.3"/>
+          <path d="M41 32 C47 30 53 36 55 37"/><path d="M38.4 38.4 C44 41.2 44 49.7 44.7 51.8"/>
+          <path d="M32 41 C34 47 28 53 27 55"/><path d="M25.6 38.4 C22.8 44 14.3 44 12.2 44.7"/>
+          <path d="M23 32 C17 34 11 28 9 27"/><path d="M25.6 25.6 C20 22.8 20 14.3 19.3 12.2"/>
+        </g>
+        <circle cx="32" cy="32" r="6.5" fill="currentColor"/><circle cx="51.8" cy="19.3" r="2.4" fill="#0B5FFF"/>
+      </svg>
+      <span class="wm" style="font-size:.95rem">Octo<span style="color:var(--grey-1)">Meta</span></span>
+    </a>
+    <ul class="links">
+      <li><a href="#graph">Product</a></li>
+      <li><a href="#geometry">Geometry</a></li>
+      <li><a href="#">Docs (soon)</a></li>
+      <li><a href="#">Contact</a></li>
+    </ul>
+    <span class="fine">One mind. Eight arms. · © 2026 OctoMeta</span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const w = 24.0, CAP = 250.0;
+  const range=document.getElementById('spanRange'),
+        cellSpan=document.getElementById('cellSpan'),
+        cellM=document.getElementById('cellM'),
+        chipM=document.getElementById('chipM'),
+        chipU=document.getElementById('chipU');
+
+  /* isometric beam */
+  const fT=document.getElementById('faceTop'),fF=document.getElementById('faceFront'),fS=document.getElementById('faceSide');
+  const dimL=document.getElementById('dimL'),dimA=document.getElementById('dimA'),dimB=document.getElementById('dimB'),dimT=document.getElementById('dimT');
+  const P0={x:46,y:206},U={x:.955,y:-.296},D={x:.46,y:-.27},H=56,DEPTH=74,K=46;
+  const add=(p,v,s)=>({x:p.x+v.x*s,y:p.y+v.y*s});
+  const pts=a=>a.map(p=>p.x.toFixed(1)+','+p.y.toFixed(1)).join(' ');
+  function drawBeam(L){
+    const len=L*K,p0=P0,p1={x:p0.x,y:p0.y-H},p2=add(p0,U,len),p3=add(p1,U,len),
+          p1b=add(p1,D,DEPTH),p3b=add(p3,D,DEPTH),p2b=add(p2,D,DEPTH);
+    fF.setAttribute('points',pts([p0,p1,p3,p2]));
+    fT.setAttribute('points',pts([p1,p1b,p3b,p3]));
+    fS.setAttribute('points',pts([p2,p3,p3b,p2b]));
+    const off={x:10,y:34},a={x:p0.x+off.x,y:p0.y+off.y},b={x:p2.x+off.x,y:p2.y+off.y};
+    dimL.setAttribute('x1',a.x);dimL.setAttribute('y1',a.y);dimL.setAttribute('x2',b.x);dimL.setAttribute('y2',b.y);
+    const t={x:-U.y*7,y:U.x*7};
+    dimA.setAttribute('x1',a.x-t.x);dimA.setAttribute('y1',a.y-t.y);dimA.setAttribute('x2',a.x+t.x);dimA.setAttribute('y2',a.y+t.y);
+    dimB.setAttribute('x1',b.x-t.x);dimB.setAttribute('y1',b.y-t.y);dimB.setAttribute('x2',b.x+t.x);dimB.setAttribute('y2',b.y+t.y);
+    dimT.setAttribute('x',(a.x+b.x)/2+6);dimT.setAttribute('y',(a.y+b.y)/2+22);
+    dimT.textContent=L.toFixed(1)+' m';
+  }
+
+  /* dependency lines */
+  const demoBody=document.getElementById('demoBody'),deps=document.getElementById('depsSvg');
+  let pulses=[];
+  function anchor(el,side){const r=el.getBoundingClientRect(),c=demoBody.getBoundingClientRect();
+    const y=r.top-c.top+r.height/2;return side==='right'?{x:r.right-c.left,y}:{x:r.left-c.left,y}}
+  function path(a,b){const mx=(a.x+b.x)/2;return `M${a.x},${a.y} C${mx},${a.y} ${mx},${b.y} ${b.x},${b.y}`}
+  function drawDeps(){
+    if(matchMedia('(max-width:900px)').matches){deps.innerHTML='';pulses=[];return}
+    const c=demoBody.getBoundingClientRect();
+    deps.setAttribute('viewBox',`0 0 ${c.width} ${c.height}`);
+    deps.setAttribute('width',c.width);deps.setAttribute('height',c.height);
+    const from=anchor(cellSpan,'right');
+    const routes=[path(anchor(cellM,'right'),anchor(chipM,'left')),
+                  path(anchor(cellM,'right'),anchor(chipU,'left')),
+                  path(from,{x:c.width*0.56,y:from.y})];
+    deps.innerHTML='';
+    pulses=routes.map(d=>{
+      const base=document.createElementNS('http://www.w3.org/2000/svg','path');
+      base.setAttribute('class','dep');base.setAttribute('d',d);deps.appendChild(base);
+      const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+      p.setAttribute('class','dep-pulse');p.setAttribute('d',d);deps.appendChild(p);
+      return p;
+    });
+  }
+  function flash(el,cls){el.classList.remove(cls);void el.getBoundingClientRect();el.classList.add(cls)}
+  function update(L,animate=true){
+    const M=w*L*L/8,U_=M/CAP;
+    cellSpan.textContent=L.toFixed(1);cellM.textContent=M.toFixed(1);
+    chipM.textContent=M.toFixed(1)+' kN·m';chipU.textContent=U_.toFixed(2);
+    drawBeam(L);
+    if(animate&&!REDUCED){
+      flash(cellSpan.parentElement,'cellchange');
+      flash(chipM,'pulse');flash(chipU,'pulse');
+      pulses.forEach(p=>flash(p,'run'));
+    }
+  }
+  let idleTimer=null,loopDir=1,looping=!REDUCED;
+  range.addEventListener('input',()=>{looping=false;clearTimeout(idleTimer);
+    idleTimer=setTimeout(()=>{looping=true},6000);update(parseFloat(range.value))});
+  setInterval(()=>{if(!looping)return;
+    let v=parseFloat(range.value)+0.1*loopDir;
+    if(v>=7.8){v=7.8;loopDir=-1}else if(v<=6.0){v=6.0;loopDir=1}
+    range.value=v.toFixed(1);update(v)},1600);
+  drawDeps();update(6.0,false);
+  addEventListener('resize',drawDeps);
+  document.fonts&&document.fonts.ready.then(drawDeps);
+
+  /* graph diagram pulse */
+  const gd=document.getElementById('graphDiagram');
+  if('IntersectionObserver' in window&&!REDUCED){
+    const io=new IntersectionObserver(es=>es.forEach(e=>{
+      if(e.isIntersecting){gd.classList.add('inview');setTimeout(()=>gd.classList.remove('inview'),2600)}
+    }),{threshold:.5});
+    io.observe(gd);
+    setInterval(()=>{const r=gd.getBoundingClientRect();
+      if(r.top<innerHeight&&r.bottom>0){gd.classList.add('inview');setTimeout(()=>gd.classList.remove('inview'),2600)}},6000);
+  } else gd.classList.add('inview');
+
+  /* ============ WAITLIST SIGNUP ============
+     Set WAITLIST_ENDPOINT to your backend (Convex HTTP action, Formspree,
+     or any POST endpoint accepting JSON). Until configured, submissions are
+     stored in localStorage under "octometa-waitlist" so early signups are
+     never lost during development — export before wiring the backend. */
+  const WAITLIST_ENDPOINT = '';   // e.g. 'https://<deployment>.convex.site/waitlist'
+  const form=document.getElementById('wlForm');
+  form.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const email=document.getElementById('wlEmail');
+    if(!email.checkValidity()){email.focus();email.reportValidity();return}
+    if(!document.getElementById('wlConsent').checked){document.getElementById('wlConsent').focus();return}
+    const payload={
+      email:email.value.trim(),
+      name:document.getElementById('wlName').value.trim(),
+      role:document.getElementById('wlRole').value,
+      firm:document.getElementById('wlFirm').value,
+      tool:document.getElementById('wlTool').value,
+      source:'landing', createdAt:Date.now()
+    };
+    const btn=document.getElementById('wlBtn');
+    btn.disabled=true;btn.textContent='Joining…';
+    try{
+      if(WAITLIST_ENDPOINT){
+        const r=await fetch(WAITLIST_ENDPOINT,{method:'POST',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        if(!r.ok)throw new Error('endpoint');
+      }else{
+        const key='octometa-waitlist';
+        const list=JSON.parse(localStorage.getItem(key)||'[]');
+        list.push(payload);localStorage.setItem(key,JSON.stringify(list));
+      }
+      document.getElementById('waitlist').classList.add('done');
+      document.querySelector('.wl-success').scrollIntoView({block:'center',behavior:REDUCED?'auto':'smooth'});
+    }catch(err){
+      btn.disabled=false;btn.textContent='Join the waitlist';
+      document.getElementById('wlNote').textContent='Something went wrong sending your signup. Please try again.';
+    }
+  });
+})();
+</script>
+</body>
+</html>

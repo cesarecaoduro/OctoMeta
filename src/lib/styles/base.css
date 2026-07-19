@@ -1,0 +1,251 @@
+/* Global base styles + the small set of primitives shared across sections.
+   Anything section-specific lives scoped inside its component. */
+
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+html {
+	scroll-behavior: smooth;
+}
+
+/* anchored targets stop clear of the sticky nav */
+:where([id]) {
+	scroll-margin-top: 88px;
+}
+
+body {
+	background: var(--paper);
+	color: var(--ink);
+	font-family: var(--font-body);
+	font-size: var(--fs-body);
+	line-height: 1.6;
+	-webkit-font-smoothing: antialiased;
+}
+
+a {
+	color: inherit;
+}
+
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 3px;
+	border-radius: 2px;
+}
+
+::selection {
+	background: var(--accent-dim);
+}
+
+h1,
+h2,
+h3 {
+	font-family: var(--font-display);
+	font-weight: 600;
+	letter-spacing: -0.03em;
+	line-height: 1.04;
+}
+
+h1 {
+	font-size: var(--fs-h1);
+	letter-spacing: -0.038em;
+}
+
+h2 {
+	font-size: var(--fs-h2);
+	letter-spacing: -0.028em;
+	line-height: 1.08;
+}
+
+/* layout */
+.wrap {
+	max-width: var(--max);
+	margin: 0 auto;
+	padding: 0 var(--s3);
+}
+
+/* type primitives */
+.sub {
+	color: var(--grey-1);
+	font-size: var(--fs-sub);
+	line-height: 1.55;
+}
+
+.mono {
+	font-family: var(--font-mono);
+	font-size: 0.82em;
+}
+
+.eyebrow {
+	font-family: var(--font-mono);
+	font-size: var(--fs-eyebrow);
+	font-weight: 500;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--grey-2);
+}
+
+/* value chip: computed value in prose; identical in marketing and app */
+.chip {
+	display: inline-block;
+	font-family: var(--font-mono);
+	font-size: 0.85em;
+	font-weight: 500;
+	padding: 1px 7px;
+	border-radius: var(--radius-chip);
+	background: var(--accent-dim);
+	color: var(--accent);
+	transition: background var(--t-med) var(--ease);
+}
+
+.chip.pulse {
+	animation: chipflash 0.7s var(--ease);
+}
+
+@keyframes chipflash {
+	0% {
+		background: var(--accent);
+		color: #fff;
+	}
+	100% {
+		background: var(--accent-dim);
+		color: var(--accent);
+	}
+}
+
+/* entrance rise: apply with `animation: rise .9s var(--ease) both`.
+   `both` keeps the element hidden until the (possibly delayed) animation
+   starts; when reduced-motion strips animations the element simply shows. */
+@keyframes rise {
+	from {
+		opacity: 0;
+		transform: translateY(26px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+/* scroll reveal: the `reveal` action adds .pre (hidden) only when JS runs
+   and motion is allowed, then .in when the element enters the viewport */
+.pre {
+	opacity: 0;
+	transform: translateY(22px);
+	transition:
+		opacity 0.8s var(--ease),
+		transform 0.8s var(--ease);
+}
+
+.pre.in {
+	opacity: 1;
+	transform: none;
+}
+
+/* recompute flash on a sheet row */
+@keyframes cellflash {
+	0% {
+		background: var(--accent-dim);
+	}
+	100% {
+		background: transparent;
+	}
+}
+
+/* pulse travelling along a dependency hairline */
+@keyframes deprun {
+	0% {
+		opacity: 1;
+		stroke-dashoffset: 126;
+	}
+	85% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0;
+		stroke-dashoffset: -40;
+	}
+}
+
+/* typed graph error */
+.err {
+	color: var(--error);
+	background: var(--error-dim);
+	padding: 1px 7px;
+	border-radius: var(--radius-chip);
+	font-weight: 500;
+}
+
+/* buttons */
+.btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	font-family: var(--font-body);
+	font-weight: 500;
+	font-size: 0.95rem;
+	padding: 12px 22px;
+	border-radius: var(--radius-pill);
+	border: 1px solid transparent;
+	cursor: pointer;
+	text-decoration: none;
+	transition: all var(--t-fast) var(--ease);
+}
+
+.btn-primary {
+	background: var(--ink);
+	color: var(--paper);
+}
+
+.btn-primary:hover {
+	background: var(--accent);
+}
+
+.btn-ghost {
+	border-color: var(--grey-3);
+	color: var(--ink);
+	background: transparent;
+}
+
+.btn-ghost:hover {
+	border-color: var(--ink);
+}
+
+.btn-sm {
+	padding: 8px 16px;
+	font-size: 0.85rem;
+}
+
+/* arrow micro-interaction inside buttons */
+.btn .arr {
+	display: inline-block;
+	transition: transform var(--t-fast) var(--ease);
+}
+
+.btn:hover .arr {
+	transform: translateX(3px);
+}
+
+.btn .arr-d {
+	display: inline-block;
+	transition: transform var(--t-fast) var(--ease);
+}
+
+.btn:hover .arr-d {
+	transform: translateY(3px);
+}
+
+/* motion off means everything off, including demo auto-loops (handled in JS) */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation: none !important;
+		transition: none !important;
+	}
+	html {
+		scroll-behavior: auto;
+	}
+}

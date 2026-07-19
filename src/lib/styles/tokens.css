@@ -1,0 +1,51 @@
+/* OctoMeta design tokens: single source of truth, mirrors DESIGN.md §3.
+   Imported by the marketing site and, later, the app shell. */
+:root {
+	/* ---- color ---- */
+	--paper: #fafaf9; /* page background */
+	--ink: #0b0b0c; /* text, mark, primary buttons */
+	--grey-1: #55555a; /* secondary text */
+	--grey-2: #9a9aa0; /* tertiary text, ticks, eyebrows */
+	--grey-3: #e4e4e1; /* hairlines: 1px, always */
+	--grey-4: #f1f1ef; /* panel fills, formula bars */
+	--surface: #ffffff; /* cards, demo panels */
+	--accent: #0b5fff; /* "graph blue": THE accent. Computed values, chips,
+	                      dependency pulses, dimension lines, the logo node,
+	                      CTA hover, focus rings. Nothing else. */
+	--accent-dim: rgba(11, 95, 255, 0.1);
+	--error: #c42b1c; /* typed graph errors only (#UNIT!, #CYCLE!) */
+	--error-dim: rgba(196, 43, 28, 0.08);
+
+	/* ---- type ---- */
+	--font-display: 'Inter Tight', system-ui, sans-serif; /* w600, ls -0.025em */
+	--font-body: 'Inter', system-ui, sans-serif; /* w400/500 */
+	--font-mono: 'JetBrains Mono', ui-monospace, monospace; /* formulas, units, handles */
+	--fs-h1: clamp(3rem, 7.2vw, 5.6rem);
+	--fs-h2: clamp(2rem, 4.2vw, 3.1rem);
+	--fs-sub: clamp(1.05rem, 1.6vw, 1.3rem);
+	--fs-body: 17px;
+	--fs-caption: 0.78rem;
+	--fs-eyebrow: 0.72rem; /* mono, uppercase, letter-spacing .14em */
+
+	/* ---- spacing (8-base) ---- */
+	--s1: 8px;
+	--s2: 16px;
+	--s3: 24px;
+	--s4: 40px;
+	--s5: 64px;
+	--s6: 96px;
+	--s7: 160px;
+
+	/* ---- layout ---- */
+	--max: 1200px;
+	--prose: 720px;
+	--radius-card: 12px;
+	--radius-panel: 14px;
+	--radius-chip: 6px;
+	--radius-pill: 999px;
+
+	/* ---- motion ---- */
+	--t-fast: 180ms;
+	--t-med: 280ms;
+	--ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+}
