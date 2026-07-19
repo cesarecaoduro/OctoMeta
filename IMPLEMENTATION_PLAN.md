@@ -51,7 +51,7 @@ Do not implement anything beyond this task's scope.
 |---|---|---|---|
 | **V1-0** | De-risk spikes (Univer) | 1.5–2 wk | (internal) Univer-in-TipTap and custom functions proven; go/no-go recorded |
 | **V1-1** | Engine: values, units, formulas | 2 wk (starts during V1-0) | ✅ done · (internal) `5 kN * 2` → `10 kN`; `kN + m` → `#UNIT!`, all in tests. Units layer stays engine-only/dormant until V2 (decision 19 Jul 2026) |
-| **V1-2** | Engine: mutations + reactive recalc | 1.5 wk | (internal) Edit an input, dependents recompute in order; undo/redo; `#CYCLE!` |
+| **V1-2** | Engine: mutations + reactive recalc | 1.5 wk | ✅ done · (internal) Edit an input, dependents recompute in order; undo/redo; `#CYCLE!` |
 | **V1-3** | Univer adapter | 2 wk | Standalone sheet: graph-evaluated formulas, named ranges publish to the graph |
 | **V1-4** | Persistence | 1 wk (parallel with V1-3/V1-5) | Documents survive reload bit-for-bit; reproducibility test in CI |
 | **V1-5** | The document | 3 wk | **The prototype:** prose + images + sheets + chips + show-steps + provenance, all reactive |
@@ -122,6 +122,8 @@ Engine work (V1-1/V1-2) overlaps the spikes; persistence overlaps the adapter an
 ## 5. V1-2 — Engine: mutations + reactive recalc (1.5 weeks)
 
 **Goal:** the mutation API is the sole write path and edits propagate reactively. This is what "every block is connected and reactive" means mechanically: after this milestone, every block type (sheet, chip, and later viewer and agent) is just a subscriber.
+
+> **Status: done (19 Jul 2026).** All three tasks shipped and tested (320 engine cases total; perf gate green at ~3–5 ms for the 500-node chain). Design decisions recorded in ARCHITECTURE.md "Engine conventions (V1-2)".
 
 **V1-2-1 · Mutation API + undo log** · *Size L · Deps: V1-1-3*
 - **In:** `applyMutation(m: GraphMutation, actor: Actor)` per SCHEMA.md §9 for `setInput`, `setFormula`, `addNode`, `removeNode`, `publishName`, `rebindChip`, and `blockOp` (all real: the document editor is V1, nothing stays stubbed). Validation before commit (type/dim shape, cycle pre-check via V1-1-3 resolution), provenance stamping from `actor`. Undo log per SCHEMA.md §9: `UndoEntry` with serializable inverses captured at apply time (full prior state; `removeNode`/`blockOp remove` carry the whole node/block), one linear per-document history with a cursor, `undo()`/`redo()` running through the same validated apply path without appending entries, fresh mutations truncating the redo tail, cap at 200 entries. Delete semantics: removing a node converts dependents' refs to `#REF!` immediately (SCHEMA.md §5).

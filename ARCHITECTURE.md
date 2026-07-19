@@ -2,7 +2,7 @@
 
 *What is actually built, where it lives, and the decisions behind it. Updated as the codebase grows; the forward-looking plan lives in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) (with [PRD.md](PRD.md) for the why).*
 
-**Last updated:** 19 July 2026 · V1-1 engine core (values, units, formulas) implemented and unit-tested; V1-0 de-risk spikes complete (GO, see [docs/v1-0-findings.md](docs/v1-0-findings.md)); waitlist backend live on Convex + Resend; V1/V2/V3 version arc adopted (IMPLEMENTATION_PLAN.md v3).
+**Last updated:** 19 July 2026 · V1-2 engine (mutation API + undo log, reactive recalc, cycle detection) implemented and unit-tested; V1-1 engine core (values, units, formulas) done; V1-0 de-risk spikes complete (GO, see [docs/v1-0-findings.md](docs/v1-0-findings.md)); waitlist backend live on Convex + Resend; V1/V2/V3 version arc adopted (IMPLEMENTATION_PLAN.md v3).
 
 ## Current state
 
@@ -10,7 +10,9 @@ A SvelteKit + Svelte 5 (runes) + TypeScript app containing the marketing landing
 
 **V1-0 is done.** The workspace is scaffolded (exact-pinned Univer 0.25.1 + TipTap 3.28.0, Vitest on `src/lib/engine/`, Playwright e2e against the production build) and both Univer spikes passed: a Univer sheet lives inside a TipTap NodeView (SSR-safe, focus-isolated, move-safe, serializable), and Facade custom functions spill 2D arrays natively with tagged strings as the `TypedValue` display path. Findings, landmines, and the spike-route promotion plan are in `docs/v1-0-findings.md`.
 
-**V1-1 is done.** The typed core of SCHEMA.md §2–3 + §6 lives in `src/lib/engine/` as pure TypeScript (zero UI imports, enforced by a boundary test): `types.ts` (TypedValue union, Dimension, error taxonomy, ULID ids, cyrb53 content hashing, exhaustive guards), `node.ts` (GraphNode with Provenance/PendingChange stamped from day one), `units.ts` (SI + engineering unit table, canonical-SI quantity storage, dimension algebra, `#UNIT!` checks, `format`/`convert` display conversion that never touches stored values), `formula.ts` (v1 grammar parser with unit literals/cell refs/dotted names, canonical printer, `resolveInputs` deriving edges, `#REF!`/`#NAME?` as values), and `registry.ts` (FnSignature registry with the builtin/user origin seam, quantity-lifted operators, the V1 built-ins, `SHOWSTEPS` stubbed until V1-5-4). 193 Vitest cases including a seeded property test over dimension algebra. `5 kN * 2` → `10 kN` and `kN + m` → `#UNIT!` hold in tests; evaluation/recalc wiring is V1-2. No product tables yet; next is V1-2-1 (mutation API + undo log).
+**V1-1 is done.** The typed core of SCHEMA.md §2–3 + §6 lives in `src/lib/engine/` as pure TypeScript (zero UI imports, enforced by a boundary test): `types.ts` (TypedValue union, Dimension, error taxonomy, ULID ids, cyrb53 content hashing, exhaustive guards), `node.ts` (GraphNode with Provenance/PendingChange stamped from day one), `units.ts` (SI + engineering unit table, canonical-SI quantity storage, dimension algebra, `#UNIT!` checks, `format`/`convert` display conversion that never touches stored values), `formula.ts` (v1 grammar parser with unit literals/cell refs/dotted names, canonical printer, `resolveInputs` deriving edges, `#REF!`/`#NAME?` as values), and `registry.ts` (FnSignature registry with the builtin/user origin seam, quantity-lifted operators, the V1 built-ins, `SHOWSTEPS` stubbed until V1-5-4). 193 Vitest cases including a seeded property test over dimension algebra. `5 kN * 2` → `10 kN` and `kN + m` → `#UNIT!` hold in tests.
+
+**V1-2 is done.** The engine is now reactive end-to-end, still pure TypeScript: `block.ts` (Block/ChipBinding data model, SCHEMA §8), `graph.ts` (`DocumentGraph` in-memory store with derived indexes — name, cellRef, reverse edges, unresolved-ref healing — plus subscribers and the undo-log storage), `mutations.ts` (`applyMutation` as the sole write path for all seven SCHEMA §9 ops, validation-before-commit, provenance stamping, serializable undo/redo with full-prior-state inverses, cycle rejection at mutation time), `topo.ts` (transitive descendants, Kahn topo-sort with cycle capture, `wouldCycle` pre-check), `evaluate.ts` (pure FormulaAST evaluator over the registry), and `recalc.ts` (dirty-set → Kahn → content-hash memo → subscriber notify, `#CYCLE!` marking, the `commit`/`commitUndo`/`commitRedo` facade, dormant `geometryHook`). Edit an input and dependents recompute in dependency order; undo/redo re-settle; the 500-node scalar-chain perf gate (< 50 ms, PRD §4) runs in CI at ~3–5 ms. No product tables yet; next is V1-3-1 (Univer adapter).
 
 ## Stack in use
 
@@ -46,6 +48,15 @@ src/
       units.ts              unit table, dimension algebra, parse/format/convert, quantity ops
       formula.ts            FormulaAST, parser, canonical printer, resolveInputs (edges derived)
       registry.ts           FnSignature registry, quantity-lifted operators, V1 built-ins
+      block.ts              Block + ChipBinding data model (SCHEMA §8, pure data)
+      graph.ts              DocumentGraph store: nodes/blocks/chips, derived indexes,
+                            unresolved-ref healing index, subscribers, undo-log storage
+      mutations.ts          applyMutation (sole write path, all 7 ops), undo/redo,
+                            validation, provenance stamping, cycle rejection
+      topo.ts               transitiveDescendants, kahnTopoSort, wouldCycle (pure)
+      evaluate.ts           pure FormulaAST evaluator (literals/refs/operators/calls)
+      recalc.ts             incremental recalc + #CYCLE! marking + commit facade,
+                            dormant geometryHook (V2 seam)
       index.ts              public engine surface (import from here, not internals)
     adapters/                 (V1-3) third-party bridges; only place allowed to import @univerjs; README stub
     persistence/              (V1-4) the only path to Convex for UI code; README stub
@@ -96,10 +107,20 @@ docs/v1-0-findings.md       V1-0 decision memo: spike outcomes, Univer landmines
 - **Units deferred to V2 in the product** (user decision, 19 Jul 2026): the V1-1-2 quantity/units engine layer stays built, tested, and **dormant** — same pattern as the geometry hooks. No V1 surface (Univer adapter, chips, show-steps, fixtures) parses, renders, or converts units; V1 numbers are plain scalars and `#UNIT!` never surfaces before V2. IMPLEMENTATION_PLAN.md V1-3/V1-5 acceptance was re-tagged accordingly and units surfacing is task V2-U.
 - **Engine conventions (V1-1, 19 Jul 2026):** quantities are stored as canonical SI magnitudes; `Dimension.display` is presentation only, so display-unit switches never change stored values or hashes. A dimensionless arithmetic result collapses to `scalar` (a ratio is a bare number). Formula grammar: juxtaposition after a number always means a unit literal (`5 m2` is 5 m²; write `5 * M2` for the cell), `^` right after a unit extends the unit (`(5 m)^2` to square a quantity), `*` is always arithmetic (compound units use `·` or `/`), and in denominators cell-ref lookalikes stay cell refs (`5 kN/m2` divides by M2; write `kN/m^2`). Unary minus binds tighter than `^` (Excel). Errors are values with `origin`; units-layer errors carry `origin: ''` until the evaluator (V1-2-2) stamps the failing node.
 
+- **Engine conventions (V1-2, 19 Jul 2026):**
+  - **Undo inverses are restore ops.** SCHEMA §9's public mutations cannot carry full prior state, so the undo system uses two undo-internal ops — `restoreNode {node}` and `restoreChip {chip}` — that restore captured state verbatim (value, inputs, contentHash, provenance, pending). `applyMutation` rejects them at the public boundary; only `undo`/`redo` reach them. Redo is bit-for-bit deterministic: recorded `publishName` entries carry the minted `nodeId`, and redo replays with the entry's original timestamp so `authoredAt` reproduces exactly.
+  - **Unresolved refs heal.** The graph keeps an unresolved-ref index (`name:<name>` / `cell:<blockId>␟<a1>` keys). A formula referencing a not-yet-existing cell or name gets `#REF!`/`#NAME?` as its value and registers as a waiter; a later `addNode`/`publishName` re-derives the waiters' inputs and seeds them into the AffectedSet so recalc settles them. Deleting a node converts dependents to `#REF!` immediately (Marimo semantics, SCHEMA §5) with `origin` = the dependent's own id (the removed node no longer exists to deep-link to).
+  - **Provenance is authorship, not mechanics.** Actor stamping (`authoredBy/authorId/authoredAt`, clearing `verifiedBy/At`) applies only to nodes a mutation authors; healed waiters and `#REF!`-converted dependents keep their provenance.
+  - **Seeds bypass the memo.** Mutations refresh the touched node's `contentHash` (undo round-trips deep-equal *including* hashes), so a seed's stored hash matches while its value is stale; `recalc` re-settles every AffectedSet id unconditionally and applies the salsa-style hash memo only to downstream dirty nodes. Post-pass invariant: stored hash current ⟹ value current, document-wide.
+  - **Cycles:** a mutation that would introduce one (self, direct, transitive) is rejected with the would-be cycle in the error (`wouldCycle` pre-check). Cycles that exist anyway (loaded fixtures) are caught by Kahn: every unsortable node — members and trapped descendants — gets `#CYCLE!` listing the group, `origin` = its own id, and a `''` hash sentinel that never memo-matches, so breaking the cycle clears members on the next pass while the acyclic rest keeps evaluating.
+  - **blockOp is layout-only for recalc:** add/move/update return an empty AffectedSet (evaluation never reads `position`); `remove` cascade-removes hosted nodes through the same internal path with full inverse capture; `update` treats `null` as field-clearing so inverses stay JSON-safe.
+  - **Eager evaluation:** call arguments (IF branches included) evaluate left-to-right before dispatch — a deliberate v1 simplification documented in `evaluate.ts`.
+  - **Enforcement note:** the "no projection writes around `applyMutation`" lint/test (cross-cutting rule 1) lands with the first projection in V1-3-1 — nothing outside the engine imports it yet.
+
 ## Verification
 
-`pnpm check` (0 errors/warnings), `pnpm build` passes, page SSRs correctly at `/`, `pnpm test` (193 engine cases: types/hashing, units corpus + property test, formula parse/print round-trips, registry built-ins, engine import boundary), `pnpm test:e2e` (spike proofs incl. SSR/hydration, focus isolation, move survival, serialize/restore, custom functions, spill).
+`pnpm check` (0 errors/warnings), `pnpm build` passes, page SSRs correctly at `/`, `pnpm test` (320 engine cases: types/hashing, units corpus + property test, formula parse/print round-trips, registry built-ins, graph store/indexes, mutation round-trips incl. JSON-serialized undo, evaluator corpus, recalc order-independence + memo spy + cycle suite + the CI-enforced < 50 ms/500-node perf gate + bit-for-bit reproducibility, engine import boundary), `pnpm test:e2e` (spike proofs incl. SSR/hydration, focus isolation, move survival, serialize/restore, custom functions, spill).
 
 ## Next (not started)
 
-V1-2 from IMPLEMENTATION_PLAN.md v3: mutation API + undo log (V1-2-1), topological + content-hash incremental recalc (V1-2-2), cycle detection (V1-2-3). The occt-wasm spike stays moved to V2-0.
+V1-3-1 from IMPLEMENTATION_PLAN.md v3: the Univer adapter (custom functions, cell↔node binding, named-range lift) — plus V1-4-1 persistence, which can start in parallel. The occt-wasm spike stays moved to V2-0.
