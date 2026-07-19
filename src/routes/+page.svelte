@@ -302,23 +302,18 @@
 			<span class="eyebrow">Your tools, one graph</span>
 			<h2>Connected to the tools you already run.</h2>
 			<p>
-				The numbers you need already exist: in Revit models on Autodesk Construction Cloud, and in
-				the business systems that hold your rates and quantities. OctoMeta binds them into the
-				graph instead of asking you to retype them.
+				The numbers you need already exist: in Revit models on Autodesk Construction Cloud, in the
+				ERP that holds your rates. OctoMeta binds them into the graph instead of asking you to
+				retype them.
 			</p>
 			<p>
-				<strong>
-					Autodesk Platform Services publishes official MCP server samples for its AEC Data Model
-					API</strong
-				>: Revit elements on ACC, queried over GraphQL, no plugins. OctoMeta consumes exactly this
-				class of server, so a bound element property enters the graph with provenance, like any
-				other input. The same pattern reaches the MCP server in front of your ERP: unit rates land
-				in the same checked graph as your quantities.
+				<strong>Autodesk publishes official MCP servers for its AEC Data Model API.</strong>
+				OctoMeta consumes exactly that class of server: a bound Revit property or ERP unit rate
+				enters the graph with provenance, like any other input.
 			</p>
 			<p class="conn-fine">
-				First connectors ship read-only: Revit via APS, plus any MCP server you already run.
-				Exposing the document graph as its own MCP server is on the roadmap, built on the same
-				mutation API.
+				First connectors ship read-only: Revit via APS, plus any MCP server you already run. The
+				document graph as its own MCP server is on the roadmap.
 			</p>
 			<div class="conn-badges" aria-label="Connectors">
 				<span class="conn-badge hi">Revit · ACC via APS AEC Data Model</span>
@@ -370,9 +365,8 @@
 				<span class="chip">1.33 k$</span>
 			</div>
 			<p class="caption">
-				Model data and cost data meet inside one graph. Bound inputs carry provenance (source,
-				query, pull time), and the whole document recomputes when they're refreshed: checks, cost
-				and geometry together.
+				Model and cost data meet in one graph: bound inputs carry provenance, and refreshing them
+				recomputes the whole document.
 			</p>
 		</div>
 	</section>
