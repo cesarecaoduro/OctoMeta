@@ -11,10 +11,14 @@
 	--surface: #ffffff; /* cards, demo panels */
 	--accent: #6c5ce7; /* "graph violet": THE accent. Computed values, chips,
 	                      dependency pulses, dimension lines, logo arc nodes,
-	                      CTA hover, focus rings. Nothing else. */
+	                      CTA hover, focus rings, plus the DESIGN.md §6 text-
+	                      emphasis doses (heading full stops, stat numerals,
+	                      eyebrow ring-ticks, one hero keyword, mono labels).
+	                      Nothing else. 4.65:1 on paper: AA at any size. */
 	--accent-2: #2b2e83; /* deep indigo, gradient partner to --accent. Logo
 	                        mark ONLY. Never in UI chrome. */
-	--accent-light: #a99cff; /* tints where --accent-dim reads too subtle */
+	--accent-light: #a99cff; /* decoration ONLY (2.26:1, fails AA as text):
+	                            underlines, ticks, tints. Never glyphs. */
 	--accent-dim: rgba(108, 92, 231, 0.1);
 	--error: #c42b1c; /* typed graph errors only (#UNIT!, #CYCLE!) */
 	--error-dim: rgba(196, 43, 28, 0.08);
