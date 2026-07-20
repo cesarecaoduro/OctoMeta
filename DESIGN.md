@@ -107,10 +107,16 @@ Reference palette (`static/brand/README.md`; adopted into tokens — see §3):
   --surface:    #FFFFFF;   /* cards, demo panels */
   --accent:       #6C5CE7;   /* "graph violet" — THE accent. Allowed: computed values,
                                 value chips, dependency pulses, dimension lines,
-                                logo arc nodes, CTA hover, focus rings. Nothing else. */
+                                logo arc nodes, CTA hover, focus rings, and the §6
+                                text-emphasis doses (heading full stops, stat
+                                numerals, eyebrow ring-ticks, one hero keyword,
+                                mono role labels). Nothing else.
+                                4.65:1 on paper — AA at any text size. */
   --accent-2:     #2B2E83;   /* deep indigo — gradient partner to --accent. Logo
                                 mark ONLY (see DESIGN.md §2). Never in UI chrome. */
-  --accent-light: #A99CFF;   /* tints where --accent-dim reads too subtle */
+  --accent-light: #A99CFF;   /* decoration ONLY (2.26:1 on paper — fails AA as
+                                text): underline emphasis, ticks, tints where
+                                --accent-dim reads too subtle. Never glyphs. */
   --accent-dim:   rgba(108,92,231,.10);
   --error:      #C42B1C;   /* typed graph errors only (#UNIT!, #CYCLE!) */
   --error-dim:  rgba(196,43,28,.08);
@@ -150,8 +156,17 @@ Motion exists only to demonstrate computation. Recompute flash (chip: accent→d
 
 ## 6. Application rules (do / don't)
 
-**Do:** paper background everywhere; product-as-hero; one bold moment per surface (landing = live demo; deck = matrix slide); 8-px spacing scale only; AA contrast (`--grey-1` is the floor for body text).
-**Don't:** second accent color or gradient anywhere outside the logo mark (§2 — `--accent-2` and the gradient never appear in UI chrome, chips, or buttons); shadows (elevation = border + surface shift); octopus illustration/mascot anywhere (the mark is a diagram, not a character); accent in headings; stock imagery; dark-mode improvisation (a dark theme is a future, tokenized decision — invert paper/ink, keep accent).
+**Do:** paper background everywhere; product-as-hero; one bold moment per surface (landing = live demo; deck = matrix slide); 8-px spacing scale only; AA contrast (`--grey-1` is the floor for body text; `--accent` passes AA on paper at any size, `--accent-light` never renders glyphs).
+
+**Accent as text emphasis** (v2, supersedes the old "no accent in headings" rule): accent appears in prose only as fixed, single-dose emphasis, never as whole sentences or whole headings —
+- **heading full stops** — display headings end with an accent period (`.ap`), the graph touching the end of every claim;
+- **one keyword in the hero H1** — italic *and* accent (`.acc-i`), so color never carries the emphasis alone;
+- **stat numerals** — computed-cost figures are accent display type; the label stays grey;
+- **eyebrow ring-ticks** — section eyebrows open with a 6px accent ring node (`.eyebrow-tick`), the logo's ring node as punctuation; eyebrow text stays grey; not used on eyebrows that serve as panel labels inside demos;
+- **mono role/§ labels** — persona labels and the dimension-divider `§` number may take accent (dimension lines are on the §3 allowlist);
+- **underline emphasis** — a key phrase may take a 2px `--accent-light` underline under ink text; the light tint is decoration-only.
+
+**Don't:** second accent color or gradient anywhere outside the logo mark (§2 — `--accent-2` and the gradient never appear in UI chrome, chips, or buttons); shadows (elevation = border + surface shift); octopus illustration/mascot anywhere (the mark is a diagram, not a character); accent on whole headings or body sentences (emphasis doses above only); stock imagery; dark-mode improvisation (a dark theme is a future, tokenized decision — invert paper/ink, keep accent).
 
 ## 7. Surface mapping
 

@@ -87,6 +87,25 @@ h2 {
 	color: var(--grey-2);
 }
 
+/* opt-in ring-node tick before section eyebrows: the logo's ring node as
+   punctuation. Not applied inside demo panels, where eyebrows are labels. */
+.eyebrow-tick::before {
+	content: '';
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	border: 1.5px solid var(--accent);
+	margin-right: 9px;
+	vertical-align: 1px;
+}
+
+/* accent full stop: display headings end on the graph's color. A single
+   glyph of accent, never a whole heading (DESIGN.md §6). */
+.ap {
+	color: var(--accent);
+}
+
 /* value chip: computed value in prose; identical in marketing and app */
 .chip {
 	display: inline-block;

@@ -50,4 +50,9 @@
 		letter-spacing: 0.12em;
 		color: var(--grey-2);
 	}
+	/* the § number takes the accent: dimension lines are on the accent
+	   allowlist (DESIGN.md §3); the name tag stays grey */
+	.tag:first-child {
+		color: var(--accent);
+	}
 </style>

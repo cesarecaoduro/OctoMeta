@@ -57,8 +57,8 @@
 	{#if !done}
 		<div class="wl-grid">
 			<div>
-				<span class="eyebrow">Early access</span>
-				<h2>Test the platform first.</h2>
+				<span class="eyebrow eyebrow-tick">Early access</span>
+				<h2>Test the platform first<span class="ap">.</span></h2>
 				<p class="lead">
 					We're onboarding a small group of structural and civil teams. Bring a real calc package;
 					leave with a document that recalculates, verifies, and exports.
@@ -148,8 +148,8 @@
 	{:else}
 		<div class="wl-success" aria-live="polite" bind:this={successEl}>
 			<span class="mark-badge"><Logo size={22} /></span>
-			<span class="eyebrow">Confirmed</span>
-			<h3>You're on the list.</h3>
+			<span class="eyebrow eyebrow-tick">Confirmed</span>
+			<h3>You're on the list<span class="ap">.</span></h3>
 			<p>A new node just entered the graph. We'll email you when your testing invite is ready.</p>
 		</div>
 	{/if}

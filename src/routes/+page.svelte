@@ -26,10 +26,10 @@
 <header class="hero" id="top">
 	<div class="hero-bg" aria-hidden="true"></div>
 	<div class="wrap">
-		<p class="eyebrow hero-eyebrow r r1">One mind. Eight arms.</p>
+		<p class="eyebrow eyebrow-tick hero-eyebrow r r1">One mind. Eight arms.</p>
 		<h1>
-			<span class="r r2">The living</span><br />
-			<span class="r r3 h1-dim">engineering document.</span>
+			<span class="r r2">The <em class="acc-i">living</em></span><br />
+			<span class="r r3 h1-dim">engineering document<span class="ap">.</span></span>
 		</h1>
 		<p class="sub vision r r4">
 			Your calculations, your report, and your 3D model are arms of a single intelligent graph.
@@ -65,8 +65,8 @@
 
 	<section id="why">
 		<div class="section-head" use:reveal>
-			<span class="eyebrow">Why OctoMeta exists</span>
-			<h2>The calc you stamped<br />isn't the calc you have.</h2>
+			<span class="eyebrow eyebrow-tick">Why OctoMeta exists</span>
+			<h2>The calc you stamped<br /><span class="h2-dim">isn't the calc you have<span class="ap">.</span></span></h2>
 			<p class="sub">
 				Every engineer knows the Monday: the span changed on Friday, the spreadsheet was updated,
 				the Word report wasn't, and the model belongs to another team. Three artifacts. Three
@@ -134,10 +134,10 @@
 		</div>
 
 		<p class="pain-pivot" use:reveal>
-			Every copy is maintained by hand.
+			Every copy is maintained by hand<span class="ap">.</span>
 			<span class="pivot-dim">
-				OctoMeta removes the copies: one graph underneath, so nothing to reconcile, nothing to go
-				stale, nothing to take on faith.
+				OctoMeta removes the copies: <span class="pivot-key">one graph underneath</span>, so nothing
+				to reconcile, nothing to go stale, nothing to take on faith.
 			</span>
 		</p>
 	</section>
@@ -146,8 +146,8 @@
 
 	<section id="graph">
 		<div class="section-head" use:reveal>
-			<span class="eyebrow">Reactive by construction</span>
-			<h2>Position is for humans.<br />Order is for the graph.</h2>
+			<span class="eyebrow eyebrow-tick">Reactive by construction</span>
+			<h2>Position is for humans.<br /><span class="h2-dim">Order is for the graph<span class="ap">.</span></span></h2>
 			<p class="sub">
 				Your document reads top to bottom. It computes by dependency, never by where a block sits
 				on the page. No hidden state, no run-order bugs, no stale cell three tabs away.
@@ -162,8 +162,8 @@
 
 	<section id="units" class="feature">
 		<div class="copy" use:reveal>
-			<span class="eyebrow">Unit-safe by default</span>
-			<h2>Every number carries its units.</h2>
+			<span class="eyebrow eyebrow-tick">Unit-safe by default</span>
+			<h2>Every number carries its units<span class="ap">.</span></h2>
 			<p>
 				Dimensional mismatches surface as typed errors, not silent bugs. Ask for the full
 				substituted derivation on demand, so a checker reads the logic, not cell references.
@@ -221,8 +221,8 @@
 			</p>
 		</div>
 		<div class="copy" use:reveal>
-			<span class="eyebrow">Live 3D from your formulas</span>
-			<h2>Type a formula.<br />Get a footing.</h2>
+			<span class="eyebrow eyebrow-tick">Live 3D from your formulas</span>
+			<h2>Type a formula.<br /><span class="h2-dim">Get a footing<span class="ap">.</span></span></h2>
 			<p>
 				<span class="mono">=EXTRUDE(plan, t)</span> returns real B-Rep geometry, computed by a
 				proper CAD kernel, live in the viewer. Pick a cell, highlight the object, and back again. No
@@ -235,8 +235,8 @@
 
 	<section id="deliverable" class="feature">
 		<div class="copy" use:reveal>
-			<span class="eyebrow">The report is the deliverable</span>
-			<h2>From calc to PDF and IFC. One artifact.</h2>
+			<span class="eyebrow eyebrow-tick">The report is the deliverable</span>
+			<h2>From calc to PDF and IFC. One artifact<span class="ap">.</span></h2>
 			<p>
 				Your calculation isn't transcribed into a deliverable. It <em>is</em> one. Export a paginated
 				report and a schema-valid IFC4X3 model from the same graph; nothing to reconcile.
@@ -286,8 +286,8 @@
 			</p>
 		</div>
 		<div class="copy" use:reveal>
-			<span class="eyebrow">Built for checking</span>
-			<h2>Reviewable by design.</h2>
+			<span class="eyebrow eyebrow-tick">Built for checking</span>
+			<h2>Reviewable by design<span class="ap">.</span></h2>
 			<p>
 				Provenance and "show steps" make verification fast and trustworthy: a workflow made for ISO
 				19650-style checking, not bolted on after.
@@ -299,8 +299,8 @@
 
 	<section id="connected" class="feature">
 		<div class="copy" use:reveal>
-			<span class="eyebrow">Your tools, one graph</span>
-			<h2>Connected to the tools you already run.</h2>
+			<span class="eyebrow eyebrow-tick">Your tools, one graph</span>
+			<h2>Connected to the tools you already run<span class="ap">.</span></h2>
 			<p>
 				The numbers you need already exist: in Revit models on Autodesk Construction Cloud, in the
 				ERP that holds your rates. OctoMeta binds them into the graph instead of asking you to
@@ -373,7 +373,7 @@
 
 	<div class="ai-strip" use:reveal>
 		<div class="inner">
-			<span class="eyebrow">AI-ready by architecture</span>
+			<span class="eyebrow eyebrow-tick">AI-ready by architecture</span>
 			<p>
 				Every edit flows through one typed API, with provenance built in, so when AI arrives, it's
 				just another careful reviewer, not a bolt-on.
@@ -426,6 +426,12 @@
 	.h1-dim {
 		color: var(--grey-1);
 	}
+	/* the one accent keyword: italic + accent, so color never carries the
+	   emphasis alone (DESIGN.md §6) */
+	.acc-i {
+		font-style: italic;
+		color: var(--accent);
+	}
 	.vision {
 		max-width: 56ch;
 		margin-top: var(--s3);
@@ -433,6 +439,10 @@
 	.vision strong {
 		color: var(--ink);
 		font-weight: 500;
+		text-decoration: underline;
+		text-decoration-color: var(--accent-light);
+		text-decoration-thickness: 2px;
+		text-underline-offset: 5px;
 	}
 	.hero-ctas {
 		display: flex;
@@ -458,7 +468,7 @@
 		font-size: 0.72rem;
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
-		color: var(--grey-2);
+		color: var(--accent);
 	}
 	.why p {
 		font-size: 0.88rem;
@@ -544,11 +554,14 @@
 		padding-top: var(--s3);
 		border-top: 1px solid var(--grey-3);
 	}
+	/* computed-cost numerals take the accent: large display type, so the
+	   color marks the value without straining contrast */
 	.stat .n {
 		font-family: var(--font-display);
 		font-weight: 600;
 		font-size: 1.9rem;
 		letter-spacing: -0.02em;
+		color: var(--accent);
 	}
 	.stat .l {
 		font-size: 0.78rem;
@@ -567,6 +580,13 @@
 		max-width: 34ch;
 	}
 	.pivot-dim {
+		color: var(--grey-1);
+	}
+	.pivot-key {
+		color: var(--ink);
+	}
+	/* second lines of two-line H2s dim to grey, echoing the hero headline */
+	.h2-dim {
 		color: var(--grey-1);
 	}
 
