@@ -22,8 +22,10 @@
         --grey-3: #e4e4e1;
         --grey-4: #f1f1ef;
         --surface: #ffffff;
-        --accent: #0b5fff;
-        --accent-dim: rgba(11, 95, 255, 0.1);
+        --accent: #6c5ce7;
+        --accent-2: #2b2e83;
+        --accent-light: #a99cff;
+        --accent-dim: rgba(108, 92, 231, 0.1);
         --error: #c42b1c;
         --font-display: "Inter Tight", sans-serif;
         --font-body: "Inter", sans-serif;
@@ -297,31 +299,35 @@
       <div class="slides">
         <!-- 1 · TITLE -->
         <section>
-          <svg
-            class="logo-hero"
-            viewBox="0 0 64 64"
-            fill="none"
-            aria-label="OctoMeta"
-          >
-            <g stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
-              <path d="M32 23 C30 17 36 11 37 9" />
-              <path d="M38.4 25.6 C41.2 20 49.7 20 51.8 19.3" />
-              <path d="M41 32 C47 30 53 36 55 37" />
-              <path d="M38.4 38.4 C44 41.2 44 49.7 44.7 51.8" />
-              <path d="M32 41 C34 47 28 53 27 55" />
-              <path d="M25.6 38.4 C22.8 44 14.3 44 12.2 44.7" />
-              <path d="M23 32 C17 34 11 28 9 27" />
-              <path d="M25.6 25.6 C20 22.8 20 14.3 19.3 12.2" />
-            </g>
-            <circle cx="32" cy="32" r="6.5" fill="currentColor" />
-            <circle cx="37" cy="9" r="2.4" fill="currentColor" />
-            <circle cx="51.8" cy="19.3" r="2.4" fill="#0B5FFF" />
-            <circle cx="55" cy="37" r="2.4" fill="currentColor" />
-            <circle cx="44.7" cy="51.8" r="2.4" fill="currentColor" />
-            <circle cx="27" cy="55" r="2.4" fill="currentColor" />
-            <circle cx="12.2" cy="44.7" r="2.4" fill="currentColor" />
-            <circle cx="9" cy="27" r="2.4" fill="currentColor" />
-            <circle cx="19.3" cy="12.2" r="2.4" fill="currentColor" />
+          <svg class="logo-hero" viewBox="0 0 1000 1000" aria-label="OctoMeta">
+            <defs>
+              <linearGradient id="octoGradDeckHero" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="var(--ink)" />
+                <stop offset="55%" stop-color="var(--accent-2)" />
+                <stop offset="100%" stop-color="var(--accent)" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M 500 115 C 365 115 285 215 285 335 C 285 420 325 475 355 515 C 315 560 270 600 200 610 C 125 620 90 680 105 745 C 120 815 190 850 250 820 C 300 795 325 745 315 695 C 350 670 390 645 425 620 C 450 650 470 685 470 730 L 470 785 C 420 800 390 845 400 900 C 410 960 470 995 525 975 C 575 955 600 900 580 850 C 565 815 535 795 510 785 L 510 730 C 510 685 530 650 555 620 C 590 645 630 670 665 695 C 655 745 680 795 730 820 C 790 850 860 815 875 745 C 890 680 855 620 780 610 C 710 600 665 560 625 515 C 655 475 695 420 695 335 C 695 215 615 115 500 115 Z"
+              fill="url(#octoGradDeckHero)"
+            />
+            <path
+              d="M 500 185 C 405 185 350 255 350 345 C 350 430 400 500 500 530 C 600 500 650 430 650 345 C 650 255 595 185 500 185 Z"
+              fill="var(--paper)"
+            />
+            <circle cx="210" cy="715" r="58" fill="var(--paper)" />
+            <circle cx="490" cy="885" r="58" fill="var(--paper)" />
+            <circle cx="770" cy="715" r="58" fill="var(--paper)" />
+            <path
+              d="M 390 650 C 430 705 460 735 500 760 C 540 735 570 705 610 650"
+              fill="none"
+              stroke="var(--accent)"
+              stroke-width="18"
+              stroke-linecap="round"
+            />
+            <circle cx="390" cy="650" r="20" fill="var(--paper)" stroke="var(--accent)" stroke-width="12" />
+            <circle cx="500" cy="760" r="22" fill="var(--paper)" stroke="var(--accent)" stroke-width="12" />
+            <circle cx="610" cy="650" r="20" fill="var(--paper)" stroke="var(--accent)" stroke-width="12" />
           </svg>
           <span class="eyebrow"
             >Competitive landscape &amp; pricing · Founding team · July 2026 ·
@@ -842,19 +848,32 @@
 
     <div class="deckfoot">
       <span class="lockup">
-        <svg viewBox="0 0 64 64" fill="none">
-          <g stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
-            <path d="M32 23 C30 17 36 11 37 9" />
-            <path d="M38.4 25.6 C41.2 20 49.7 20 51.8 19.3" />
-            <path d="M41 32 C47 30 53 36 55 37" />
-            <path d="M38.4 38.4 C44 41.2 44 49.7 44.7 51.8" />
-            <path d="M32 41 C34 47 28 53 27 55" />
-            <path d="M25.6 38.4 C22.8 44 14.3 44 12.2 44.7" />
-            <path d="M23 32 C17 34 11 28 9 27" />
-            <path d="M25.6 25.6 C20 22.8 20 14.3 19.3 12.2" />
-          </g>
-          <circle cx="32" cy="32" r="6.5" fill="currentColor" />
-          <circle cx="51.8" cy="19.3" r="2.4" fill="#0B5FFF" />
+        <svg viewBox="0 0 1000 1000">
+          <defs>
+            <linearGradient id="octoGradDeckFoot" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="var(--ink)" />
+              <stop offset="55%" stop-color="var(--accent-2)" />
+              <stop offset="100%" stop-color="var(--accent)" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M 500 115 C 365 115 285 215 285 335 C 285 420 325 475 355 515 C 315 560 270 600 200 610 C 125 620 90 680 105 745 C 120 815 190 850 250 820 C 300 795 325 745 315 695 C 350 670 390 645 425 620 C 450 650 470 685 470 730 L 470 785 C 420 800 390 845 400 900 C 410 960 470 995 525 975 C 575 955 600 900 580 850 C 565 815 535 795 510 785 L 510 730 C 510 685 530 650 555 620 C 590 645 630 670 665 695 C 655 745 680 795 730 820 C 790 850 860 815 875 745 C 890 680 855 620 780 610 C 710 600 665 560 625 515 C 655 475 695 420 695 335 C 695 215 615 115 500 115 Z"
+            fill="url(#octoGradDeckFoot)"
+          />
+          <circle cx="210" cy="715" r="58" fill="var(--paper)" />
+          <circle cx="490" cy="885" r="58" fill="var(--paper)" />
+          <circle cx="770" cy="715" r="58" fill="var(--paper)" />
+          <path
+            d="M 390 650 C 430 705 460 735 500 760 C 540 735 570 705 610 650"
+            fill="none"
+            stroke="var(--paper)"
+            stroke-width="15"
+            stroke-linecap="round"
+            opacity="0.92"
+          />
+          <circle cx="390" cy="650" r="18" fill="var(--accent)" stroke="var(--paper)" stroke-width="9" />
+          <circle cx="500" cy="760" r="20" fill="var(--accent)" stroke="var(--paper)" stroke-width="9" />
+          <circle cx="610" cy="650" r="18" fill="var(--accent)" stroke="var(--paper)" stroke-width="9" />
         </svg>
         OCTOMETA
       </span>

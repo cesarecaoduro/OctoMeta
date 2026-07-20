@@ -9,10 +9,13 @@
 	--grey-3: #e4e4e1; /* hairlines: 1px, always */
 	--grey-4: #f1f1ef; /* panel fills, formula bars */
 	--surface: #ffffff; /* cards, demo panels */
-	--accent: #0b5fff; /* "graph blue": THE accent. Computed values, chips,
-	                      dependency pulses, dimension lines, the logo node,
+	--accent: #6c5ce7; /* "graph violet": THE accent. Computed values, chips,
+	                      dependency pulses, dimension lines, logo arc nodes,
 	                      CTA hover, focus rings. Nothing else. */
-	--accent-dim: rgba(11, 95, 255, 0.1);
+	--accent-2: #2b2e83; /* deep indigo, gradient partner to --accent. Logo
+	                        mark ONLY. Never in UI chrome. */
+	--accent-light: #a99cff; /* tints where --accent-dim reads too subtle */
+	--accent-dim: rgba(108, 92, 231, 0.1);
 	--error: #c42b1c; /* typed graph errors only (#UNIT!, #CYCLE!) */
 	--error-dim: rgba(196, 43, 28, 0.08);
 

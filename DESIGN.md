@@ -16,94 +16,78 @@ An octopus keeps roughly two-thirds of its neurons in its arms: eight limbs that
 
 ## 2. Logo
 
-> **v2 direction — this section supersedes the v1 "Octet" mark.** Provenance and an open flag are logged in §2.1.
+> **v2 direction — this section supersedes the v1 "Octet" mark.** Provenance is logged in §2.1.
 
-**Concept ("Node"):** a rounded head loop over three legs, each ending in an open ring; a shallow arc threads the legs together with three small graph nodes underneath. Head = one mind; the three legs = the load-bearing projections (sheet, report, viewer); the arc = *Meta*, the graph running under them. Monoline, no eyes, no suckers, no mascot.
+**Concept ("Node"):** a rounded head over three legs, each ending in a knocked-out ring; a shallow arc threads the legs together with three accent nodes underneath. Head = one mind; the three legs = the load-bearing projections (sheet, report, viewer); the arc = *Meta*, the graph running under them. Solid silhouette, no eyes, no suckers, no mascot.
 
-**Construction (master SVG, 64-box):** head ring Ø20 at (32,18), stroke 3.2; neck (32,28)→(32,36); legs stroke 3.2 from (32,36) to ring centers (14,50) / (32,54) / (50,50), ring Ø9; graph arc stroke 1.6 from (18,44) through (32,48.5) to (46,44), three nodes Ø3.6 on the arc in `--accent`.
+**Source files:** `static/brand/` holds the shipped vector pack — `octometa_mark_outline.svg` (primary, ≥48 px), `octometa_mark_filled.svg` (compact, <48 px), `octometa_mark_mono_black.svg` / `octometa_mark_mono_white.svg` (single-tone), `octometa_icon_light.svg` / `octometa_icon_dark.svg` / `octometa_icon_gradient.svg` (app icon, 1000-box rounded square), `octometa_wordmark.svg`, and the two horizontal lockups. Path data below is copied verbatim from `octometa_mark_outline.svg` (1000-box viewBox) — don't hand-edit coordinates outside that source.
 
-```svg
-<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none" role="img" aria-label="OctoMeta">
-  <circle cx="32" cy="18" r="10" stroke="currentColor" stroke-width="3.2"/>
-  <path d="M 32 28 L 32 36" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
-  <g stroke="currentColor" stroke-width="3.2" stroke-linecap="round">
-    <path d="M 32 36 C 24 38, 16 42, 14 50"/>
-    <path d="M 32 36 L 32 54"/>
-    <path d="M 32 36 C 40 38, 48 42, 50 50"/>
-  </g>
-  <g fill="none" stroke="currentColor" stroke-width="2.2">
-    <circle cx="14" cy="50" r="4.5"/>
-    <circle cx="32" cy="54" r="4.5"/>
-    <circle cx="50" cy="50" r="4.5"/>
-  </g>
-  <path d="M 18 44 Q 32 50 46 44" stroke="currentColor" stroke-width="1.6" fill="none"/>
-  <circle cx="18" cy="44"   r="1.8" fill="var(--accent, #6C5CE7)"/>
-  <circle cx="32" cy="48.5" r="1.8" fill="var(--accent, #6C5CE7)"/>
-  <circle cx="46" cy="44"   r="1.8" fill="var(--accent, #6C5CE7)"/>
-</svg>
-```
-
-**Filled brand stamp (marketing, splash, avatars, app icon):** solid silhouette stroked in the accent gradient, ring nodes knocked out in paper. This is the *only* context where the gradient and `--accent-2` are allowed — see the exception in §6.
+**Primary mark — outline (1000-box, ≥48 px):** brand gradient body (navy → indigo → violet), paper knockout for the head ring and the three leg-end rings, `--accent` graph arc with three ring nodes.
 
 ```svg
-<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="OctoMeta">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" role="img" aria-label="OctoMeta">
   <defs>
-    <linearGradient id="octoGrad" x1="32" y1="8" x2="32" y2="58" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="var(--accent-2, #2B2E83)"/>
-      <stop offset="1" stop-color="var(--accent, #6C5CE7)"/>
+    <linearGradient id="octoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="var(--ink, #0B1020)"/>
+      <stop offset="55%" stop-color="var(--accent-2, #2B2E83)"/>
+      <stop offset="100%" stop-color="var(--accent, #6C5CE7)"/>
     </linearGradient>
   </defs>
-  <g fill="none" stroke="url(#octoGrad)" stroke-width="6" stroke-linecap="round">
-    <circle cx="32" cy="18" r="10"/>
-    <path d="M 32 28 L 32 36"/>
-    <path d="M 32 36 C 24 38, 16 42, 14 50"/>
-    <path d="M 32 36 L 32 54"/>
-    <path d="M 32 36 C 40 38, 48 42, 50 50"/>
-  </g>
-  <g fill="var(--paper, #F5F6F8)">
-    <circle cx="14" cy="50" r="4.5"/>
-    <circle cx="32" cy="54" r="4.5"/>
-    <circle cx="50" cy="50" r="4.5"/>
-  </g>
+  <path d="M 500 115 C 365 115 285 215 285 335 C 285 420 325 475 355 515 C 315 560 270 600 200 610 C 125 620 90 680 105 745 C 120 815 190 850 250 820 C 300 795 325 745 315 695 C 350 670 390 645 425 620 C 450 650 470 685 470 730 L 470 785 C 420 800 390 845 400 900 C 410 960 470 995 525 975 C 575 955 600 900 580 850 C 565 815 535 795 510 785 L 510 730 C 510 685 530 650 555 620 C 590 645 630 670 665 695 C 655 745 680 795 730 820 C 790 850 860 815 875 745 C 890 680 855 620 780 610 C 710 600 665 560 625 515 C 655 475 695 420 695 335 C 695 215 615 115 500 115 Z" fill="url(#octoGrad)"/>
+  <path d="M 500 185 C 405 185 350 255 350 345 C 350 430 400 500 500 530 C 600 500 650 430 650 345 C 650 255 595 185 500 185 Z" fill="var(--paper, #F5F6F8)"/>
+  <circle cx="210" cy="715" r="58" fill="var(--paper, #F5F6F8)"/>
+  <circle cx="490" cy="885" r="58" fill="var(--paper, #F5F6F8)"/>
+  <circle cx="770" cy="715" r="58" fill="var(--paper, #F5F6F8)"/>
+  <path d="M 390 650 C 430 705 460 735 500 760 C 540 735 570 705 610 650" fill="none" stroke="var(--accent, #6C5CE7)" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="390" cy="650" r="20" fill="var(--paper, #F5F6F8)" stroke="var(--accent, #6C5CE7)" stroke-width="12"/>
+  <circle cx="500" cy="760" r="22" fill="var(--paper, #F5F6F8)" stroke="var(--accent, #6C5CE7)" stroke-width="12"/>
+  <circle cx="610" cy="650" r="20" fill="var(--paper, #F5F6F8)" stroke="var(--accent, #6C5CE7)" stroke-width="12"/>
 </svg>
 ```
 
-**Glyph (below 24 px, 32-box):** same anatomy at half scale, arc dots dropped — used for the favicon and any tiny context.
+**Compact mark — filled (<48 px, favicon, inline lockups):** same silhouette, head-ring knockout dropped for legibility at small size, arc rendered paper-on-gradient with solid `--accent` nodes.
 
 ```svg
-<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" fill="none" role="img" aria-label="OctoMeta">
-  <circle cx="16" cy="9" r="5" stroke="currentColor" stroke-width="2"/>
-  <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
-    <path d="M 16 14 L 16 18"/>
-    <path d="M 16 18 C 12 19, 8 21, 7 25"/>
-    <path d="M 16 18 L 16 27"/>
-    <path d="M 16 18 C 20 19, 24 21, 25 25"/>
-  </g>
-  <g fill="none" stroke="currentColor" stroke-width="1.4">
-    <circle cx="7"  cy="25" r="2.2"/>
-    <circle cx="16" cy="27" r="2.2"/>
-    <circle cx="25" cy="25" r="2.2"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" role="img" aria-label="OctoMeta">
+  <defs>
+    <linearGradient id="octoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="var(--ink, #0B1020)"/>
+      <stop offset="55%" stop-color="var(--accent-2, #2B2E83)"/>
+      <stop offset="100%" stop-color="var(--accent, #6C5CE7)"/>
+    </linearGradient>
+  </defs>
+  <path d="M 500 115 C 365 115 285 215 285 335 C 285 420 325 475 355 515 C 315 560 270 600 200 610 C 125 620 90 680 105 745 C 120 815 190 850 250 820 C 300 795 325 745 315 695 C 350 670 390 645 425 620 C 450 650 470 685 470 730 L 470 785 C 420 800 390 845 400 900 C 410 960 470 995 525 975 C 575 955 600 900 580 850 C 565 815 535 795 510 785 L 510 730 C 510 685 530 650 555 620 C 590 645 630 670 665 695 C 655 745 680 795 730 820 C 790 850 860 815 875 745 C 890 680 855 620 780 610 C 710 600 665 560 625 515 C 655 475 695 420 695 335 C 695 215 615 115 500 115 Z" fill="url(#octoGrad)"/>
+  <circle cx="210" cy="715" r="58" fill="var(--paper, #F5F6F8)"/>
+  <circle cx="490" cy="885" r="58" fill="var(--paper, #F5F6F8)"/>
+  <circle cx="770" cy="715" r="58" fill="var(--paper, #F5F6F8)"/>
+  <path d="M 390 650 C 430 705 460 735 500 760 C 540 735 570 705 610 650" fill="none" stroke="var(--paper, #F5F6F8)" stroke-width="15" stroke-linecap="round" opacity="0.92"/>
+  <circle cx="390" cy="650" r="18" fill="var(--accent, #6C5CE7)" stroke="var(--paper, #F5F6F8)" stroke-width="9"/>
+  <circle cx="500" cy="760" r="20" fill="var(--accent, #6C5CE7)" stroke="var(--paper, #F5F6F8)" stroke-width="9"/>
+  <circle cx="610" cy="650" r="18" fill="var(--accent, #6C5CE7)" stroke="var(--paper, #F5F6F8)" stroke-width="9"/>
 </svg>
 ```
 
-**App icon (Apple platforms):** symbol only, no wordmark, centered on the standard rounded-square canvas built from a 1024×1024 master. Ship a light appearance (paper canvas, ink or gradient mark) and a dark appearance (`--ink` canvas, paper mark); generate shipping sizes from the master via Apple's icon tooling rather than hand-exported PNGs.
+**Single-tone (print, monochrome reproduction, dark UI chrome):** `octometa_mark_mono_black.svg` / `octometa_mark_mono_white.svg` in `static/brand/` — flat ink or paper fill, no gradient, no accent.
 
-**Rules.** Default context is the monoline outline in `currentColor` with arc nodes in `--accent` — this is what ships in-product (UI chrome, favicon, docs). The gradient filled stamp is reserved for marketing/brand moments (hero, splash, decks, social avatars, app icon). Clear space = one ring-node diameter on all sides. Minimum size 16 px; below 24 px always the glyph. Animation means computation only: a pulse traveling the arc, or a ring flash on hover, then stillness. Never rotate, flip, stretch, or add a face.
+**App icon (Apple platforms):** `octometa_icon_light.svg` (paper canvas, gradient mark) and `octometa_icon_dark.svg` (`--ink` canvas, paper mark) — symbol only, no wordmark, rounded-square canvas baked into the 1000-box source. `octometa_icon_gradient.svg` (gradient canvas, paper mark) is the marketing/App Store variant. Generate shipping sizes from these masters via Apple's icon tooling.
 
-**Wordmark:** `OctoMeta` set in Inter Tight 600, tracking −0.02em; "Meta" may render in `--grey-1` next to ink "Octo" in large lockups; single weight/color in small sizes. Mark-left lockup, gap = 0.6× mark height.
+**Rules.** The gradient is fixed brand identity, not theme-adaptive — it renders the same on light and dark surfaces; only the paper/ink knockouts and the accent swap for the mono variants. Clear space = one leg-ring diameter on all sides. Minimum size 16 px; below 48 px use the compact filled mark. Animation means computation only: a pulse traveling the arc, or a ring flash on hover, then stillness. Never rotate, flip, stretch, or add a face.
 
-### 2.1 Provenance and open flag
+**Wordmark:** `octometa_wordmark.svg` — `OctoMeta` set in Inter (Inter Tight in-product), weight 600, tracking −0.024em (letter-spacing −6 at the 1000-box wordmark's 150 px type size), ink fill. Mark-left lockup, gap = 0.6× mark height — see `octometa_logo_horizontal_outline.svg` / `_filled.svg`.
 
-This mark replaces the v1 eight-arm "Octet" per a submitted reference image and logo-system writeup (Apple HIG-informed: text-free app icon, layered light/dark appearances, restrained iconography). The construction above is hand-traced from a raster preview only — the source SVGs referenced by that writeup were not retrievable (they pointed to another tool's ephemeral sandbox storage, not a live URL) — so treat the coordinates as a first pass to true up if real vector source ever surfaces.
+### 2.1 Provenance
 
-**Unresolved:** §1's tagline ("*One mind. Eight arms.*") and premise copy are built on the octopus's eight limbs and no longer match a three-legged mark. This doc doesn't touch §1 — that's a copy decision, not a token/logo one — flagging it for a follow-up call.
+v2 replaces the v1 eight-arm "Octet" per a submitted logo-system writeup and reference image; the writeup's own asset links were unreachable (another tool's ephemeral sandbox), so an earlier pass of this doc hand-traced the mark from a raster preview. The full vector pack has since been supplied (`static/brand/`, source `octometa_logo_system.zip`), and the construction above is now copied directly from it — the earlier hand-traced approximation is superseded.
 
-Reference palette from the submitted study (for traceability; only `--accent`/`--accent-2` were adopted into tokens — see §3):
+One bug fixed in transit: `octometa_icon_gradient.svg` shipped with a malformed `<svg>` tag (`<defs>` placed before the root element's attributes closed, which XML parsers reject). Fixed in the copy under `static/brand/`.
+
+**Unresolved:** §1's tagline ("*One mind. Eight arms.*") and premise copy are built on the octopus's eight limbs and still don't match a three-legged mark. This doc doesn't touch §1 — that's a copy decision, not a token/logo one.
+
+Reference palette (`static/brand/README.md`; adopted into tokens — see §3):
 
 | Swatch | Hex | Mapped to |
 |---|---|---|
-| Near-black navy | `#0B1020` | close to existing `--ink` (`#0B0B0C`) — left unchanged |
+| Near-black navy | `#0B1020` | close to existing `--ink` (`#0B0B0C`) — left unchanged, reused as the gradient's dark stop |
 | Deep indigo | `#2B2E83` | `--accent-2` (gradient stop, logo-only) |
 | Violet | `#6C5CE7` | `--accent` |
 | Light violet | `#A99CFF` | `--accent-light` |
@@ -125,8 +109,7 @@ Reference palette from the submitted study (for traceability; only `--accent`/`-
                                 value chips, dependency pulses, dimension lines,
                                 logo arc nodes, CTA hover, focus rings. Nothing else. */
   --accent-2:     #2B2E83;   /* deep indigo — gradient partner to --accent. Logo
-                                filled brand stamp ONLY (see DESIGN.md §2). Never
-                                in UI chrome. */
+                                mark ONLY (see DESIGN.md §2). Never in UI chrome. */
   --accent-light: #A99CFF;   /* tints where --accent-dim reads too subtle */
   --accent-dim:   rgba(108,92,231,.10);
   --error:      #C42B1C;   /* typed graph errors only (#UNIT!, #CYCLE!) */
@@ -168,7 +151,7 @@ Motion exists only to demonstrate computation. Recompute flash (chip: accent→d
 ## 6. Application rules (do / don't)
 
 **Do:** paper background everywhere; product-as-hero; one bold moment per surface (landing = live demo; deck = matrix slide); 8-px spacing scale only; AA contrast (`--grey-1` is the floor for body text).
-**Don't:** second accent color or gradient anywhere outside the logo's filled brand stamp (§2 — `--accent-2` and the gradient never appear in UI chrome, chips, or buttons); shadows (elevation = border + surface shift); octopus illustration/mascot anywhere (the mark is a diagram, not a character); accent in headings; stock imagery; dark-mode improvisation (a dark theme is a future, tokenized decision — invert paper/ink, keep accent).
+**Don't:** second accent color or gradient anywhere outside the logo mark (§2 — `--accent-2` and the gradient never appear in UI chrome, chips, or buttons); shadows (elevation = border + surface shift); octopus illustration/mascot anywhere (the mark is a diagram, not a character); accent in headings; stock imagery; dark-mode improvisation (a dark theme is a future, tokenized decision — invert paper/ink, keep accent).
 
 ## 7. Surface mapping
 

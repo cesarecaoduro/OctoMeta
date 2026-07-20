@@ -10,13 +10,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Inter+Tight:wght@500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-<link rel="icon" type="image/svg+xml" href='data:image/svg+xml,<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none"><g stroke="%230B0B0C" stroke-width="3" stroke-linecap="round"><path d="M32 23 C30 17 36 11 37 9"/><path d="M38.4 25.6 C41.2 20 49.7 20 51.8 19.3"/><path d="M41 32 C47 30 53 36 55 37"/><path d="M38.4 38.4 C44 41.2 44 49.7 44.7 51.8"/><path d="M32 41 C34 47 28 53 27 55"/><path d="M25.6 38.4 C22.8 44 14.3 44 12.2 44.7"/><path d="M23 32 C17 34 11 28 9 27"/><path d="M25.6 25.6 C20 22.8 20 14.3 19.3 12.2"/></g><circle cx="32" cy="32" r="7" fill="%230B0B0C"/><circle cx="51.8" cy="19.3" r="3" fill="%230B5FFF"/></svg>' />
+<link rel="icon" type="image/svg+xml" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000"><defs><linearGradient id="brandGradient" x1="0%25" y1="0%25" x2="100%25" y2="100%25"><stop offset="0%25" stop-color="%230B1020"/><stop offset="55%25" stop-color="%232B2E83"/><stop offset="100%25" stop-color="%236C5CE7"/></linearGradient></defs><path d="M 500 115C 365 115 285 215 285 335C 285 420 325 475 355 515C 315 560 270 600 200 610C 125 620 90 680 105 745C 120 815 190 850 250 820C 300 795 325 745 315 695C 350 670 390 645 425 620C 450 650 470 685 470 730L 470 785C 420 800 390 845 400 900C 410 960 470 995 525 975C 575 955 600 900 580 850C 565 815 535 795 510 785L 510 730C 510 685 530 650 555 620C 590 645 630 670 665 695C 655 745 680 795 730 820C 790 850 860 815 875 745C 890 680 855 620 780 610C 710 600 665 560 625 515C 655 475 695 420 695 335C 695 215 615 115 500 115Z" fill="url(%23brandGradient)"/><circle cx="210" cy="715" r="58" fill="white"/><circle cx="490" cy="885" r="58" fill="white"/><circle cx="770" cy="715" r="58" fill="white"/><path d="M 390 650 C 430 705 460 735 500 760 C 540 735 570 705 610 650" fill="none" stroke="white" stroke-width="15" stroke-linecap="round" opacity="0.92"/><circle cx="390" cy="650" r="18" fill="%236C5CE7" stroke="white" stroke-width="9"/><circle cx="500" cy="760" r="20" fill="%236C5CE7" stroke="white" stroke-width="9"/><circle cx="610" cy="650" r="18" fill="%236C5CE7" stroke="white" stroke-width="9"/></svg>' />
 <style>
 /* ============ OCTOMETA TOKENS (see DESIGN.md) ============ */
 :root{
   --paper:#FAFAF9; --ink:#0B0B0C; --grey-1:#55555A; --grey-2:#9A9AA0;
   --grey-3:#E4E4E1; --grey-4:#F1F1EF; --surface:#FFFFFF;
-  --accent:#0B5FFF; --accent-dim:rgba(11,95,255,.10);
+  --accent:#6C5CE7; --accent-2:#2B2E83; --accent-light:#A99CFF; --accent-dim:rgba(108,92,231,.10);
   --error:#C42B1C; --error-dim:rgba(196,43,28,.08);
   --font-display:"Inter Tight",system-ui,sans-serif;
   --font-body:"Inter",system-ui,sans-serif;
@@ -243,18 +243,16 @@ footer{border-top:1px solid var(--grey-3); padding:var(--s4) 0 var(--s5); margin
 <nav>
   <div class="wrap nav-inner">
     <a class="lockup" href="#top" aria-label="OctoMeta home">
-      <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
-        <g stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
-          <path d="M32 23 C30 17 36 11 37 9"/><path d="M38.4 25.6 C41.2 20 49.7 20 51.8 19.3"/>
-          <path d="M41 32 C47 30 53 36 55 37"/><path d="M38.4 38.4 C44 41.2 44 49.7 44.7 51.8"/>
-          <path d="M32 41 C34 47 28 53 27 55"/><path d="M25.6 38.4 C22.8 44 14.3 44 12.2 44.7"/>
-          <path d="M23 32 C17 34 11 28 9 27"/><path d="M25.6 25.6 C20 22.8 20 14.3 19.3 12.2"/>
-        </g>
-        <circle cx="32" cy="32" r="6.5" fill="currentColor"/>
-        <circle cx="37" cy="9" r="2.4" fill="currentColor"/><circle cx="51.8" cy="19.3" r="2.4" fill="#0B5FFF"/>
-        <circle cx="55" cy="37" r="2.4" fill="currentColor"/><circle cx="44.7" cy="51.8" r="2.4" fill="currentColor"/>
-        <circle cx="27" cy="55" r="2.4" fill="currentColor"/><circle cx="12.2" cy="44.7" r="2.4" fill="currentColor"/>
-        <circle cx="9" cy="27" r="2.4" fill="currentColor"/><circle cx="19.3" cy="12.2" r="2.4" fill="currentColor"/>
+      <svg viewBox="0 0 1000 1000" aria-hidden="true">
+        <defs><linearGradient id="octoGradNav" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="var(--ink)"/><stop offset="55%" stop-color="var(--accent-2)"/><stop offset="100%" stop-color="var(--accent)"/>
+        </linearGradient></defs>
+        <path d="M 500 115 C 365 115 285 215 285 335 C 285 420 325 475 355 515 C 315 560 270 600 200 610 C 125 620 90 680 105 745 C 120 815 190 850 250 820 C 300 795 325 745 315 695 C 350 670 390 645 425 620 C 450 650 470 685 470 730 L 470 785 C 420 800 390 845 400 900 C 410 960 470 995 525 975 C 575 955 600 900 580 850 C 565 815 535 795 510 785 L 510 730 C 510 685 530 650 555 620 C 590 645 630 670 665 695 C 655 745 680 795 730 820 C 790 850 860 815 875 745 C 890 680 855 620 780 610 C 710 600 665 560 625 515 C 655 475 695 420 695 335 C 695 215 615 115 500 115 Z" fill="url(#octoGradNav)"/>
+        <circle cx="210" cy="715" r="58" fill="var(--paper)"/><circle cx="490" cy="885" r="58" fill="var(--paper)"/><circle cx="770" cy="715" r="58" fill="var(--paper)"/>
+        <path d="M 390 650 C 430 705 460 735 500 760 C 540 735 570 705 610 650" fill="none" stroke="var(--paper)" stroke-width="15" stroke-linecap="round" opacity="0.92"/>
+        <circle cx="390" cy="650" r="18" fill="var(--accent)" stroke="var(--paper)" stroke-width="9"/>
+        <circle cx="500" cy="760" r="20" fill="var(--accent)" stroke="var(--paper)" stroke-width="9"/>
+        <circle cx="610" cy="650" r="18" fill="var(--accent)" stroke="var(--paper)" stroke-width="9"/>
       </svg>
       <span class="wm">Octo<span>Meta</span></span>
     </a>
@@ -270,18 +268,17 @@ footer{border-top:1px solid var(--grey-3); padding:var(--s4) 0 var(--s5); margin
 <!-- ============ HERO ============ -->
 <header class="hero" id="top">
   <div class="wrap">
-    <svg class="hero-mark" viewBox="0 0 64 64" fill="none" aria-hidden="true">
-      <g stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
-        <path d="M32 23 C30 17 36 11 37 9"/><path d="M38.4 25.6 C41.2 20 49.7 20 51.8 19.3"/>
-        <path d="M41 32 C47 30 53 36 55 37"/><path d="M38.4 38.4 C44 41.2 44 49.7 44.7 51.8"/>
-        <path d="M32 41 C34 47 28 53 27 55"/><path d="M25.6 38.4 C22.8 44 14.3 44 12.2 44.7"/>
-        <path d="M23 32 C17 34 11 28 9 27"/><path d="M25.6 25.6 C20 22.8 20 14.3 19.3 12.2"/>
-      </g>
-      <circle cx="32" cy="32" r="6.5" fill="currentColor"/>
-      <circle cx="37" cy="9" r="2.4" fill="currentColor"/><circle cx="51.8" cy="19.3" r="2.4" fill="#0B5FFF"/>
-      <circle cx="55" cy="37" r="2.4" fill="currentColor"/><circle cx="44.7" cy="51.8" r="2.4" fill="currentColor"/>
-      <circle cx="27" cy="55" r="2.4" fill="currentColor"/><circle cx="12.2" cy="44.7" r="2.4" fill="currentColor"/>
-      <circle cx="9" cy="27" r="2.4" fill="currentColor"/><circle cx="19.3" cy="12.2" r="2.4" fill="currentColor"/>
+    <svg class="hero-mark" viewBox="0 0 1000 1000" aria-hidden="true">
+      <defs><linearGradient id="octoGradHero" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="var(--ink)"/><stop offset="55%" stop-color="var(--accent-2)"/><stop offset="100%" stop-color="var(--accent)"/>
+      </linearGradient></defs>
+      <path d="M 500 115 C 365 115 285 215 285 335 C 285 420 325 475 355 515 C 315 560 270 600 200 610 C 125 620 90 680 105 745 C 120 815 190 850 250 820 C 300 795 325 745 315 695 C 350 670 390 645 425 620 C 450 650 470 685 470 730 L 470 785 C 420 800 390 845 400 900 C 410 960 470 995 525 975 C 575 955 600 900 580 850 C 565 815 535 795 510 785 L 510 730 C 510 685 530 650 555 620 C 590 645 630 670 665 695 C 655 745 680 795 730 820 C 790 850 860 815 875 745 C 890 680 855 620 780 610 C 710 600 665 560 625 515 C 655 475 695 420 695 335 C 695 215 615 115 500 115 Z" fill="url(#octoGradHero)"/>
+      <path d="M 500 185 C 405 185 350 255 350 345 C 350 430 400 500 500 530 C 600 500 650 430 650 345 C 650 255 595 185 500 185 Z" fill="var(--paper)"/>
+      <circle cx="210" cy="715" r="58" fill="var(--paper)"/><circle cx="490" cy="885" r="58" fill="var(--paper)"/><circle cx="770" cy="715" r="58" fill="var(--paper)"/>
+      <path d="M 390 650 C 430 705 460 735 500 760 C 540 735 570 705 610 650" fill="none" stroke="var(--accent)" stroke-width="18" stroke-linecap="round"/>
+      <circle cx="390" cy="650" r="20" fill="var(--paper)" stroke="var(--accent)" stroke-width="12"/>
+      <circle cx="500" cy="760" r="22" fill="var(--paper)" stroke="var(--accent)" stroke-width="12"/>
+      <circle cx="610" cy="650" r="20" fill="var(--paper)" stroke="var(--accent)" stroke-width="12"/>
     </svg>
     <span class="eyebrow">The living engineering document · Early access</span>
     <h1>One mind. Eight arms.</h1>
@@ -580,14 +577,17 @@ footer{border-top:1px solid var(--grey-3); padding:var(--s4) 0 var(--s5); margin
       </form>
     </div>
     <div class="wl-success" aria-live="polite">
-      <svg class="mark" viewBox="0 0 64 64" fill="none">
-        <g stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
-          <path d="M32 23 C30 17 36 11 37 9"/><path d="M38.4 25.6 C41.2 20 49.7 20 51.8 19.3"/>
-          <path d="M41 32 C47 30 53 36 55 37"/><path d="M38.4 38.4 C44 41.2 44 49.7 44.7 51.8"/>
-          <path d="M32 41 C34 47 28 53 27 55"/><path d="M25.6 38.4 C22.8 44 14.3 44 12.2 44.7"/>
-          <path d="M23 32 C17 34 11 28 9 27"/><path d="M25.6 25.6 C20 22.8 20 14.3 19.3 12.2"/>
-        </g>
-        <circle cx="32" cy="32" r="6.5" fill="currentColor"/>
+      <svg class="mark" viewBox="0 0 1000 1000">
+        <defs><linearGradient id="octoGradWl" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="var(--ink)"/><stop offset="55%" stop-color="var(--accent-2)"/><stop offset="100%" stop-color="var(--accent)"/>
+        </linearGradient></defs>
+        <path d="M 500 115 C 365 115 285 215 285 335 C 285 420 325 475 355 515 C 315 560 270 600 200 610 C 125 620 90 680 105 745 C 120 815 190 850 250 820 C 300 795 325 745 315 695 C 350 670 390 645 425 620 C 450 650 470 685 470 730 L 470 785 C 420 800 390 845 400 900 C 410 960 470 995 525 975 C 575 955 600 900 580 850 C 565 815 535 795 510 785 L 510 730 C 510 685 530 650 555 620 C 590 645 630 670 665 695 C 655 745 680 795 730 820 C 790 850 860 815 875 745 C 890 680 855 620 780 610 C 710 600 665 560 625 515 C 655 475 695 420 695 335 C 695 215 615 115 500 115 Z" fill="url(#octoGradWl)"/>
+        <path d="M 500 185 C 405 185 350 255 350 345 C 350 430 400 500 500 530 C 600 500 650 430 650 345 C 650 255 595 185 500 185 Z" fill="var(--paper)"/>
+        <circle cx="210" cy="715" r="58" fill="var(--paper)"/><circle cx="490" cy="885" r="58" fill="var(--paper)"/><circle cx="770" cy="715" r="58" fill="var(--paper)"/>
+        <path d="M 390 650 C 430 705 460 735 500 760 C 540 735 570 705 610 650" fill="none" stroke="var(--accent)" stroke-width="18" stroke-linecap="round"/>
+        <circle cx="390" cy="650" r="20" fill="var(--paper)" stroke="var(--accent)" stroke-width="12"/>
+        <circle cx="500" cy="760" r="22" fill="var(--paper)" stroke="var(--accent)" stroke-width="12"/>
+        <circle cx="610" cy="650" r="20" fill="var(--paper)" stroke="var(--accent)" stroke-width="12"/>
       </svg>
       <h3>You're on the list.</h3>
       <p>One arm of the graph just updated. We'll email you when your testing invite is ready.</p>
@@ -599,14 +599,16 @@ footer{border-top:1px solid var(--grey-3); padding:var(--s4) 0 var(--s5); margin
 <footer>
   <div class="wrap foot">
     <a class="lockup" href="#top" aria-label="OctoMeta">
-      <svg viewBox="0 0 64 64" fill="none" aria-hidden="true" style="width:22px;height:22px">
-        <g stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
-          <path d="M32 23 C30 17 36 11 37 9"/><path d="M38.4 25.6 C41.2 20 49.7 20 51.8 19.3"/>
-          <path d="M41 32 C47 30 53 36 55 37"/><path d="M38.4 38.4 C44 41.2 44 49.7 44.7 51.8"/>
-          <path d="M32 41 C34 47 28 53 27 55"/><path d="M25.6 38.4 C22.8 44 14.3 44 12.2 44.7"/>
-          <path d="M23 32 C17 34 11 28 9 27"/><path d="M25.6 25.6 C20 22.8 20 14.3 19.3 12.2"/>
-        </g>
-        <circle cx="32" cy="32" r="6.5" fill="currentColor"/><circle cx="51.8" cy="19.3" r="2.4" fill="#0B5FFF"/>
+      <svg viewBox="0 0 1000 1000" aria-hidden="true" style="width:22px;height:22px">
+        <defs><linearGradient id="octoGradFoot" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="var(--ink)"/><stop offset="55%" stop-color="var(--accent-2)"/><stop offset="100%" stop-color="var(--accent)"/>
+        </linearGradient></defs>
+        <path d="M 500 115 C 365 115 285 215 285 335 C 285 420 325 475 355 515 C 315 560 270 600 200 610 C 125 620 90 680 105 745 C 120 815 190 850 250 820 C 300 795 325 745 315 695 C 350 670 390 645 425 620 C 450 650 470 685 470 730 L 470 785 C 420 800 390 845 400 900 C 410 960 470 995 525 975 C 575 955 600 900 580 850 C 565 815 535 795 510 785 L 510 730 C 510 685 530 650 555 620 C 590 645 630 670 665 695 C 655 745 680 795 730 820 C 790 850 860 815 875 745 C 890 680 855 620 780 610 C 710 600 665 560 625 515 C 655 475 695 420 695 335 C 695 215 615 115 500 115 Z" fill="url(#octoGradFoot)"/>
+        <circle cx="210" cy="715" r="58" fill="var(--paper)"/><circle cx="490" cy="885" r="58" fill="var(--paper)"/><circle cx="770" cy="715" r="58" fill="var(--paper)"/>
+        <path d="M 390 650 C 430 705 460 735 500 760 C 540 735 570 705 610 650" fill="none" stroke="var(--paper)" stroke-width="15" stroke-linecap="round" opacity="0.92"/>
+        <circle cx="390" cy="650" r="18" fill="var(--accent)" stroke="var(--paper)" stroke-width="9"/>
+        <circle cx="500" cy="760" r="20" fill="var(--accent)" stroke="var(--paper)" stroke-width="9"/>
+        <circle cx="610" cy="650" r="18" fill="var(--accent)" stroke="var(--paper)" stroke-width="9"/>
       </svg>
       <span class="wm" style="font-size:.95rem">Octo<span style="color:var(--grey-1)">Meta</span></span>
     </a>

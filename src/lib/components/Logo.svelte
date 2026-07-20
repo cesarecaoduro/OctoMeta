@@ -1,69 +1,73 @@
 <script lang="ts">
 	/**
-	 * The OctoMeta mark: one head node (the graph) with eight arms drawn as
-	 * dependency hairlines, each ending in a node (the projections). Exactly
-	 * one tip takes the accent: the value that just recomputed. Ink inherits
-	 * via currentColor.
+	 * The OctoMeta mark: a rounded head over three legs, each ending in a
+	 * knocked-out ring node, threaded underneath by a shallow graph arc
+	 * with three accent nodes — the typed dependency layer. Fixed brand
+	 * gradient (not currentColor); path data mirrors static/brand and
+	 * DESIGN.md §2.
 	 *
-	 * Below 24px renders the three-arm glyph so the mark stays legible.
-	 * A parent with class `mark-hover` flashes the accent tip on hover.
+	 * Renders the compact filled variant below 48px, which holds up
+	 * better at small sizes per the brand pack's usage guidance; the
+	 * fuller outline variant (open head ring) at 48px and above.
+	 *
+	 * A parent with class `mark-hover` flashes the arc nodes on hover.
 	 *
 	 * @prop size - rendered width/height in px (default 24)
 	 */
 	let { size = 24 }: { size?: number } = $props();
+
+	const uid = $props.id();
+	const BODY =
+		'M 500 115 C 365 115 285 215 285 335 C 285 420 325 475 355 515 C 315 560 270 600 200 610 C 125 620 90 680 105 745 C 120 815 190 850 250 820 C 300 795 325 745 315 695 C 350 670 390 645 425 620 C 450 650 470 685 470 730 L 470 785 C 420 800 390 845 400 900 C 410 960 470 995 525 975 C 575 955 600 900 580 850 C 565 815 535 795 510 785 L 510 730 C 510 685 530 650 555 620 C 590 645 630 670 665 695 C 655 745 680 795 730 820 C 790 850 860 815 875 745 C 890 680 855 620 780 610 C 710 600 665 560 625 515 C 655 475 695 420 695 335 C 695 215 615 115 500 115 Z';
+	const ARC = 'M 390 650 C 430 705 460 735 500 760 C 540 735 570 705 610 650';
 </script>
 
-{#if size >= 24}
-	<svg viewBox="0 0 64 64" fill="none" width={size} height={size} aria-hidden="true">
-		<g stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
-			<path d="M 25.62 15.24 C 18.75 16.58, 6 31.5, 6 38.5" />
-			<path d="M 26.61 17.63 C 19.98 22.11, 12 38, 12 46" />
-			<path d="M 28.46 19.45 C 24.10 26.16, 20 44, 20 52" />
-			<path d="M 30.87 20.40 C 29.48 28.28, 28 47, 28 55" />
-			<path d="M 33.13 20.40 C 34.52 28.28, 36 47, 36 55" />
-			<path d="M 35.54 19.45 C 39.90 26.16, 44 44, 44 52" />
-			<path d="M 37.39 17.63 C 44.02 22.11, 52 38, 52 46" />
-			<path d="M 38.38 15.24 C 45.25 16.58, 58 31.5, 58 38.5" />
-		</g>
-		<circle cx="32" cy="14" r="7.5" fill="currentColor" />
-		<circle cx="6" cy="38.5" r="2.5" fill="currentColor" />
-		<circle cx="12" cy="46" r="2.5" fill="currentColor" />
-		<circle cx="20" cy="52" r="2.5" fill="currentColor" />
-		<circle cx="28" cy="55" r="2.5" fill="currentColor" />
-		<circle cx="36" cy="55" r="2.5" fill="currentColor" />
-		<circle class="tip" cx="44" cy="52" r="2.5" fill="var(--accent, #0B5FFF)" />
-		<circle cx="52" cy="46" r="2.5" fill="currentColor" />
-		<circle cx="58" cy="38.5" r="2.5" fill="currentColor" />
-	</svg>
-{:else}
-	<svg viewBox="0 0 32 32" fill="none" width={size} height={size} aria-hidden="true">
-		<g stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-			<path d="M 13.05 10.85 C 9.09 14.67, 6.5 18.5, 6.5 23.5" />
-			<path d="M 16.00 12.10 C 16.00 17.60, 16 22, 16 27" />
-			<path d="M 18.95 10.85 C 22.91 14.67, 25.5 18.5, 25.5 23.5" />
-		</g>
-		<circle cx="16" cy="8" r="4.6" fill="currentColor" />
-		<circle cx="6.5" cy="23.5" r="2.1" fill="currentColor" />
-		<circle cx="16" cy="27" r="2.1" fill="currentColor" />
-		<circle class="tip" cx="25.5" cy="23.5" r="2.1" fill="var(--accent, #0B5FFF)" />
-	</svg>
-{/if}
+<svg viewBox="0 0 1000 1000" width={size} height={size} aria-hidden="true">
+	<defs>
+		<linearGradient id="octoGrad-{uid}" x1="0%" y1="0%" x2="100%" y2="100%">
+			<stop offset="0%" stop-color="var(--ink)" />
+			<stop offset="55%" stop-color="var(--accent-2)" />
+			<stop offset="100%" stop-color="var(--accent)" />
+		</linearGradient>
+	</defs>
+	<path d={BODY} fill="url(#octoGrad-{uid})" />
+	{#if size >= 48}
+		<path
+			d="M 500 185 C 405 185 350 255 350 345 C 350 430 400 500 500 530 C 600 500 650 430 650 345 C 650 255 595 185 500 185 Z"
+			fill="var(--paper)"
+		/>
+	{/if}
+	<circle cx="210" cy="715" r="58" fill="var(--paper)" />
+	<circle cx="490" cy="885" r="58" fill="var(--paper)" />
+	<circle cx="770" cy="715" r="58" fill="var(--paper)" />
+	{#if size >= 48}
+		<path d={ARC} fill="none" stroke="var(--accent)" stroke-width="18" stroke-linecap="round" />
+		<circle class="node" cx="390" cy="650" r="20" fill="var(--paper)" stroke="var(--accent)" stroke-width="12" />
+		<circle class="node" cx="500" cy="760" r="22" fill="var(--paper)" stroke="var(--accent)" stroke-width="12" />
+		<circle class="node" cx="610" cy="650" r="20" fill="var(--paper)" stroke="var(--accent)" stroke-width="12" />
+	{:else}
+		<path d={ARC} fill="none" stroke="var(--paper)" stroke-width="15" stroke-linecap="round" opacity="0.92" />
+		<circle class="node" cx="390" cy="650" r="18" fill="var(--accent)" stroke="var(--paper)" stroke-width="9" />
+		<circle class="node" cx="500" cy="760" r="20" fill="var(--accent)" stroke="var(--paper)" stroke-width="9" />
+		<circle class="node" cx="610" cy="650" r="18" fill="var(--accent)" stroke="var(--paper)" stroke-width="9" />
+	{/if}
+</svg>
 
 <style>
-	.tip {
+	.node {
 		transform-box: fill-box;
 		transform-origin: center;
 	}
-	:global(.mark-hover:hover) .tip {
-		animation: tip-flash 0.7s var(--ease);
+	:global(.mark-hover:hover) .node {
+		animation: node-flash 0.7s var(--ease);
 	}
-	@keyframes tip-flash {
+	@keyframes node-flash {
 		0%,
 		100% {
 			transform: scale(1);
 		}
 		35% {
-			transform: scale(1.8);
+			transform: scale(1.35);
 		}
 	}
 </style>
