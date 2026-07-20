@@ -39,18 +39,10 @@ function buildGraph() {
 	const graph = new DocumentGraph();
 	const opts = { registry };
 	const ast = (src: string) => {
-		const parsed = parseFormula(src, { sheetBlockId: SHEET });
+		const parsed = parseFormula(src, { sheetId: SHEET });
 		if (!parsed.ok) throw new Error(parsed.message);
 		return parsed.ast;
 	};
-	must(
-		commit(
-			graph,
-			{ op: 'blockOp', action: 'add', blockId: SHEET, block: { docId: 'doc', type: 'sheet' } },
-			HUMAN,
-			opts
-		)
-	);
 	const addInput = (id: NodeId, a1: string, value: number, actor: Actor): void => {
 		must(
 			commit(
@@ -60,8 +52,7 @@ function buildGraph() {
 					node: {
 						id,
 						kind: 'input',
-						cellRef: { sheetBlockId: SHEET, a1 },
-						blockId: SHEET,
+						cellRef: { sheetId: SHEET, a1 },
 						provenance: emptyProvenance()
 					}
 				},
@@ -82,8 +73,7 @@ function buildGraph() {
 					id: 'n-moment',
 					kind: 'computed',
 					formula: ast('=A2 * A1^2 / 8'),
-					cellRef: { sheetBlockId: SHEET, a1: 'A3' },
-					blockId: SHEET,
+					cellRef: { sheetId: SHEET, a1: 'A3' },
 					provenance: emptyProvenance()
 				}
 			},
@@ -94,7 +84,7 @@ function buildGraph() {
 	must(
 		commit(
 			graph,
-			{ op: 'publishName', cellRef: { sheetBlockId: SHEET, a1: 'A1' }, name: 'beam.span' },
+			{ op: 'publishName', cellRef: { sheetId: SHEET, a1: 'A1' }, name: 'beam.span' },
 			HUMAN,
 			opts
 		)
@@ -102,7 +92,7 @@ function buildGraph() {
 	const momentNameId = must(
 		commit(
 			graph,
-			{ op: 'publishName', cellRef: { sheetBlockId: SHEET, a1: 'A3' }, name: 'beam.moment' },
+			{ op: 'publishName', cellRef: { sheetId: SHEET, a1: 'A3' }, name: 'beam.moment' },
 			HUMAN,
 			opts
 		)
@@ -116,8 +106,7 @@ function buildGraph() {
 					id: 'n-util',
 					kind: 'computed',
 					formula: ast('=beam.moment / 25'),
-					cellRef: { sheetBlockId: SHEET, a1: 'B1' },
-					blockId: SHEET,
+					cellRef: { sheetId: SHEET, a1: 'B1' },
 					provenance: emptyProvenance()
 				}
 			},
@@ -159,7 +148,7 @@ describe('buildInspector · node mapping', () => {
 
 	it('renders error values as their code, as-is', () => {
 		const { graph, registry } = buildGraph();
-		const parsed = parseFormula('=missing.name', { sheetBlockId: SHEET });
+		const parsed = parseFormula('=missing.name', { sheetId: SHEET });
 		if (!parsed.ok) throw new Error(parsed.message);
 		must(
 			commit(
@@ -170,8 +159,7 @@ describe('buildInspector · node mapping', () => {
 						id: 'n-bad',
 						kind: 'computed',
 						formula: parsed.ast,
-						cellRef: { sheetBlockId: SHEET, a1: 'C1' },
-						blockId: SHEET,
+						cellRef: { sheetId: SHEET, a1: 'C1' },
 						provenance: emptyProvenance()
 					}
 				},
@@ -193,8 +181,7 @@ describe('buildInspector · node mapping', () => {
 					node: {
 						id: 'n-seed',
 						kind: 'input',
-						cellRef: { sheetBlockId: SHEET, a1: 'C2' },
-						blockId: SHEET,
+						cellRef: { sheetId: SHEET, a1: 'C2' },
 						provenance: emptyProvenance()
 					}
 				},

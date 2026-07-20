@@ -58,8 +58,8 @@ describe('cell edits through the graph', () => {
 		expect(outcome.kind).toBe('applied');
 		const node = nodeForCell(session, A, 'A1');
 		expect(node?.kind).toBe('input');
-		expect(node?.cellRef).toEqual({ sheetBlockId: A, a1: 'A1' });
-		expect(node?.blockId).toBe(A);
+		expect(node?.cellRef).toEqual({ sheetId: A, a1: 'A1' });
+		expect(node?.blockId).toBeUndefined();
 		expect(display(session, A, 'A1')).toBe(12);
 	});
 
@@ -68,6 +68,21 @@ describe('cell edits through the graph', () => {
 		edit(session, A, 'A1', '=5 * 2');
 		expect(nodeForCell(session, A, 'A1')?.kind).toBe('computed');
 		expect(display(session, A, 'A1')).toBe(10);
+	});
+
+	it('stores authored quantities canonically and rejects unknown units without mutation', () => {
+		const session = newSession();
+		expect(edit(session, A, 'A1', '20 in')).toMatchObject({ kind: 'applied' });
+		expect(nodeForCell(session, A, 'A1')?.value).toMatchObject({
+			kind: 'quantity',
+			value: 0.508,
+			unit: { display: 'in' }
+		});
+		expect(display(session, A, 'A1')).toBe('20 in');
+		const before = session.doc.undoLog.length;
+		expect(edit(session, A, 'A2', '20 mystery')).toMatchObject({ kind: 'rejected' });
+		expect(nodeForCell(session, A, 'A2')).toBeUndefined();
+		expect(session.doc.undoLog).toHaveLength(before);
 	});
 
 	it('recomputes dependents when an input changes', () => {
@@ -358,7 +373,7 @@ describe('acceptance: no write path around applyMutation', () => {
 		expect(fresh.blocksOrder).toEqual(doc.blocksOrder);
 		// Binding indexes agree too: every cell node resolves identically.
 		for (const node of nodesForSheet(session, A).concat(nodesForSheet(session, B))) {
-			expect(fresh.resolveRef(node.cellRef as { sheetBlockId: string; a1: string })).toBe(
+			expect(fresh.resolveRef(node.cellRef as { sheetId: string; a1: string })).toBe(
 				node.id
 			);
 		}

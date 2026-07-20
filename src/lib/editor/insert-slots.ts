@@ -16,14 +16,14 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 
 /** Block types a slot can insert. */
-export type InsertableBlockType = 'text' | 'sheet' | 'image';
+export type InsertableBlockType = 'text' | 'image' | 'equation';
 
 export interface InsertSlotsOptions {
 	/** Insert a new block of `type` at top-level position `index`. */
 	insert: (type: InsertableBlockType, index: number) => void;
 }
 
-const SLOT_TYPES: InsertableBlockType[] = ['text', 'sheet', 'image'];
+const SLOT_TYPES: InsertableBlockType[] = ['text', 'image', 'equation'];
 
 /** Build one slot's DOM: hairline rule + the three insert buttons. */
 function slotWidget(

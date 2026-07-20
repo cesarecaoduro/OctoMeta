@@ -37,6 +37,32 @@ function valueOf(graph: ReturnType<typeof buildBeamFixture>['graph'], id: string
 }
 
 describe('serializeGraph → hydrateGraph round trip', () => {
+	it('preserves exact static and bound equation payloads', () => {
+		const graph = new DocumentGraph();
+		graph.insertBlock({
+			id: 'eq-static',
+			docId: 'doc',
+			type: 'equation',
+			position: 0,
+			equation: { mode: 'static', tex: String.raw`E = mc^2` }
+		});
+		graph.insertBlock({
+			id: 'eq-bound',
+			docId: 'doc',
+			type: 'equation',
+			position: 1,
+			equation: { mode: 'bound', nodeId: 'published-area', display: 'substituted' }
+		});
+		const payload = serializeGraph(graph);
+		const { graph: hydrated } = hydrateGraph(toRows(payload));
+		expect(hydrated.blocks.get('eq-static')?.equation).toEqual(
+			graph.blocks.get('eq-static')?.equation
+		);
+		expect(hydrated.blocks.get('eq-bound')?.equation).toEqual(
+			graph.blocks.get('eq-bound')?.equation
+		);
+	});
+
 	it.each(FIXTURE_BUILDERS.map((build) => [build().title, build] as const))(
 		'%s: reproduces every contentHash and value from inputs',
 		(_title, build) => {
@@ -148,26 +174,20 @@ describe('SHOWSTEPS cells rehydrate reproducibly (V1-5-4)', () => {
 	 * contentHash mismatch.
 	 */
 	function buildShowStepsDoc() {
-		const graph = new DocumentGraph();
+		const SHEET = 'blk-steps-sheet';
+		const graph = new DocumentGraph({
+			sheets: [{ id: SHEET, name: 'Calculation', position: 0 }]
+		});
 		const registry = createBuiltinRegistry();
 		const opts = { registry, evaluate: evaluateWithDerivations(graph) };
-		const SHEET = 'blk-steps-sheet';
 		const must = (r: { ok: boolean; error?: { message: string } }): void => {
 			if (!r.ok) throw new Error(`fixture mutation rejected: ${r.error?.message}`);
 		};
 		const ast = (src: string) => {
-			const parsed = parseFormula(src, { sheetBlockId: SHEET });
+			const parsed = parseFormula(src, { sheetId: SHEET });
 			if (!parsed.ok) throw new Error(parsed.message);
 			return parsed.ast;
 		};
-		must(
-			commit(
-				graph,
-				{ op: 'blockOp', action: 'add', blockId: SHEET, block: { docId: 'doc', type: 'sheet' } },
-				HUMAN,
-				opts
-			)
-		);
 		must(
 			commit(
 				graph,
@@ -176,8 +196,7 @@ describe('SHOWSTEPS cells rehydrate reproducibly (V1-5-4)', () => {
 					node: {
 						id: 'n-a1',
 						kind: 'input',
-						cellRef: { sheetBlockId: SHEET, a1: 'A1' },
-						blockId: SHEET,
+						cellRef: { sheetId: SHEET, a1: 'A1' },
 						provenance: emptyProvenance()
 					}
 				},
@@ -195,8 +214,7 @@ describe('SHOWSTEPS cells rehydrate reproducibly (V1-5-4)', () => {
 						id: 'n-b1',
 						kind: 'computed',
 						formula: ast('=A1 * 2 + 1'),
-						cellRef: { sheetBlockId: SHEET, a1: 'B1' },
-						blockId: SHEET,
+						cellRef: { sheetId: SHEET, a1: 'B1' },
 						provenance: emptyProvenance()
 					}
 				},
@@ -207,7 +225,7 @@ describe('SHOWSTEPS cells rehydrate reproducibly (V1-5-4)', () => {
 		must(
 			commit(
 				graph,
-				{ op: 'publishName', cellRef: { sheetBlockId: SHEET, a1: 'B1' }, name: 'beam.load' },
+				{ op: 'publishName', cellRef: { sheetId: SHEET, a1: 'B1' }, name: 'beam.load' },
 				HUMAN,
 				opts
 			)
@@ -221,8 +239,7 @@ describe('SHOWSTEPS cells rehydrate reproducibly (V1-5-4)', () => {
 						id: 'n-steps',
 						kind: 'computed',
 						formula: ast('=SHOWSTEPS(beam.load)'),
-						cellRef: { sheetBlockId: SHEET, a1: 'C1' },
-						blockId: SHEET,
+						cellRef: { sheetId: SHEET, a1: 'C1' },
 						provenance: emptyProvenance()
 					}
 				},

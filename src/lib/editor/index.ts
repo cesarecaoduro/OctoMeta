@@ -9,6 +9,7 @@ export * from './sync';
 export * from './chips';
 export * from './inspector';
 export * from './create-editor';
-export { enterGrid, isUndoRedoChord, type SheetHandle } from './sheet-node';
+export { EquationBlock, MAX_TEX_LENGTH } from './equation-node';
 export { matchChipQuery } from './chip-picker';
 export { type InsertableBlockType } from './insert-slots';
+export { BlockChrome, blockTypeLabel } from './block-chrome';

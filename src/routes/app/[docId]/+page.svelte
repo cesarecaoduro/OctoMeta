@@ -4,7 +4,8 @@
 	import { beforeNavigate } from '$app/navigation';
 	import {
 		createBuiltinRegistry,
-		printFormula,
+		parseParameterInput,
+		resolvePublishedTarget,
 		ulid,
 		type Actor,
 		type DocumentGraph,
@@ -15,30 +16,22 @@
 	import {
 		hydrateGraph,
 		createDocumentSaver,
-		createSheetSnapshotSaver,
 		usePersistence,
 		type DocumentId,
 		type DocumentSaver,
-		type SaveState,
-		type SheetSnapshotEntry
+		type SaveState
 	} from '$lib/persistence';
+	import { createDocEditor, type DocEditor, type InsertableBlockType } from '$lib/editor';
 	import {
-		createDocEditor,
-		type DocEditor,
-		type InsertableBlockType,
-		type SheetHandle
-	} from '$lib/editor';
-	import {
-		attachSheetAdapter,
 		createGraphSession,
 		formatCellDisplay,
 		nodeForCell,
-		seedSheetStore,
-		sheetStore,
 		type GraphSession,
-		type SheetAdapter
+		type WorkbookAdapter
 	} from '$lib/adapters/univer';
 	import Inspector from './Inspector.svelte';
+	import WorkbookDrawer from './WorkbookDrawer.svelte';
+	import ParametersRail from './ParametersRail.svelte';
 
 	// V1-5-1/V1-5-2 · /app/[docId] — the document canvas. Block structure lives
 	// in the graph: every add/move/remove/update is a `commit(blockOp …)`,
@@ -51,13 +44,24 @@
 	const docId = page.params.docId as DocumentId;
 	const HUMAN: Actor = { kind: 'human' };
 
-	let phase = $state<'loading' | 'ready' | 'missing' | 'failed'>('loading');
+	let phase = $state<
+		'loading' | 'ready' | 'missing' | 'trashed' | 'unauthorized' | 'integrity' | 'failed'
+	>('loading');
 	let title = $state('');
+	let titleEditing = $state(false);
+	let titleDraft = $state('');
+	let titleError = $state('');
 	let saveState = $state<SaveState>('idle');
+	let online = $state(true);
 	let editorEl: HTMLDivElement;
 	let imageInputEl: HTMLInputElement | undefined;
 	/** Insertion-slot position for the next picked image (null = after selection). */
 	let pendingImageAt: number | null = null;
+	let parametersOpen = $state(false);
+	let workbookOpen = $state(false);
+	let pendingWorkbookCell: { sheetId: string; a1: string } | null = null;
+	let parametersButton: HTMLButtonElement;
+	let blockAnnouncement = $state('');
 
 	// V1-5-5 · provenance inspector (read-only). Opens on chip Alt+click /
 	// Alt+Enter (focus moves to the panel) and on selecting a graph-bound
@@ -87,6 +91,34 @@
 		inspectorFocusTick = 0;
 	}
 
+	function startTitleEdit(): void {
+		titleDraft = title;
+		titleError = '';
+		titleEditing = true;
+	}
+
+	async function commitTitle(): Promise<void> {
+		if (!titleEditing) return;
+		const next = titleDraft.trim();
+		if (!next) {
+			titleError = 'Title is required.';
+			return;
+		}
+		if (next.length > 120) {
+			titleError = 'Title must be 120 characters or fewer.';
+			return;
+		}
+		titleEditing = false;
+		if (next === title) return;
+		try {
+			await persistence.renameDocument(docId, next);
+			title = next;
+		} catch (cause) {
+			titleError = cause instanceof Error ? cause.message : String(cause);
+			titleEditing = true;
+		}
+	}
+
 	/** Escape closes the panel — except inside a grid, where Escape leaves the
 	 * grid (the sheet NodeView stops propagation for that case anyway). */
 	function onWindowKeydown(e: KeyboardEvent): void {
@@ -97,14 +129,12 @@
 
 	let graph: DocumentGraph;
 	let registry: FunctionRegistry;
-	let session: GraphSession;
+	let session: GraphSession = $state()!;
 	let saver: DocumentSaver | null = null;
 	let docEditor: DocEditor | null = null;
 
-	/** Live sheet adapters by block id (one per mounted sheet NodeView). */
-	const sheets = new Map<string, SheetAdapter>();
-	/** Mount metrics (landmine 2): per-grid attach wall time, mount order. */
-	const mountMetrics: { blockId: string; ms: number }[] = [];
+	let workbookAdapter: WorkbookAdapter | null = $state(null);
+	let restoredWorkbookSnapshot: unknown = $state(null);
 
 	const SAVE_LABEL: Record<SaveState, string> = {
 		idle: 'saved',
@@ -149,61 +179,10 @@
 		saver?.scheduleSave();
 	}
 
-	/**
-	 * Mount a live grid for a sheet NodeView (V1-5-2, eager strategy — see
-	 * ARCHITECTURE.md mount measurements). Rehydrates from `sheetStore` (seeded
-	 * from `sheetSnapshots` on load, refreshed on every NodeView destroy).
-	 */
-	async function attachSheet(blockId: string, container: HTMLElement): Promise<SheetHandle> {
-		const t0 = performance.now();
-		const adapter = await attachSheetAdapter({ session, blockId, container, name: 'Sheet' });
-		mountMetrics.push({ blockId, ms: Math.round(performance.now() - t0) });
-		sheets.set(blockId, adapter);
-		// Any workbook model mutation (cell edit, column width…) dirties the doc;
-		// the debounced saver then flushes changed snapshots alongside the graph.
-		const offMutated = adapter.onMutated(() => saver?.scheduleSave());
-		// V1-5-5: selecting a graph-bound cell targets the inspector at its
-		// node. Unbound cells do nothing, and focus stays in the grid.
-		const offSelect = adapter.onSelect((a1) => {
-			const node = nodeForCell(session, blockId, a1);
-			if (node) openInspector(node.id, { focus: false });
-		});
-		return {
-			dispose: () => {
-				offMutated();
-				offSelect();
-				sheets.delete(blockId);
-				adapter.dispose(); // flushes the latest snapshot into sheetStore
-			}
-		};
-	}
-
-	/** Current snapshots of every sheet block, for the saver's snapshot flush. */
-	function collectSheetSnapshots(): SheetSnapshotEntry[] {
-		for (const adapter of sheets.values()) adapter.saveSnapshot();
-		const entries: SheetSnapshotEntry[] = [];
-		for (const [id, block] of graph.blocks) {
-			if (block.type !== 'sheet') continue;
-			const snapshot = sheetStore.get(id);
-			if (snapshot) entries.push({ blockId: id, snapshot });
-		}
-		return entries;
-	}
-
-	/** Toolbar: add a sheet block after the current one (blockOp add → commit). */
+	/** Add a workbook tab; workbook tabs are not report blocks. */
 	function insertSheet(): void {
-		if (!docEditor) return;
-		docEditor.flushProse();
-		const selected = docEditor.selectedBlockId();
-		const at = selected ? graph.blocksOrder.indexOf(selected) + 1 : graph.blocksOrder.length;
-		const ok = commitMutation({
-			op: 'blockOp',
-			action: 'add',
-			blockId: ulid(),
-			block: { docId, type: 'sheet' },
-			position: at
-		});
-		if (ok) docEditor.renderFromGraph();
+		const result = workbookAdapter?.addSheet();
+		if (result?.ok) saver?.scheduleSave();
 	}
 
 	/** Upload the picked file, then add an image block — at the pending slot
@@ -214,7 +193,7 @@
 		const slotAt = pendingImageAt;
 		pendingImageAt = null;
 		if (!file || !docEditor) return;
-		const storageId = await persistence.uploadFile(file);
+		const storageId = await persistence.uploadFile(docId, file);
 		docEditor.flushProse();
 		const selected = docEditor.selectedBlockId();
 		const at =
@@ -249,12 +228,16 @@
 			op: 'blockOp',
 			action: 'add',
 			blockId,
-			block: { docId, type: type === 'sheet' ? 'sheet' : 'text' },
+			block:
+				type === 'equation'
+					? { docId, type: 'equation', equation: { mode: 'static', tex: '' } }
+					: { docId, type: 'text' },
 			position: at
 		});
 		if (!ok) return;
 		docEditor.renderFromGraph();
-		if (type === 'text') docEditor.focusBlock(blockId);
+		if (type === 'equation') docEditor.focusEquationEditor(blockId);
+		else docEditor.focusBlock(blockId);
 	}
 
 	function flushAll(): void {
@@ -269,38 +252,45 @@
 	 * `sheetIds()` lists them in canonical blocksOrder.
 	 */
 	function exposeCanvasHooks(): void {
-		const sheetIds = (): string[] =>
-			graph.blocksOrder.filter((id) => graph.blocks.get(id)?.type === 'sheet');
+		const sheetIds = (): string[] => graph.workbook.sheets.map((sheet) => sheet.id);
 		Object.assign(window as object, {
 			__canvas: {
 				sheetIds,
-				sheetsMounted: () => sheetIds().every((id) => sheets.has(id)),
+				sheets: () => graph.workbook.sheets.map((sheet) => ({ ...sheet })),
+				sheetsMounted: () => workbookAdapter !== null,
 				blocksOrder: () => [...graph.blocksOrder],
-				getCell: (blockId: string, a1: string) => sheets.get(blockId)?.getCell(a1) ?? null,
-				getRawCell: (blockId: string, a1: string) => sheets.get(blockId)?.getRawCell(a1) ?? null,
-				setCell: (blockId: string, a1: string, input: number | string | boolean) =>
-					sheets.get(blockId)?.setCellText(a1, input),
-				publish: (blockId: string, a1: string, name: string) =>
-					sheets.get(blockId)?.publishName(a1, name),
-				deleteName: (blockId: string, name: string) =>
-					sheets.get(blockId)?.deleteName(name) ?? false,
+				getCell: (sheetId: string, a1: string) =>
+					workbookAdapter?.getCell(sheetId, a1) ?? null,
+				getRawCell: (sheetId: string, a1: string) =>
+					workbookAdapter?.getRawCell(sheetId, a1) ?? null,
+				setCell: (sheetId: string, a1: string, input: number | string | boolean) =>
+					workbookAdapter?.setCellText(sheetId, a1, input),
+				publish: (sheetId: string, a1: string, name: string) =>
+					workbookAdapter?.publishName(sheetId, a1, name),
+				deleteName: (_sheetId: string, name: string) =>
+					workbookAdapter?.deleteName(name) ?? false,
+				renameName: (oldName: string, newName: string) =>
+					workbookAdapter?.renameName(oldName, newName) ?? false,
+				selection: () => workbookAdapter?.selection() ?? null,
 				chipIds: () => [...graph.chips.keys()],
 				chipBinding: (chipId: string) => graph.chips.get(chipId) ?? null,
-				graphDisplay: (blockId: string, a1: string) => {
-					const node = nodeForCell(session, blockId, a1);
+				graphDisplay: (sheetId: string, a1: string) => {
+					const node = nodeForCell(session, sheetId, a1);
 					return node ? formatCellDisplay(node.value) : null;
 				},
-				formulaOf: (blockId: string, a1: string) => {
-					const node = nodeForCell(session, blockId, a1);
-					return node?.formula ? printFormula(node.formula) : null;
+				formulaOf: (sheetId: string, a1: string) => {
+					const node = nodeForCell(session, sheetId, a1);
+					return node?.formula ?? null;
 				},
 				insertSheet: () => insertSheet(),
+				renameSheet: (sheetId: string, name: string) =>
+					workbookAdapter?.renameSheet(sheetId, name) ?? { ok: false, message: 'not ready' },
 				moveBlock: (blockId: string, position: number) => {
 					const ok = commitMutation({ op: 'blockOp', action: 'move', blockId, position });
 					if (ok) docEditor?.renderFromGraph();
 					return ok;
 				},
-				mountMetrics: () => [...mountMetrics],
+				mountMetrics: () => [],
 				heapBytes: () =>
 					(performance as unknown as { memory?: { usedJSHeapSize: number } }).memory
 						?.usedJSHeapSize ?? null
@@ -310,12 +300,21 @@
 
 	onMount(() => {
 		let cancelled = false;
+		online = navigator.onLine;
+		const setOnline = (): void => {
+			online = navigator.onLine;
+		};
+		window.addEventListener('online', setOnline);
+		window.addEventListener('offline', setOnline);
 		void (async () => {
 			try {
 				const loaded = await persistence.loadDocument(docId);
 				if (cancelled) return;
-				if (!loaded) {
-					phase = 'missing';
+				if (loaded.state !== 'live') {
+					phase =
+						loaded.state === 'integrity-error'
+							? 'integrity'
+							: loaded.state;
 					return;
 				}
 				title = loaded.document.title;
@@ -326,47 +325,57 @@
 				}
 				graph = hydrated;
 				session = createGraphSession({ doc: graph, registry, docId, actor: HUMAN });
-				// Snapshots restore BEFORE the editor mounts its sheet NodeViews:
-				// each grid rehydrates from the store, the graph repaints its cells.
-				seedSheetStore(
-					loaded.sheetSnapshots.map((row) => ({
-						blockId: row.blockId,
-						snapshot: row.univerSnapshot
-					}))
-				);
-				// Snapshot writes ride the document saver's debounce/flush cadence.
-				const snapshotSaver = createSheetSnapshotSaver((blockId, snapshot) =>
-					persistence.upsertSheetSnapshot(docId, blockId, snapshot)
-				);
-				saver = createDocumentSaver(
-					{
-						saveDocument: async (id, g) => {
-							const entries = collectSheetSnapshots();
-							await Promise.all([
-								persistence.saveDocument(id, g),
-								snapshotSaver.flushChanged(entries)
-							]);
-						}
-					},
-					docId,
-					graph,
-					{ onState: (s) => (saveState = s) }
-				);
+				restoredWorkbookSnapshot = loaded.workbookSnapshot.snapshot;
+				saver = createDocumentSaver(persistence, docId, graph, {
+					onState: (s) => (saveState = s),
+					workbookSnapshot: () =>
+						workbookAdapter?.saveSnapshot() ?? restoredWorkbookSnapshot
+				});
 				docEditor = createDocEditor({
 					element: editorEl,
 					graph,
 					docId,
 					registry,
 					resolveImageUrl: (storageId) => persistence.fileUrl(storageId),
-					attachSheet,
 					commitMutation,
 					onChanged: () => saver?.scheduleSave(),
 					onUndo: handleUndo,
 					onRedo: handleRedo,
+					onAnnounce: (message) => {
+						blockAnnouncement = '';
+						queueMicrotask(() => (blockAnnouncement = message));
+					},
 					// Chips re-render + flash on every settle (commit/undo/redo).
 					onSettle: (cb) => session.onSettle(() => cb()),
 					// Alt+click / Alt+Enter on a chip opens the inspector (V1-5-5).
 					onInspect: (nodeId) => openInspector(nodeId, { focus: true }),
+					onNavigateCell: (cellRef) => {
+						if (!graph.sheet(cellRef.sheetId)) return false;
+						workbookOpen = true;
+						pendingWorkbookCell = cellRef;
+						queueMicrotask(() => {
+							if (workbookAdapter?.activateCell(cellRef.sheetId, cellRef.a1)) {
+								pendingWorkbookCell = null;
+							}
+						});
+						return true;
+					},
+					editParameter: (publishedNodeId, text) => {
+						const resolved = resolvePublishedTarget(graph, publishedNodeId);
+						if (!resolved || resolved.targetNode.kind !== 'input') {
+							return { ok: false, message: 'This parameter is read-only.' };
+						}
+						const parsed = parseParameterInput(text, resolved.targetNode.value);
+						if (!parsed.ok) return parsed;
+						const result = session.commit({
+							op: 'setInput',
+							id: resolved.targetNode.id,
+							value: parsed.value
+						});
+						if (!result.ok) return { ok: false, message: result.error.message };
+						saver?.scheduleSave();
+						return { ok: true };
+					},
 					// Notebook-style insertion slots between blocks and at the end.
 					onInsertBlockAt: insertBlockAt
 				});
@@ -387,12 +396,23 @@
 		window.addEventListener('pagehide', flushAll);
 		return () => {
 			cancelled = true;
+			window.removeEventListener('online', setOnline);
+			window.removeEventListener('offline', setOnline);
 			document.removeEventListener('visibilitychange', onHide);
 			window.removeEventListener('pagehide', flushAll);
 		};
 	});
 
-	beforeNavigate(() => flushAll());
+	beforeNavigate((navigation) => {
+		flushAll();
+		if (
+			!navigator.onLine &&
+			saveState !== 'idle' &&
+			!window.confirm('This document has unsaved offline changes. Leave anyway?')
+		) {
+			navigation.cancel();
+		}
+	});
 
 	onDestroy(() => {
 		flushAll();
@@ -411,9 +431,31 @@
 </svelte:head>
 
 <main class="wrap">
+	<p class="visually-hidden" role="status" aria-live="polite">{blockAnnouncement}</p>
 	<div class="toolbar">
 		<a class="back mono" href="/app" data-testid="back">← documents</a>
-		<span class="title" data-testid="doc-title">{title}</span>
+		{#if titleEditing}
+			<div class="title-edit">
+				<input
+					bind:value={titleDraft}
+					maxlength="120"
+					aria-label="Document title"
+					aria-invalid={titleError ? 'true' : undefined}
+					aria-describedby={titleError ? 'document-title-error' : undefined}
+					onkeydown={(event) => {
+						if (event.key === 'Enter') void commitTitle();
+						if (event.key === 'Escape') {
+							titleEditing = false;
+							titleError = '';
+						}
+					}}
+					onblur={() => void commitTitle()}
+				/>
+				{#if titleError}<span id="document-title-error" role="alert">{titleError}</span>{/if}
+			</div>
+		{:else}
+			<button class="title" data-testid="doc-title" type="button" onclick={startTitleEdit}>{title}</button>
+		{/if}
 		<span class="grow"></span>
 		<button
 			class="tool"
@@ -460,6 +502,13 @@
 			onclick={insertSheet}
 			title="Insert a calculation sheet">Sheet</button
 		>
+		<button
+			class="tool"
+			type="button"
+			bind:this={parametersButton}
+			aria-expanded={parametersOpen}
+			onclick={() => (parametersOpen = !parametersOpen)}>Parameters</button
+		>
 		<span
 			class="save mono"
 			data-testid="save-state"
@@ -467,9 +516,32 @@
 			class:error={saveState === 'error'}>{SAVE_LABEL[saveState]}</span
 		>
 	</div>
+	{#if !online}
+		<p class="offline" role="status">
+			Offline. {saveState === 'idle' ? 'Changes will save after reconnecting.' : 'Unsaved changes are waiting to sync.'}
+		</p>
+	{/if}
 
 	{#if phase === 'missing'}
 		<p class="notice">This document does not exist. <a href="/app">Back to documents.</a></p>
+	{:else if phase === 'trashed'}
+		<section class="notice" aria-labelledby="trashed-title">
+			<h1 id="trashed-title">This document is in trash.</h1>
+			<button
+				class="tool"
+				type="button"
+				onclick={() =>
+					void persistence.restoreDocument(docId).then(() => location.reload())}
+				>Restore</button
+			>
+			<a href="/app">Back to documents</a>
+		</section>
+	{:else if phase === 'unauthorized'}
+		<p class="notice err" role="alert">You do not have access to this document.</p>
+	{:else if phase === 'integrity'}
+		<p class="notice err" role="alert">
+			This document failed its integrity check and has been opened read-only. No writes were sent.
+		</p>
 	{:else if phase === 'failed'}
 		<p class="notice err" role="alert">Could not load the document.</p>
 	{/if}
@@ -480,6 +552,37 @@
 		data-ready={phase === 'ready' ? 'true' : 'false'}
 		bind:this={editorEl}
 	></div>
+
+	{#if phase === 'ready'}
+		<ParametersRail
+			{session}
+			open={parametersOpen}
+			onclose={() => {
+				parametersOpen = false;
+				queueMicrotask(() => parametersButton?.focus());
+			}}
+			onchanged={() => saver?.scheduleSave()}
+			oninsert={(nodeId) => docEditor?.insertChip(nodeId) ?? false}
+		/>
+		<WorkbookDrawer
+			{session}
+			snapshot={restoredWorkbookSnapshot}
+			bind:expanded={workbookOpen}
+			ondirty={() => saver?.scheduleSave()}
+			onready={(adapter) => {
+				workbookAdapter = adapter;
+				if (adapter) {
+					exposeCanvasHooks();
+					if (
+						pendingWorkbookCell &&
+						adapter.activateCell(pendingWorkbookCell.sheetId, pendingWorkbookCell.a1)
+					) {
+						pendingWorkbookCell = null;
+					}
+				}
+			}}
+		/>
+	{/if}
 
 	{#if inspectorTarget !== null && phase === 'ready'}
 		<Inspector
@@ -522,7 +625,16 @@
 		font-weight: 600;
 		letter-spacing: -0.02em;
 		margin-left: var(--s1);
+		min-height: 32px;
+		border: 1px solid transparent;
+		background: transparent;
+		color: var(--ink);
+		cursor: text;
 	}
+	.title:focus-visible, .title-edit input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+	.title-edit { position: relative; min-width: min(34vw, 360px); }
+	.title-edit input { width: 100%; min-height: 32px; box-sizing: border-box; border: 1px solid var(--grey-3); border-radius: var(--radius-chip); background: var(--surface); color: var(--ink); font: 600 1rem var(--font-display); padding: 0 8px; }
+	.title-edit span { position: absolute; top: 100%; left: 0; z-index: 5; color: var(--error); font-size: .72rem; white-space: nowrap; }
 	.grow {
 		flex: 1;
 	}
@@ -551,7 +663,7 @@
 	}
 	.save {
 		font-size: var(--fs-caption);
-		color: var(--grey-2);
+		color: var(--grey-1);
 		min-width: 72px;
 		text-align: right;
 	}
@@ -562,6 +674,7 @@
 		color: var(--grey-1);
 		margin-bottom: var(--s3);
 	}
+	.offline { margin: calc(-1 * var(--s2)) 0 var(--s2); padding: 7px 10px; border: 1px solid var(--warning, #9a6b00); border-radius: var(--radius-chip); color: var(--grey-1); font-size: .82rem; }
 
 	/* The document itself — DESIGN.md: paper, hairlines, no shadows. */
 	.editor :global(.tiptap) {
@@ -622,9 +735,122 @@
 		padding: var(--s1) var(--s2);
 		border-top: 1px solid var(--grey-3);
 	}
+	.editor :global(.tiptap figure[data-equation-block]) {
+		margin: var(--s3) 0;
+		padding: var(--s2);
+		border: 1px solid var(--grey-3);
+		border-radius: var(--radius-card);
+		background: var(--surface);
+		overflow: hidden;
+	}
+	@media (max-width: 800px) {
+		main { padding-inline: var(--s2); }
+		.toolbar { flex-wrap: wrap; gap: 6px; }
+		.toolbar .title {
+			max-width: 145px;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+		.toolbar .grow { min-width: 12px; }
+		.toolbar .tool { min-height: 44px; }
+		.editor { min-width: 0; overflow-wrap: anywhere; }
+		.editor :global(.equation-controls) { flex-wrap: wrap; }
+		.editor :global(.equation-controls select) { max-width: 100%; }
+	}
+	.editor :global(.equation-controls) {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--s1);
+		margin-bottom: var(--s2);
+	}
+	.editor :global(.equation-controls select),
+	.editor :global(.equation-source) {
+		min-height: 36px;
+		border: 1px solid var(--grey-3);
+		border-radius: var(--radius-chip);
+		background: var(--paper);
+		color: var(--ink);
+		font: 0.78rem var(--font-mono);
+	}
+	.editor :global(.equation-controls select) {
+		padding: 0 var(--s1);
+	}
+	.editor :global(.equation-source) {
+		display: block;
+		width: 100%;
+		resize: vertical;
+		padding: var(--s1);
+		box-sizing: border-box;
+	}
+	.editor :global(.equation-source:focus),
+	.editor :global(.equation-controls select:focus-visible) {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
+	.editor :global(.equation-preview) {
+		min-height: 72px;
+		display: grid;
+		align-items: center;
+		overflow-x: auto;
+		padding: var(--s2);
+	}
+	.editor :global(.equation-help),
+	.editor :global(.equation-error) {
+		margin: 5px 0 0;
+		font: var(--fs-caption) var(--font-mono);
+		color: var(--grey-2);
+	}
+	.editor :global(.equation-error) {
+		color: var(--error);
+		overflow-wrap: anywhere;
+	}
 	.editor :global(.tiptap .ProseMirror-selectednode) {
 		outline: 2px solid var(--accent);
 		outline-offset: 2px;
+	}
+	.editor :global(.octo-report-block) {
+		border-radius: var(--radius-chip);
+		transition: box-shadow var(--t-fast) var(--ease);
+	}
+	.editor :global(.octo-report-block:hover),
+	.editor :global(.octo-report-block:focus-within),
+	.editor :global(.octo-report-block.ProseMirror-selectednode) {
+		box-shadow: 0 0 0 1px var(--grey-3);
+	}
+	.editor :global(.octo-block-chrome) {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 4px;
+		min-height: 28px;
+		margin: 2px 0 -4px;
+		opacity: 1;
+	}
+	.editor :global(.octo-block-type) {
+		margin-right: auto;
+		color: var(--grey-1);
+		font: 500 var(--fs-caption) var(--font-mono);
+		letter-spacing: .08em;
+		text-transform: uppercase;
+	}
+	.editor :global(.octo-block-control) {
+		min-height: 28px;
+		padding: 2px 8px;
+		border: 1px solid var(--grey-3);
+		border-radius: var(--radius-chip);
+		background: var(--surface);
+		color: var(--grey-1);
+		font: var(--fs-caption) var(--font-mono);
+		cursor: pointer;
+	}
+	.editor :global(.octo-block-control:disabled) {
+		opacity: .35;
+		cursor: default;
+	}
+	.editor :global(.octo-block-control:focus-visible) {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
 	}
 	.editor :global(.tiptap div[data-sheet-block]) {
 		margin: var(--s3) 0;
@@ -769,5 +995,15 @@
 		font-size: 0.78rem;
 		color: var(--grey-2);
 		padding: 5px 8px;
+	}
+	@media (max-width: 800px) {
+		.editor :global(.octo-block-chrome) {
+			min-height: 44px;
+			opacity: 1;
+		}
+		.editor :global(.octo-block-control) {
+			min-width: 44px;
+			min-height: 44px;
+		}
 	}
 </style>

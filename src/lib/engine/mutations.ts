@@ -12,7 +12,16 @@
  * `UNDO_CAP`, pruned oldest-first.
  */
 
-import type { BlockId, CellRef, ErrorValue, NodeId, TypedValue } from './types';
+import type {
+	BlockId,
+	CellRef,
+	ErrorValue,
+	NodeId,
+	SheetId,
+	SheetMeta,
+	SheetProjection,
+	TypedValue
+} from './types';
 import { ERR_CODES, errorValue, ulid } from './types';
 import type { GraphNode, Provenance } from './node';
 import type { Block, ChipBinding } from './block';
@@ -21,7 +30,7 @@ import type { FormulaAST } from './formula';
 import { isNameRef } from './formula';
 import { wouldCycle } from './topo';
 import type { DocumentGraph } from './graph';
-import { collectRefs, refKey } from './graph';
+import { collectRefs, refKey, stableStringify } from './graph';
 
 // ---------------------------------------------------------------------------
 // Types (SCHEMA.md §9)
@@ -41,6 +50,28 @@ export type AffectedSet = NodeId[];
 
 /** Who is mutating. Humans, templates, and (later) agents are all just actors. */
 export type Actor = { kind: 'human' | 'template' | 'agent'; id?: string };
+
+/** Undoable document-workbook operations. Univer mirrors these after commit. */
+export type WorkbookMutation =
+	| {
+			op: 'workbookOp';
+			action: 'add';
+			sheet: SheetMeta;
+			activate: boolean;
+			projection?: SheetProjection;
+	  }
+	| {
+			op: 'workbookOp';
+			action: 'rename';
+			sheetId: SheetId;
+			name: string;
+	  }
+	| {
+			op: 'workbookOp';
+			action: 'remove';
+			sheetId: SheetId;
+			projection: SheetProjection;
+	  };
 
 /**
  * The mutation vocabulary (SCHEMA.md §9), plus two undo-internal ops:
@@ -71,7 +102,9 @@ export type GraphMutation =
 	| { op: 'addNode'; node: Omit<GraphNode, 'value' | 'contentHash' | 'inputs'> }
 	| { op: 'removeNode'; id: NodeId }
 	| { op: 'publishName'; cellRef: CellRef; name: string; nodeId?: NodeId }
+	| { op: 'renameName'; nodeId: NodeId; name: string }
 	| { op: 'rebindChip'; chipId: string; nodeId: NodeId }
+	| WorkbookMutation
 	| {
 			op: 'chipOp';
 			action: 'create' | 'remove';
@@ -111,9 +144,11 @@ const PUBLIC_OPS: ReadonlySet<string> = new Set([
 	'addNode',
 	'removeNode',
 	'publishName',
+	'renameName',
 	'rebindChip',
 	'chipOp',
-	'blockOp'
+	'blockOp',
+	'workbookOp'
 ]);
 
 /**
@@ -213,12 +248,16 @@ function applyInternal(
 			return applyRemoveNode(doc, m);
 		case 'publishName':
 			return applyPublishName(doc, m, actor, at);
+		case 'renameName':
+			return applyRenameName(doc, m, actor, at);
 		case 'rebindChip':
 			return applyRebindChip(doc, m);
 		case 'chipOp':
 			return applyChipOp(doc, m);
 		case 'blockOp':
 			return applyBlockOp(doc, m, actor, at);
+		case 'workbookOp':
+			return applyWorkbookOp(doc, m, actor, at);
 		case 'restoreNode': {
 			// Verbatim restore; re-creates the node when absent. Only reachable
 			// from undo/redo, whose callers discard inverses — so none returned.
@@ -249,6 +288,8 @@ const NODE_KINDS: readonly GraphNode['kind'][] = [
 ];
 /** Valid published names: dotted identifier path, e.g. "beam.span". */
 const DOTTED_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$/;
+const MAX_SHEETS = 32;
+const MAX_TAB_PROJECTION_BYTES = 700 * 1024;
 
 function applySetInput(
 	doc: DocumentGraph,
@@ -417,7 +458,6 @@ function applyPublishName(
 		value: structuredClone(cellNode.value),
 		inputs: [cellId],
 		contentHash: '',
-		blockId: m.cellRef.sheetBlockId,
 		provenance: { authoredBy: null }
 	};
 	stamp(node, actor, at);
@@ -427,6 +467,143 @@ function applyPublishName(
 	const affected: AffectedSet = [id];
 	healWaiters(doc, node, inverse, affected);
 	return ok({ affected, inverse, recorded: { ...m, nodeId: id } });
+}
+
+function applyRenameName(
+	doc: DocumentGraph,
+	m: Extract<GraphMutation, { op: 'renameName' }>,
+	actor: Actor,
+	at: number
+): ApplyResult {
+	const named = doc.nodes.get(m.nodeId);
+	if (!named) return fail(`renameName: unknown node "${m.nodeId}"`);
+	if (named.kind !== 'namedOutput' || named.name === undefined) {
+		return fail(`renameName: node "${m.nodeId}" is not a published name`);
+	}
+	if (!DOTTED_NAME_RE.test(m.name)) {
+		return fail(`renameName: invalid name "${String(m.name)}"`);
+	}
+	if (m.name === named.name) return fail(`renameName: name is already "${m.name}"`);
+	const owner = doc.resolveRef({ name: m.name });
+	if (owner !== undefined && owner !== named.id) {
+		return fail(`renameName: name "${m.name}" is already published`);
+	}
+
+	const oldName = named.name;
+	const inverse: GraphMutation[] = [{ op: 'restoreNode', node: structuredClone(named) }];
+	const affected: AffectedSet = [named.id];
+	const renamed = structuredClone(named);
+	renamed.name = m.name;
+	stamp(renamed, actor, at);
+	doc.replaceNode(renamed);
+	doc.refreshHash(renamed.id);
+
+	for (const node of [...doc.nodes.values()]) {
+		if (!node.formula || node.id === renamed.id) continue;
+		const rewritten = rewritePublishedName(node.formula, oldName, m.name);
+		if (!rewritten.changed) continue;
+		inverse.push({ op: 'restoreNode', node: structuredClone(node) });
+		const updated = structuredClone(node);
+		updated.formula = rewritten.formula;
+		doc.replaceNode(updated);
+		doc.refreshHash(updated.id);
+		affected.push(updated.id);
+	}
+
+	healWaiters(doc, renamed, inverse, affected);
+	return ok({ affected: [...new Set(affected)], inverse });
+}
+
+function applyWorkbookOp(
+	doc: DocumentGraph,
+	m: WorkbookMutation,
+	actor: Actor,
+	at: number
+): ApplyResult {
+	switch (m.action) {
+		case 'add': {
+			const problem = sheetProblem(doc, m.sheet);
+			if (problem) return fail(`workbookOp add: ${problem}`);
+			if (doc.workbook.sheets.length >= MAX_SHEETS) {
+				return fail(`workbookOp add: workbook cannot exceed ${MAX_SHEETS} tabs`);
+			}
+			if (m.projection) {
+				const projectionProblem = sheetProjectionProblem(m.projection, m.sheet.id);
+				if (projectionProblem) return fail(`workbookOp add: ${projectionProblem}`);
+			}
+			doc.insertSheet(m.sheet);
+			return ok({
+				affected: [],
+				inverse: [
+					{
+						op: 'workbookOp',
+						action: 'remove',
+						sheetId: m.sheet.id,
+						projection:
+							m.projection ??
+							({
+								version: 1,
+								sheetId: m.sheet.id,
+								wasActive: m.activate,
+								snapshot: null
+							} satisfies SheetProjection)
+					}
+				]
+			});
+		}
+		case 'rename': {
+			const sheet = doc.sheet(m.sheetId);
+			if (!sheet) return fail(`workbookOp rename: unknown tab "${m.sheetId}"`);
+			const nameProblem = sheetNameProblem(doc, m.name, m.sheetId);
+			if (nameProblem) return fail(`workbookOp rename: ${nameProblem}`);
+			const priorName = sheet.name;
+			doc.renameSheet(m.sheetId, m.name);
+			return ok({
+				affected: [],
+				inverse: [
+					{ op: 'workbookOp', action: 'rename', sheetId: m.sheetId, name: priorName }
+				]
+			});
+		}
+		case 'remove': {
+			const sheet = doc.sheet(m.sheetId);
+			if (!sheet) return fail(`workbookOp remove: unknown tab "${m.sheetId}"`);
+			if (doc.workbook.sheets.length === 1) {
+				return fail('workbookOp remove: the last tab cannot be deleted');
+			}
+			const projectionProblem = sheetProjectionProblem(m.projection, m.sheetId);
+			if (projectionProblem) return fail(`workbookOp remove: ${projectionProblem}`);
+
+			const hostedIds = [...doc.nodes.values()]
+				.filter((node) => isHostedBySheet(node, m.sheetId))
+				.map((node) => node.id);
+			let nodeInverses: GraphMutation[] = [];
+			const affected: AffectedSet = [];
+			for (const id of hostedIds) {
+				if (!doc.nodes.has(id)) continue;
+				const result = applyInternal(doc, { op: 'removeNode', id }, actor, at);
+				if (!result.ok) return result;
+				nodeInverses = [...result.value.inverse, ...nodeInverses];
+				for (const nodeId of result.value.affected) {
+					if (!affected.includes(nodeId)) affected.push(nodeId);
+				}
+			}
+			doc.deleteSheet(m.sheetId);
+			return ok({
+				affected: affected.filter((id) => doc.nodes.has(id)),
+				inverse: [
+					{
+						op: 'workbookOp',
+						action: 'add',
+						sheet: structuredClone(sheet),
+						activate: m.projection.wasActive,
+						projection: structuredClone(m.projection)
+					},
+					...nodeInverses
+				]
+			});
+		}
+	}
 }
 
 function applyRebindChip(
@@ -493,6 +670,27 @@ function applyChipOp(doc: DocumentGraph, m: Extract<GraphMutation, { op: 'chipOp
 
 /** Block fields `blockOp update` may never touch (order is owned by add/move/remove). */
 const PROTECTED_BLOCK_KEYS: readonly string[] = ['docId', 'type', 'position'];
+const MAX_TEX_LENGTH = 10_000;
+
+/** Validate the exact equation payload accepted by the R1 engine contract. */
+function validEquationPayload(value: unknown): boolean {
+	if (!value || typeof value !== 'object') return false;
+	const payload = value as Record<string, unknown>;
+	if (payload.mode === 'static') {
+		return (
+			Object.keys(payload).length === 2 &&
+			typeof payload.tex === 'string' &&
+			payload.tex.length <= MAX_TEX_LENGTH
+		);
+	}
+	return (
+		payload.mode === 'bound' &&
+		Object.keys(payload).length === 3 &&
+		typeof payload.nodeId === 'string' &&
+		payload.nodeId.length > 0 &&
+		['symbolic', 'substituted', 'result', 'steps'].includes(String(payload.display))
+	);
+}
 
 function applyBlockOp(
 	doc: DocumentGraph,
@@ -513,6 +711,12 @@ function applyBlockOp(
 			}
 			if (b.id !== undefined && b.id !== m.blockId) {
 				return fail(`blockOp add: block.id "${b.id}" does not match blockId "${m.blockId}"`);
+			}
+			if (b.type === 'equation' && !validEquationPayload(b.equation)) {
+				return fail('blockOp add: equation payload is required and must be valid');
+			}
+			if (b.type !== 'equation' && b.equation !== undefined) {
+				return fail('blockOp add: equation payload is only valid on equation blocks');
 			}
 			const block = { ...structuredClone(b), id: m.blockId, position: 0 } as Block;
 			doc.insertBlock(block, m.position);
@@ -597,6 +801,15 @@ function applyBlockOp(
 					return fail(`blockOp update: cannot change "${key}"`);
 				}
 			}
+			const equationUpdate = entries.find(([key]) => key === 'equation');
+			if (equationUpdate) {
+				if (block.type !== 'equation') {
+					return fail('blockOp update: equation payload is only valid on equation blocks');
+				}
+				if (!validEquationPayload(equationUpdate[1])) {
+					return fail('blockOp update: equation payload must be valid');
+				}
+			}
 			const target = block as unknown as Record<string, unknown>;
 			const priorPartial: Record<string, unknown> = {};
 			for (const [key, value] of entries) {
@@ -622,6 +835,91 @@ function applyBlockOp(
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
+
+function sheetProblem(doc: DocumentGraph, sheet: SheetMeta): string | null {
+	if (typeof sheet.id !== 'string' || sheet.id === '') return 'tab id is required';
+	if (doc.sheet(sheet.id)) return `tab id "${sheet.id}" already exists`;
+	if (!Number.isInteger(sheet.position) || sheet.position < 0) {
+		return 'tab position must be a non-negative integer';
+	}
+	return sheetNameProblem(doc, sheet.name);
+}
+
+function sheetNameProblem(doc: DocumentGraph, name: string, exceptId?: SheetId): string | null {
+	if (typeof name !== 'string') return 'tab name must be a string';
+	if (name !== name.trim()) return 'tab name must not have surrounding whitespace';
+	if (name.length < 1 || name.length > 64) return 'tab name must contain 1–64 characters';
+	const duplicate = doc.workbook.sheets.find(
+		(sheet) => sheet.id !== exceptId && sheet.name.toLowerCase() === name.toLowerCase()
+	);
+	return duplicate ? `tab name "${name}" already exists` : null;
+}
+
+function sheetProjectionProblem(projection: SheetProjection, sheetId: SheetId): string | null {
+	if (projection.version !== 1) return 'unsupported tab projection version';
+	if (projection.sheetId !== sheetId) return 'tab projection id does not match the mutation';
+	try {
+		const bytes = new TextEncoder().encode(stableStringify(projection.snapshot)).byteLength;
+		return bytes <= MAX_TAB_PROJECTION_BYTES
+			? null
+			: `tab projection exceeds ${MAX_TAB_PROJECTION_BYTES} bytes`;
+	} catch {
+		return 'tab projection must be serializable';
+	}
+}
+
+function isHostedBySheet(node: GraphNode, sheetId: SheetId): boolean {
+	if (node.cellRef?.sheetId === sheetId) return true;
+	return (
+		node.kind === 'namedOutput' &&
+		node.formula !== undefined &&
+		collectRefs(node.formula).some((ref) => !isNameRef(ref) && ref.sheetId === sheetId)
+	);
+}
+
+function rewritePublishedName(
+	formula: FormulaAST,
+	from: string,
+	to: string
+): { formula: FormulaAST; changed: boolean } {
+	switch (formula.t) {
+		case 'lit':
+			return { formula: structuredClone(formula), changed: false };
+		case 'ref':
+			if (isNameRef(formula.ref) && formula.ref.name === from) {
+				return { formula: { t: 'ref', ref: { name: to } }, changed: true };
+			}
+			return { formula: structuredClone(formula), changed: false };
+		case 'un': {
+			const arg = rewritePublishedName(formula.arg, from, to);
+			return {
+				formula: arg.changed ? { ...structuredClone(formula), arg: arg.formula } : structuredClone(formula),
+				changed: arg.changed
+			};
+		}
+		case 'bin': {
+			const left = rewritePublishedName(formula.left, from, to);
+			const right = rewritePublishedName(formula.right, from, to);
+			const changed = left.changed || right.changed;
+			return {
+				formula: changed
+					? { ...structuredClone(formula), left: left.formula, right: right.formula }
+					: structuredClone(formula),
+				changed
+			};
+		}
+		case 'call': {
+			const rewritten = formula.args.map((arg) => rewritePublishedName(arg, from, to));
+			const changed = rewritten.some((arg) => arg.changed);
+			return {
+				formula: changed
+					? { ...structuredClone(formula), args: rewritten.map((arg) => arg.formula) }
+					: structuredClone(formula),
+				changed
+			};
+		}
+	}
+}
 
 /** Provenance stamp for every node a mutation authors (SCHEMA.md §9). Re-authoring clears verification. */
 function stamp(node: GraphNode, actor: Actor, at: number): void {

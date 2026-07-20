@@ -14,6 +14,7 @@ export {
 	lettersToCol,
 	parseA1,
 	refStringToA1,
+	refStringToCellRef,
 	refersToCell,
 	renameNameRefs,
 	type ClassifiedEdit,
@@ -36,6 +37,10 @@ export {
 	type NameOutcome
 } from './graph-sync';
 
-export { attachSheetAdapter, type SheetAdapter, type SheetAdapterOptions } from './adapter';
-
-export { seedSheetStore, sheetStore } from './sheet-store';
+export {
+	attachWorkbookAdapter,
+	type WorkbookAdapter,
+	type WorkbookAdapterOptions,
+	type WorkbookCommandResult,
+	type WorkbookSelection
+} from './workbook-adapter';

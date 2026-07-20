@@ -23,7 +23,7 @@ export const graphNodeFields = {
 	inputs: v.array(v.string()),
 	contentHash: v.string(),
 	blockId: v.optional(v.string()),
-	cellRef: v.optional(v.object({ sheetBlockId: v.string(), a1: v.string() })),
+	cellRef: v.optional(v.object({ sheetId: v.string(), a1: v.string() })),
 	/** Provenance object (SCHEMA.md §3). */
 	provenance: v.any(),
 	/** Reserved V3 slot; stored verbatim, never interpreted. */
@@ -43,7 +43,21 @@ export const blockFields = {
 	image: v.optional(
 		v.object({ storageId: v.string(), alt: v.optional(v.string()), caption: v.optional(v.string()) })
 	),
-	viewer: v.optional(v.any())
+	equation: v.optional(
+		v.union(
+			v.object({
+				mode: v.literal('bound'),
+				nodeId: v.string(),
+				display: v.union(
+					v.literal('symbolic'),
+					v.literal('substituted'),
+					v.literal('result'),
+					v.literal('steps')
+				)
+			}),
+			v.object({ mode: v.literal('static'), tex: v.string() })
+		)
+	)
 };
 
 /** One undo-log entry (SCHEMA.md §9), codec-encoded mutation/inverse payloads. */
@@ -70,14 +84,36 @@ export const chipBindingFields = {
 export default defineSchema({
 	// ---- product tables (SCHEMA.md §10; `versions` is V2) --------------------
 	documents: defineTable({
+		/** Optional only while pre-R1 development rows are migrated; all writes require it. */
+		ownerId: v.optional(v.string()),
 		title: v.string(),
 		/** Canonical block order; `blocks.position` is the denormalized copy. */
 		blocksOrder: v.array(v.string()),
 		/** Undo-log cursor (SCHEMA.md §9): entries with seq ≤ cursor boundary are undoable. */
 		undoCursor: v.number(),
+		revision: v.optional(v.number()),
+		bundleHash: v.optional(v.string()),
+		workbookManifest: v.optional(
+			v.object({
+				sheets: v.array(
+					v.object({ id: v.string(), name: v.string(), position: v.number() })
+				)
+			})
+		),
+		deletedAt: v.optional(v.number()),
+		stats: v.optional(
+			v.object({
+				blocks: v.number(),
+				tabs: v.number(),
+				nodes: v.number(),
+				bytes: v.number()
+			})
+		),
 		createdAt: v.number(),
 		updatedAt: v.number()
-	}),
+	})
+		.index('by_owner_deleted_updated', ['ownerId', 'deletedAt', 'updatedAt'])
+		.index('by_deleted_at', ['deletedAt']),
 	graphNodes: defineTable(graphNodeFields)
 		.index('by_doc', ['docId'])
 		.index('by_doc_node', ['docId', 'nodeId']),
@@ -85,17 +121,44 @@ export default defineSchema({
 		.index('by_doc', ['docId'])
 		.index('by_doc_block', ['docId', 'blockId']),
 	undoLog: defineTable(undoLogFields).index('by_doc_seq', ['docId', 'seq']),
-	sheetSnapshots: defineTable({
+	workbookSnapshots: defineTable({
 		docId: v.id('documents'),
-		blockId: v.string(),
-		univerSnapshot: v.any(),
+		revision: v.number(),
+		snapshotHash: v.string(),
+		snapshot: v.any(),
 		updatedAt: v.number()
-	})
-		.index('by_doc', ['docId'])
-		.index('by_block', ['blockId']),
+	}).index('by_doc', ['docId']),
 	chipBindings: defineTable(chipBindingFields)
 		.index('by_doc', ['docId'])
 		.index('by_doc_chip', ['docId', 'chipId']),
+	assets: defineTable({
+		storageId: v.id('_storage'),
+		ownerId: v.string(),
+		docId: v.optional(v.id('documents')),
+		contentType: v.string(),
+		size: v.number(),
+		state: v.union(
+			v.literal('claimed'),
+			v.literal('pendingDeletion')
+		),
+		createdAt: v.number(),
+		claimedAt: v.optional(v.number()),
+		pendingDeletionAt: v.optional(v.number()),
+		deleteAttempts: v.number(),
+		nextAttemptAt: v.optional(v.number()),
+		lastError: v.optional(v.string())
+	})
+		.index('by_storage', ['storageId'])
+		.index('by_doc', ['docId'])
+		.index('by_state_next', ['state', 'nextAttemptAt'])
+		.index('by_state_created', ['state', 'createdAt']),
+	maintenance: defineTable({
+		key: v.string(),
+		locked: v.boolean(),
+		operation: v.optional(v.string()),
+		startedAt: v.optional(v.number()),
+		updatedAt: v.number()
+	}).index('by_key', ['key']),
 
 	// ---- marketing (live) ----------------------------------------------------
 	waitlist: defineTable({

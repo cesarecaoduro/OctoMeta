@@ -12,7 +12,7 @@ import type { CellRef, NodeId } from './types';
 const SHEET = 'sheet-1';
 
 function parse(src: string): FormulaAST {
-	const r = parseFormula(src, { sheetBlockId: SHEET });
+	const r = parseFormula(src, { sheetId: SHEET });
 	if (!r.ok) throw new Error(`parse failed for "${src}": ${r.message} @ ${r.pos}`);
 	return r.ast;
 }
@@ -91,8 +91,8 @@ describe('parse/print round-trip corpus (V1-1-3)', () => {
 	});
 
 	it('resolves cell refs against the parsing sheet context', () => {
-		expect(parse('A1')).toEqual({ t: 'ref', ref: { sheetBlockId: SHEET, a1: 'A1' } });
-		expect(parse('A1:B2')).toEqual({ t: 'ref', ref: { sheetBlockId: SHEET, a1: 'A1:B2' } });
+		expect(parse('A1')).toEqual({ t: 'ref', ref: { sheetId: SHEET, a1: 'A1' } });
+		expect(parse('A1:B2')).toEqual({ t: 'ref', ref: { sheetId: SHEET, a1: 'A1:B2' } });
 	});
 
 	it('builds unit literals with raw magnitude and source unit text', () => {
@@ -114,7 +114,7 @@ describe('parse/print round-trip corpus (V1-1-3)', () => {
 			t: 'bin',
 			op: '/',
 			left: { t: 'lit', value: 5, unit: 'kN' },
-			right: { t: 'ref', ref: { sheetBlockId: SHEET, a1: 'M2' } }
+			right: { t: 'ref', ref: { sheetId: SHEET, a1: 'M2' } }
 		});
 	});
 
@@ -137,7 +137,7 @@ describe('parse errors (V1-1-3)', () => {
 		['·'],
 		['']
 	])('rejects %j', (src) => {
-		const r = parseFormula(src, { sheetBlockId: SHEET });
+		const r = parseFormula(src, { sheetId: SHEET });
 		expect(r.ok).toBe(false);
 		if (!r.ok) {
 			expect(r.message.length).toBeGreaterThan(0);
@@ -155,7 +155,7 @@ describe('resolveInputs — edges are derived (V1-1-3)', () => {
 		['beam.span', 'node-span']
 	]);
 	const resolver = (ref: CellRef | { name: string }): NodeId | undefined =>
-		'name' in ref ? nodes.get(ref.name) : nodes.get(`${ref.sheetBlockId}!${ref.a1}`);
+		'name' in ref ? nodes.get(ref.name) : nodes.get(`${ref.sheetId}!${ref.a1}`);
 
 	it('collects referenced nodes in first-appearance order, deduplicated', () => {
 		expect(resolveInputs(parse('A1 + beam.span * A1 - B2'), resolver)).toEqual([
@@ -207,7 +207,7 @@ describe('resolveInputs — edges are derived (V1-1-3)', () => {
 
 describe('expandRange — ranges are call-argument sugar', () => {
 	const a1s = (ref: { a1: string }): ReturnType<typeof expandRange> | string[] => {
-		const r = expandRange({ sheetBlockId: SHEET, ...ref });
+		const r = expandRange({ sheetId: SHEET, ...ref });
 		return Array.isArray(r) ? r.map((c) => c.a1) : r;
 	};
 
@@ -224,10 +224,10 @@ describe('expandRange — ranges are call-argument sugar', () => {
 	});
 
 	it('carries the sheet through to every cell', () => {
-		const cells = expandRange({ sheetBlockId: SHEET, a1: 'A1:A2' });
+		const cells = expandRange({ sheetId: SHEET, a1: 'A1:A2' });
 		expect(cells).toEqual([
-			{ sheetBlockId: SHEET, a1: 'A1' },
-			{ sheetBlockId: SHEET, a1: 'A2' }
+			{ sheetId: SHEET, a1: 'A1' },
+			{ sheetId: SHEET, a1: 'A2' }
 		]);
 	});
 
@@ -236,14 +236,14 @@ describe('expandRange — ranges are call-argument sugar', () => {
 	});
 
 	it(`caps expansion at ${MAX_RANGE_CELLS} cells with a #VALUE!`, () => {
-		expect(expandRange({ sheetBlockId: SHEET, a1: 'A1:A2000' })).toMatchObject({
+		expect(expandRange({ sheetId: SHEET, a1: 'A1:A2000' })).toMatchObject({
 			kind: 'error',
 			code: '#VALUE!'
 		});
 	});
 
 	it('rejects malformed ranges with a #REF!', () => {
-		expect(expandRange({ sheetBlockId: SHEET, a1: 'A1:' })).toMatchObject({
+		expect(expandRange({ sheetId: SHEET, a1: 'A1:' })).toMatchObject({
 			kind: 'error',
 			code: '#REF!'
 		});

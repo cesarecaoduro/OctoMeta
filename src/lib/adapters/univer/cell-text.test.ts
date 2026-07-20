@@ -38,6 +38,18 @@ describe('classifyCellInput', () => {
 		expect(classifyCellInput({ v: true })).toEqual({ kind: 'value', value: true });
 	});
 
+	it('lifts strict numeric unit text and rejects malformed intended units', () => {
+		expect(classifyCellInput({ v: '20 in' })).toMatchObject({
+			kind: 'value',
+			value: { kind: 'quantity', value: 0.508, unit: { L: 1, display: 'in' } }
+		});
+		expect(classifyCellInput({ v: '50 ksi' })).toMatchObject({
+			kind: 'value',
+			value: { kind: 'quantity', value: 344_737_864.6584, unit: { display: 'ksi' } }
+		});
+		expect(classifyCellInput({ v: '20 mystery' })).toMatchObject({ kind: 'invalid' });
+	});
+
 	it('maps Univer boolean cells (v: 0/1, t: 3) to booleans', () => {
 		expect(classifyCellInput({ v: 1, t: 3 })).toEqual({ kind: 'value', value: true });
 		expect(classifyCellInput({ v: 0, t: 3 })).toEqual({ kind: 'value', value: false });
@@ -118,17 +130,17 @@ describe('formatCellDisplay', () => {
 		}
 	});
 
-	it('renders quantities as bare magnitudes (units dormant in V1)', () => {
+	it('renders quantities through the shared formatter', () => {
 		const q: TypedValue = {
 			kind: 'quantity',
 			value: 5,
 			unit: { L: 1, M: 0, T: 0, I: 0, Θ: 0, N: 0, J: 0, display: 'm' }
 		};
-		expect(formatCellDisplay(q)).toBe(5);
+		expect(formatCellDisplay(q)).toBe('5 m');
 	});
 
 	it('renders placeholders for kinds with no single-cell rendering', () => {
-		expect(formatCellDisplay({ kind: 'table', columns: [], rows: [] })).toBe('[table]');
+		expect(formatCellDisplay({ kind: 'table', columns: [], rows: [] })).toBe('[table 0×0]');
 		expect(formatCellDisplay({ kind: 'geometry', handle: 'geom:extrude:9f3a' })).toBe(
 			'geom:extrude:9f3a'
 		);
@@ -137,7 +149,7 @@ describe('formatCellDisplay', () => {
 
 describe('renameNameRefs', () => {
 	function ast(src: string) {
-		const parsed = parseFormula(src, { sheetBlockId: 'blk' });
+		const parsed = parseFormula(src, { sheetId: 'blk' });
 		if (!parsed.ok) throw new Error(parsed.message);
 		return parsed.ast;
 	}
@@ -159,7 +171,7 @@ describe('renameNameRefs', () => {
 
 describe('refersToCell', () => {
 	function ast(src: string) {
-		const parsed = parseFormula(src, { sheetBlockId: 'blk' });
+		const parsed = parseFormula(src, { sheetId: 'blk' });
 		if (!parsed.ok) throw new Error(parsed.message);
 		return parsed.ast;
 	}
@@ -178,21 +190,35 @@ describe('refersToCell', () => {
 describe('DefinedNameBook', () => {
 	it('tracks insert, update, and remove by stable id', () => {
 		const book = new DefinedNameBook();
-		book.recordInsert('dn1', 'beam.span', 'A1');
-		expect(book.get('dn1')).toEqual({ name: 'beam.span', a1: 'A1' });
+		book.recordInsert('dn1', 'beam.span', { sheetId: 'sheet-a', a1: 'A1' });
+		expect(book.get('dn1')).toEqual({
+			name: 'beam.span',
+			cellRef: { sheetId: 'sheet-a', a1: 'A1' }
+		});
 
-		const prev = book.recordUpdate('dn1', 'beam.length', 'A1');
-		expect(prev).toEqual({ name: 'beam.span', a1: 'A1' });
-		expect(book.get('dn1')).toEqual({ name: 'beam.length', a1: 'A1' });
+		const prev = book.recordUpdate('dn1', 'beam.length', { sheetId: 'sheet-a', a1: 'A1' });
+		expect(prev).toEqual({
+			name: 'beam.span',
+			cellRef: { sheetId: 'sheet-a', a1: 'A1' }
+		});
+		expect(book.get('dn1')).toEqual({
+			name: 'beam.length',
+			cellRef: { sheetId: 'sheet-a', a1: 'A1' }
+		});
 
 		const removed = book.recordRemove('dn1');
-		expect(removed).toEqual({ name: 'beam.length', a1: 'A1' });
+		expect(removed).toEqual({
+			name: 'beam.length',
+			cellRef: { sheetId: 'sheet-a', a1: 'A1' }
+		});
 		expect(book.get('dn1')).toBeNull();
 	});
 
 	it('returns null for unknown ids (update treated as insert by callers)', () => {
 		const book = new DefinedNameBook();
-		expect(book.recordUpdate('ghost', 'x', 'B2')).toBeNull();
+		expect(
+			book.recordUpdate('ghost', 'x', { sheetId: 'sheet-b', a1: 'B2' })
+		).toBeNull();
 		expect(book.recordRemove('ghost2')).toBeNull();
 	});
 });

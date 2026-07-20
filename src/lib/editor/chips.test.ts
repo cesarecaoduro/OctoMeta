@@ -66,13 +66,13 @@ describe('chipDisplay', () => {
 		expect(chipDisplay(withDigits, node(scalar(1.005))).text).toBe((1.005).toFixed(2));
 	});
 
-	it('renders quantities as bare magnitude (units dormant in V1)', () => {
+	it('renders quantities through the shared formatter', () => {
 		const q: TypedValue = {
 			kind: 'quantity',
 			value: 2.5,
-			unit: { L: 1, M: 0, T: 0, I: 0, Θ: 0, N: 0, J: 0 }
+			unit: { L: 1, M: 0, T: 0, I: 0, Θ: 0, N: 0, J: 0, display: 'm' }
 		};
-		expect(chipDisplay(binding, node(q)).text).toBe('2.5');
+		expect(chipDisplay(binding, node(q)).text).toBe('2.5 m');
 	});
 
 	it('renders strings and booleans sensibly', () => {
@@ -84,7 +84,7 @@ describe('chipDisplay', () => {
 	it('labels by published name, then cell address, then id', () => {
 		expect(chipDisplay(binding, node(scalar(1), { name: 'a.b' })).label).toBe('a.b: 1');
 		expect(
-			chipDisplay(binding, node(scalar(1), { cellRef: { sheetBlockId: 's', a1: 'B2' } })).label
+			chipDisplay(binding, node(scalar(1), { cellRef: { sheetId: 's', a1: 'B2' } })).label
 		).toBe('B2: 1');
 		expect(chipDisplay(binding, node(scalar(1))).label).toBe('n1: 1');
 	});
@@ -230,16 +230,8 @@ describe('show-steps expansion helpers', () => {
 		const registry = createBuiltinRegistry();
 		const opts = { registry };
 		const SHEET = 'blk-sheet';
-		must(
-			commit(
-				graph,
-				{ op: 'blockOp', action: 'add', blockId: SHEET, block: { docId: 'doc', type: 'sheet' } },
-				HUMAN,
-				opts
-			)
-		);
 		const ast = (src: string) => {
-			const parsed = parseFormula(src, { sheetBlockId: SHEET });
+			const parsed = parseFormula(src, { sheetId: SHEET });
 			if (!parsed.ok) throw new Error(parsed.message);
 			return parsed.ast;
 		};
@@ -251,8 +243,7 @@ describe('show-steps expansion helpers', () => {
 					node: {
 						id: 'na1',
 						kind: 'input',
-						cellRef: { sheetBlockId: SHEET, a1: 'A1' },
-						blockId: SHEET,
+						cellRef: { sheetId: SHEET, a1: 'A1' },
 						provenance: emptyProvenance()
 					}
 				},
@@ -270,8 +261,7 @@ describe('show-steps expansion helpers', () => {
 						id: 'nb1',
 						kind: 'computed',
 						formula: ast('=A1 * 2 + 1'),
-						cellRef: { sheetBlockId: SHEET, a1: 'B1' },
-						blockId: SHEET,
+						cellRef: { sheetId: SHEET, a1: 'B1' },
 						provenance: emptyProvenance()
 					}
 				},
@@ -282,7 +272,7 @@ describe('show-steps expansion helpers', () => {
 		const spanId = must(
 			commit(
 				graph,
-				{ op: 'publishName', cellRef: { sheetBlockId: SHEET, a1: 'A1' }, name: 'beam.span' },
+				{ op: 'publishName', cellRef: { sheetId: SHEET, a1: 'A1' }, name: 'beam.span' },
 				HUMAN,
 				opts
 			)
@@ -290,7 +280,7 @@ describe('show-steps expansion helpers', () => {
 		const loadId = must(
 			commit(
 				graph,
-				{ op: 'publishName', cellRef: { sheetBlockId: SHEET, a1: 'B1' }, name: 'beam.load' },
+				{ op: 'publishName', cellRef: { sheetId: SHEET, a1: 'B1' }, name: 'beam.load' },
 				HUMAN,
 				opts
 			)

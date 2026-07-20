@@ -20,8 +20,8 @@ const DOC = 'doc1';
 
 type NewNode = Omit<GraphNode, 'value' | 'contentHash' | 'inputs'>;
 
-function cell(a1: string, sheetBlockId = SHEET): CellRef {
-	return { sheetBlockId, a1 };
+function cell(a1: string, sheetId = SHEET): CellRef {
+	return { sheetId, a1 };
 }
 
 function must<T>(r: { ok: true; value: T } | { ok: false; error: MutationError }): T {
@@ -30,7 +30,7 @@ function must<T>(r: { ok: true; value: T } | { ok: false; error: MutationError }
 }
 
 function ast(src: string): FormulaAST {
-	const p = parseFormula(src, { sheetBlockId: SHEET });
+	const p = parseFormula(src, { sheetId: SHEET });
 	if (!p.ok) throw new Error(p.message);
 	return p.ast;
 }
@@ -84,6 +84,7 @@ function addBlock(
 /** Full-store snapshot for deep equality (nodes incl. contentHash + provenance). */
 function snap(doc: DocumentGraph) {
 	return structuredClone({
+		workbook: doc.workbook,
 		nodes: doc.nodes,
 		blocks: doc.blocks,
 		blocksOrder: doc.blocksOrder,
@@ -252,7 +253,7 @@ describe('undo/redo round-trips (deep-equal incl. hashes and provenance)', () =>
 
 	it('blockOp remove cascades hosted nodes and chips with full inverse', () => {
 		const doc = new DocumentGraph();
-		addBlock(doc, SHEET, 'sheet');
+		addBlock(doc, SHEET, 'text');
 		addBlock(doc, 'blk-text');
 		addInput(doc, 'a', 'A1');
 		addComputed(doc, 'c', 'C1', '=A1*2'); // hosted by SHEET, removed in cascade
@@ -309,7 +310,7 @@ describe('removeNode healing (Marimo semantics)', () => {
 describe('undo log serialization', () => {
 	it('entries survive JSON.stringify/parse and still undo/redo in a replica', () => {
 		const doc = new DocumentGraph();
-		addBlock(doc, SHEET, 'sheet');
+		addBlock(doc, SHEET, 'text');
 		addInput(doc, 'a', 'A1');
 		addComputed(doc, 'c', 'C1', '=A1*2');
 		must(applyMutation(doc, { op: 'publishName', cellRef: cell('A1'), name: 'beam.span' }, HUMAN));
@@ -392,7 +393,7 @@ describe('invalid mutations reject with zero partial writes', () => {
 
 	function seeded(): DocumentGraph {
 		const doc = new DocumentGraph();
-		addBlock(doc, SHEET, 'sheet');
+		addBlock(doc, SHEET, 'text');
 		addInput(doc, 'a', 'A1');
 		addComputed(doc, 'c', 'C1', '=A1*2');
 		return doc;
@@ -530,7 +531,7 @@ describe('blocksOrder vs position invariant', () => {
 		assertOrderInvariant(doc);
 		addBlock(doc, 'b2', 'heading', 0);
 		assertOrderInvariant(doc);
-		addBlock(doc, 'b3', 'sheet', 1);
+		addBlock(doc, 'b3', 'image', 1);
 		assertOrderInvariant(doc);
 		must(applyMutation(doc, { op: 'blockOp', action: 'move', blockId: 'b1', position: 0 }, HUMAN));
 		assertOrderInvariant(doc);
@@ -539,7 +540,12 @@ describe('blocksOrder vs position invariant', () => {
 		must(
 			applyMutation(
 				doc,
-				{ op: 'blockOp', action: 'update', blockId: 'b3', block: { univerSnapshot: { v: 2 } } },
+				{
+					op: 'blockOp',
+					action: 'update',
+					blockId: 'b3',
+					block: { image: { storageId: 'asset-1', alt: 'updated' } }
+				},
 				HUMAN
 			)
 		);
@@ -618,5 +624,202 @@ describe('publishName + dotted-name resolution', () => {
 		expect(rebound).toEqual([namedId]);
 		expect(doc.nodes.get(namedId)?.inputs).toEqual(['b']);
 		expect(doc.nodes.get('w')?.inputs).toEqual([namedId]); // edge unchanged
+	});
+
+	it('renameName preserves alias identity and rewrites dependent formulas atomically', () => {
+		const doc = new DocumentGraph();
+		addInput(doc, 'a', 'A1');
+		must(applyMutation(doc, { op: 'publishName', cellRef: cell('A1'), name: 'beam.span' }, HUMAN));
+		const aliasId = doc.resolveRef({ name: 'beam.span' }) as string;
+		addComputed(doc, 'w', 'C1', '=beam.span * 2');
+		doc.chips.set('chip', { id: 'chip', blockId: 'report', nodeId: aliasId });
+
+		roundTrip(doc, { op: 'renameName', nodeId: aliasId, name: 'beam.depth' });
+
+		expect(doc.resolveRef({ name: 'beam.span' })).toBeUndefined();
+		expect(doc.resolveRef({ name: 'beam.depth' })).toBe(aliasId);
+		expect(doc.chips.get('chip')?.nodeId).toBe(aliasId);
+		expect(doc.nodes.get('w')?.formula).toMatchObject({
+			t: 'bin',
+			left: { t: 'ref', ref: { name: 'beam.depth' } }
+		});
+	});
+});
+
+describe('workbookOp', () => {
+	const projection = (sheetId: string, wasActive = false) => ({
+		version: 1 as const,
+		sheetId,
+		wasActive,
+		snapshot: { id: sheetId, cellData: {} }
+	});
+
+	it('adds and renames tabs through one undoable history', () => {
+		const doc = new DocumentGraph();
+		roundTrip(doc, {
+			op: 'workbookOp',
+			action: 'add',
+			sheet: { id: 'sheet-2', name: 'Calculation', position: 1 },
+			activate: true
+		});
+		expect(doc.workbook.sheets.map((sheet) => sheet.name)).toEqual(['Sheet 1', 'Calculation']);
+
+		roundTrip(doc, {
+			op: 'workbookOp',
+			action: 'rename',
+			sheetId: 'sheet-2',
+			name: 'Output'
+		});
+		expect(doc.sheet('sheet-2')).toMatchObject({ id: 'sheet-2', name: 'Output', position: 1 });
+	});
+
+	it('rejects duplicate names, invalid names, and last-tab removal', () => {
+		const doc = new DocumentGraph();
+		const duplicate = applyMutation(
+			doc,
+			{
+				op: 'workbookOp',
+				action: 'add',
+				sheet: { id: 'sheet-2', name: 'sheet 1', position: 1 },
+				activate: false
+			},
+			HUMAN
+		);
+		expect(duplicate).toMatchObject({ ok: false });
+
+		const whitespace = applyMutation(
+			doc,
+			{ op: 'workbookOp', action: 'rename', sheetId: 'sheet-1', name: ' Input ' },
+			HUMAN
+		);
+		expect(whitespace).toMatchObject({ ok: false });
+
+		const last = applyMutation(
+			doc,
+			{
+				op: 'workbookOp',
+				action: 'remove',
+				sheetId: 'sheet-1',
+				projection: projection('sheet-1', true)
+			},
+			HUMAN
+		);
+		expect(last).toMatchObject({ ok: false });
+		expect(doc.workbook.sheets).toHaveLength(1);
+	});
+
+	it('removes a tab, its cells and aliases, then undo restores identical identities', () => {
+		const doc = new DocumentGraph({
+			sheets: [
+				{ id: SHEET, name: 'Input', position: 0 },
+				{ id: 'sheet-b', name: 'Calculation', position: 1 }
+			]
+		});
+		const input: NewNode = {
+			id: 'source',
+			kind: 'input',
+			cellRef: cell('A1', 'sheet-b'),
+			provenance: emptyProvenance()
+		};
+		must(applyMutation(doc, { op: 'addNode', node: input }, HUMAN));
+		must(applyMutation(doc, { op: 'setInput', id: 'source', value: scalar(20) }, HUMAN));
+		must(
+			applyMutation(
+				doc,
+				{ op: 'publishName', cellRef: cell('A1', 'sheet-b'), name: 'beam.depth' },
+				HUMAN
+			)
+		);
+		const aliasId = doc.resolveRef({ name: 'beam.depth' }) as string;
+		addComputed(doc, 'consumer', 'C1', '=beam.depth * 2');
+
+		roundTrip(doc, {
+			op: 'workbookOp',
+			action: 'remove',
+			sheetId: 'sheet-b',
+			projection: projection('sheet-b', true)
+		});
+
+		expect(doc.sheet('sheet-b')).toBeUndefined();
+		expect(doc.nodes.has('source')).toBe(false);
+		expect(doc.nodes.has(aliasId)).toBe(false);
+		expect(doc.nodes.get('consumer')?.value).toMatchObject({ kind: 'error', code: '#REF!' });
+	});
+});
+
+describe('equation block payloads', () => {
+	it('requires an exact payload and updates it undoably', () => {
+		const doc = new DocumentGraph();
+		expect(
+			applyMutation(
+				doc,
+				{
+					op: 'blockOp',
+					action: 'add',
+					blockId: 'eq',
+					block: {
+						docId: 'doc',
+						type: 'equation',
+						equation: { mode: 'static', tex: String.raw`E = mc^2` }
+					}
+				},
+				HUMAN
+			)
+		).toMatchObject({ ok: true });
+
+		roundTrip(doc, {
+			op: 'blockOp',
+			action: 'update',
+			blockId: 'eq',
+			block: { equation: { mode: 'bound', nodeId: 'published-area', display: 'result' } }
+		});
+	});
+
+	it('rejects missing, cross-type, and oversized equation payloads', () => {
+		const doc = new DocumentGraph();
+		expect(
+			applyMutation(
+				doc,
+				{
+					op: 'blockOp',
+					action: 'add',
+					blockId: 'missing',
+					block: { docId: 'doc', type: 'equation' }
+				},
+				HUMAN
+			)
+		).toMatchObject({ ok: false });
+		expect(
+			applyMutation(
+				doc,
+				{
+					op: 'blockOp',
+					action: 'add',
+					blockId: 'text',
+					block: {
+						docId: 'doc',
+						type: 'text',
+						equation: { mode: 'static', tex: 'x' }
+					}
+				},
+				HUMAN
+			)
+		).toMatchObject({ ok: false });
+		expect(
+			applyMutation(
+				doc,
+				{
+					op: 'blockOp',
+					action: 'add',
+					blockId: 'large',
+					block: {
+						docId: 'doc',
+						type: 'equation',
+						equation: { mode: 'static', tex: 'x'.repeat(10_001) }
+					}
+				},
+				HUMAN
+			)
+		).toMatchObject({ ok: false });
 	});
 });

@@ -23,23 +23,30 @@ export interface PMJson {
 /** The name of the TipTap node type that renders image blocks (image-node.ts). */
 export const IMAGE_NODE_NAME = 'imageBlock';
 
-/** The name of the TipTap node type that renders sheet blocks (sheet-node.ts). */
-export const SHEET_NODE_NAME = 'sheetBlock';
+/** The name of the TipTap node type that renders equation blocks. */
+export const EQUATION_NODE_NAME = 'equationBlock';
 
 /**
  * Block types this editor owns. Sheet blocks joined in V1-5-2: their structure
  * (add/remove/move) reconciles like any other block, while their content lives
  * in the graph + `sheetSnapshots`, never in the PM doc.
  */
-export const MANAGED_BLOCK_TYPES: readonly Block['type'][] = ['text', 'heading', 'image', 'sheet'];
+export const MANAGED_BLOCK_TYPES: readonly Block['type'][] = [
+	'text',
+	'heading',
+	'image',
+	'equation'
+];
 
 /** What a top-level PM node wants its graph block to look like. */
 export interface BlockSpec {
-	type: 'text' | 'heading' | 'image' | 'sheet';
+	type: 'text' | 'heading' | 'image' | 'equation';
 	/** Present on text/heading specs: the node's PM JSON without the blockId attr. */
 	pm?: PMJson;
 	/** Present on image specs (SCHEMA.md §8). */
 	image?: { storageId: string; alt?: string; caption?: string };
+	/** Present on equation specs. */
+	equation?: Block['equation'];
 }
 
 /** A shallow clone of `node` without its top-level `blockId` attribute. */
@@ -71,9 +78,18 @@ export function specFromPmNode(node: PMJson): BlockSpec {
 		if (typeof attrs.caption === 'string' && attrs.caption !== '') image.caption = attrs.caption;
 		return { type: 'image', image };
 	}
-	// Sheet content never rides in the PM doc: the graph owns the cells, the
-	// `sheetSnapshots` table owns the grid chrome. The spec is structure-only.
-	if (node.type === SHEET_NODE_NAME) return { type: 'sheet' };
+	if (node.type === EQUATION_NODE_NAME) {
+		const payload = node.attrs?.equation;
+		if (
+			payload &&
+			typeof payload === 'object' &&
+			'mode' in payload &&
+			(payload.mode === 'static' || payload.mode === 'bound')
+		) {
+			return { type: 'equation', equation: payload as NonNullable<Block['equation']> };
+		}
+		return { type: 'equation', equation: { mode: 'static', tex: '' } };
+	}
 	return { type: node.type === 'heading' ? 'heading' : 'text', pm: stripBlockId(node) };
 }
 
@@ -82,9 +98,6 @@ export function specFromPmNode(node: PMJson): BlockSpec {
  * null for block types this editor does not render (equation/viewer — V2).
  */
 export function pmNodeFromBlock(block: Block): PMJson | null {
-	if (block.type === 'sheet') {
-		return { type: SHEET_NODE_NAME, attrs: { blockId: block.id } };
-	}
 	if (block.type === 'image') {
 		return {
 			type: IMAGE_NODE_NAME,
@@ -93,6 +106,15 @@ export function pmNodeFromBlock(block: Block): PMJson | null {
 				storageId: block.image?.storageId ?? '',
 				alt: block.image?.alt ?? null,
 				caption: block.image?.caption ?? null
+			}
+		};
+	}
+	if (block.type === 'equation') {
+		return {
+			type: EQUATION_NODE_NAME,
+			attrs: {
+				blockId: block.id,
+				equation: block.equation ?? { mode: 'static', tex: '' }
 			}
 		};
 	}

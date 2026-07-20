@@ -81,7 +81,7 @@ export function createBlockSync(host: SyncHost, opts?: { delayMs?: number }): Bl
 	const delayMs = opts?.delayMs ?? DEFAULT_SYNC_DELAY_MS;
 	const newId = host.newBlockId ?? (() => ulid());
 	/** blockId → latest desired content payload, waiting for the debounce. */
-	const pending = new Map<string, Pick<BlockSpec, 'pm' | 'image'>>();
+	const pending = new Map<string, Pick<BlockSpec, 'pm' | 'image' | 'equation'>>();
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	let disposed = false;
 
@@ -91,13 +91,19 @@ export function createBlockSync(host: SyncHost, opts?: { delayMs?: number }): Bl
 	};
 
 	/** Commit one pending update if the block still exists and still differs. */
-	const commitUpdate = (id: string, payload: Pick<BlockSpec, 'pm' | 'image'>): void => {
+	const commitUpdate = (
+		id: string,
+		payload: Pick<BlockSpec, 'pm' | 'image' | 'equation'>
+	): void => {
 		const block = host.block(id);
 		if (!block) return;
 		const fields: Partial<Block> = {};
 		if (payload.pm !== undefined && !jsonEqual(block.pm, payload.pm)) fields.pm = payload.pm;
 		if (payload.image !== undefined && !jsonEqual(block.image, payload.image)) {
 			fields.image = payload.image;
+		}
+		if (payload.equation !== undefined && !jsonEqual(block.equation, payload.equation)) {
+			fields.equation = payload.equation;
 		}
 		if (Object.keys(fields).length === 0) return;
 		host.commit({ op: 'blockOp', action: 'update', blockId: id, block: fields });
@@ -111,7 +117,10 @@ export function createBlockSync(host: SyncHost, opts?: { delayMs?: number }): Bl
 		for (const [id, payload] of batch) commitUpdate(id, payload);
 	};
 
-	const scheduleUpdate = (id: string, payload: Pick<BlockSpec, 'pm' | 'image'>): void => {
+	const scheduleUpdate = (
+		id: string,
+		payload: Pick<BlockSpec, 'pm' | 'image' | 'equation'>
+	): void => {
 		pending.set(id, payload);
 		clearTimer();
 		timer = setTimeout(() => {
@@ -193,12 +202,13 @@ export function createBlockSync(host: SyncHost, opts?: { delayMs?: number }): Bl
 				const block: Partial<Block> = { docId: host.docId, type: spec.type };
 				if (spec.pm !== undefined) block.pm = spec.pm;
 				if (spec.image !== undefined) block.image = spec.image;
+				if (spec.equation !== undefined) block.equation = spec.equation;
 				host.commit({ op: 'blockOp', action: 'add', blockId: id, block, position: index });
 			}
 		});
 
-		// Moves: bring the managed slice of blocksOrder into doc order. Every V1
-		// block type (text/heading/image/sheet) is managed, so indices in the PM
+		// Moves: bring the managed slice of blocksOrder into doc order. Every R1
+		// block type (text/heading/image/equation) is managed, so indices in the PM
 		// doc are absolute positions in blocksOrder.
 		const target = desired.map((d) => d.id);
 		const current = [...host.order()].filter((id) => desiredIds.has(id));
@@ -219,8 +229,15 @@ export function createBlockSync(host: SyncHost, opts?: { delayMs?: number }): Bl
 			if (!block) continue;
 			const changed =
 				(spec.pm !== undefined && !jsonEqual(block.pm, spec.pm)) ||
-				(spec.image !== undefined && !jsonEqual(block.image, spec.image));
-			if (changed) scheduleUpdate(id, { pm: spec.pm, image: spec.image });
+				(spec.image !== undefined && !jsonEqual(block.image, spec.image)) ||
+				(spec.equation !== undefined && !jsonEqual(block.equation, spec.equation));
+			if (changed) {
+				scheduleUpdate(id, {
+					pm: spec.pm,
+					image: spec.image,
+					equation: spec.equation
+				});
+			}
 			else pending.delete(id);
 		}
 

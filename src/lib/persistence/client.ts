@@ -8,9 +8,10 @@
 import type { ConvexClient } from 'convex/browser';
 import { api } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
-import type { ChipBinding, DocumentGraph } from '../engine';
+import type { DocumentGraph } from '../engine';
 import type { LoadedRows } from './serialize';
 import { serializeGraph } from './serialize';
+import { documentBundleHash, workbookSnapshotHash } from './canonical';
 
 /** A persisted document's id. Opaque string outside this layer. */
 export type DocumentId = Id<'documents'>;
@@ -21,6 +22,10 @@ export interface DocumentSummary {
 	title: string;
 	blocksOrder: string[];
 	undoCursor: number;
+	revision: number;
+	bundleHash: string;
+	deletedAt?: number;
+	stats: { blocks: number; tabs: number; nodes: number; bytes: number };
 	createdAt: number;
 	updatedAt: number;
 }
@@ -28,8 +33,21 @@ export interface DocumentSummary {
 /** Everything `documents.load` returns for one document, hydration-ready. */
 export interface LoadedDocument extends LoadedRows {
 	document: DocumentSummary;
-	sheetSnapshots: { blockId: string; univerSnapshot: unknown; updatedAt: number }[];
+	workbookSnapshot: {
+		revision: number;
+		snapshotHash: string;
+		snapshot: unknown;
+		updatedAt: number;
+	};
 }
+
+/** Fail-closed load state returned by the ownership/integrity boundary. */
+export type DocumentLoadState =
+	| ({ state: 'live' } & LoadedDocument)
+	| { state: 'trashed'; document: DocumentSummary }
+	| { state: 'missing' }
+	| { state: 'unauthorized' }
+	| { state: 'integrity-error'; reason: string };
 
 /** The persistence surface V1-5 consumes. All methods resolve when the backend confirms. */
 export interface Persistence {
@@ -37,58 +55,87 @@ export interface Persistence {
 	createDocument(title: string): Promise<DocumentId>;
 	/** List all documents, most recently updated first. */
 	listDocuments(): Promise<DocumentSummary[]>;
+	/** List recoverable trashed documents. */
+	listTrash(): Promise<DocumentSummary[]>;
 	/** Rename a document. */
 	renameDocument(docId: DocumentId, title: string): Promise<void>;
-	/** Delete a document and all its rows (nodes, blocks, undo log, chips, snapshots). */
+	/** Move a document to recoverable trash. */
 	deleteDocument(docId: DocumentId): Promise<void>;
-	/** Full save: nodes + blocks + blocksOrder + undo log + cursor + chips, wipe-and-replace. */
-	saveDocument(docId: DocumentId, graph: DocumentGraph): Promise<void>;
-	/** Load every row of a document, or null when it does not exist. Feed to `hydrateGraph`. */
-	loadDocument(docId: DocumentId): Promise<LoadedDocument | null>;
-	/** Insert or update the Univer snapshot for a sheet block. */
-	upsertSheetSnapshot(docId: DocumentId, blockId: string, univerSnapshot: unknown): Promise<void>;
-	/** Insert or update one chip binding. */
-	upsertChip(docId: DocumentId, chip: ChipBinding): Promise<void>;
-	/** Delete one chip binding (idempotent). */
-	deleteChip(docId: DocumentId, chipId: string): Promise<void>;
-	/** Upload file bytes to Convex storage; resolves to the storageId for `Block.image` (SCHEMA.md §8). */
-	uploadFile(file: Blob): Promise<string>;
+	/** Restore a trashed document. */
+	restoreDocument(docId: DocumentId): Promise<void>;
+	/** Permanently remove one trashed document. */
+	deleteForever(docId: DocumentId): Promise<void>;
+	/** Permanently remove all owned trash in bounded batches. */
+	emptyTrash(): Promise<number>;
+	/** Atomic compare-and-swap save of graph, manifest, and workbook snapshot. */
+	saveDocument(
+		docId: DocumentId,
+		graph: DocumentGraph,
+		workbookSnapshot?: unknown
+	): Promise<number>;
+	/** Load one typed document state. Live payloads can be fed to `hydrateGraph`. */
+	loadDocument(docId: DocumentId): Promise<DocumentLoadState>;
+	/** Upload, validate, and claim an image for one live owned document. */
+	uploadFile(docId: DocumentId, file: Blob): Promise<string>;
 	/** Resolve a storageId to a serving URL, or null when the file no longer exists. */
 	fileUrl(storageId: string): Promise<string | null>;
 }
 
 /** Build the persistence facade over a connected ConvexClient. */
 export function createPersistence(client: ConvexClient): Persistence {
+	const revisions = new Map<DocumentId, number>();
 	return {
 		createDocument: (title) => client.mutation(api.documents.create, { title }),
-		listDocuments: () => client.query(api.documents.list, {}),
+		listDocuments: async () =>
+			(await client.query(api.documents.list, {})) as DocumentSummary[],
+		listTrash: async () =>
+			(await client.query(api.documents.listTrash, {})) as DocumentSummary[],
 		renameDocument: async (docId, title) => {
 			await client.mutation(api.documents.rename, { docId, title });
 		},
 		deleteDocument: async (docId) => {
+			await client.mutation(api.documents.trash, { docId });
+		},
+		restoreDocument: async (docId) => {
+			await client.mutation(api.documents.restore, { docId });
+		},
+		deleteForever: async (docId) => {
 			await client.mutation(api.documents.remove, { docId });
 		},
-		saveDocument: async (docId, graph) => {
-			await client.mutation(api.documents.save, { docId, ...serializeGraph(graph) });
+		emptyTrash: async () => {
+			let total = 0;
+			for (;;) {
+				const result = await client.mutation(api.documents.emptyTrash, {});
+				total += result.deleted;
+				if (!result.hasMore) return total;
+			}
 		},
-		loadDocument: async (docId) =>
-			(await client.query(api.documents.load, { docId })) as LoadedDocument | null,
-		upsertSheetSnapshot: async (docId, blockId, univerSnapshot) => {
-			await client.mutation(api.sheets.upsertSnapshot, { docId, blockId, univerSnapshot });
-		},
-		upsertChip: async (docId, chip) => {
-			await client.mutation(api.chips.upsert, {
+		saveDocument: async (docId, graph, providedSnapshot) => {
+			const { workbookManifest, ...graphPayload } = serializeGraph(graph);
+			const workbookSnapshot =
+				providedSnapshot ?? freshWorkbookSnapshot(String(docId), workbookManifest);
+			const snapshotHash = workbookSnapshotHash(workbookSnapshot);
+			const bundleHash = documentBundleHash(graphPayload, workbookManifest, snapshotHash);
+			const result = await client.mutation(api.documents.save, {
 				docId,
-				chipId: chip.id,
-				blockId: chip.blockId,
-				nodeId: chip.nodeId,
-				...(chip.format !== undefined && { format: chip.format })
+				expectedRevision: revisions.get(docId) ?? 0,
+				graph: graphPayload,
+				workbookManifest,
+				workbookSnapshot,
+				snapshotHash,
+				bundleHash
 			});
+			revisions.set(docId, result.revision);
+			return result.revision;
 		},
-		deleteChip: async (docId, chipId) => {
-			await client.mutation(api.chips.remove, { docId, chipId });
+		loadDocument: async (docId) => {
+			const result = (await client.query(api.documents.load, {
+				docId
+			})) as DocumentLoadState;
+			if (result.state === 'live') revisions.set(docId, result.document.revision);
+			return result;
 		},
-		uploadFile: async (file) => {
+		uploadFile: async (docId, file) => {
 			// Standard Convex upload flow: short-lived URL, POST the bytes, read
 			// back the storageId. The URL protocol is a Convex detail — it stays
 			// inside this layer.
@@ -100,9 +147,30 @@ export function createPersistence(client: ConvexClient): Persistence {
 			});
 			if (!response.ok) throw new Error(`upload failed: HTTP ${response.status}`);
 			const { storageId } = (await response.json()) as { storageId: string };
+			await client.action(api.files.claimUpload, {
+				docId,
+				storageId: storageId as Id<'_storage'>
+			});
 			return storageId;
 		},
 		fileUrl: async (storageId) =>
 			await client.query(api.files.getUrl, { storageId: storageId as Id<'_storage'> })
+	};
+}
+
+function freshWorkbookSnapshot(
+	unitId: string,
+	manifest: DocumentGraph['workbook']
+): Record<string, unknown> {
+	return {
+		id: unitId,
+		name: unitId,
+		sheetOrder: manifest.sheets.map((sheet) => sheet.id),
+		sheets: Object.fromEntries(
+			manifest.sheets.map((sheet) => [
+				sheet.id,
+				{ id: sheet.id, name: sheet.name, cellData: {} }
+			])
+		)
 	};
 }

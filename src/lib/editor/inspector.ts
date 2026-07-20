@@ -15,7 +15,7 @@
  */
 
 import type { GraphNode, NodeId, Provenance, TypedValue } from '../engine';
-import { printFormula } from '../engine';
+import { format, printFormula } from '../engine';
 import { isPendingValue } from './chips';
 
 /**
@@ -120,7 +120,7 @@ function valueDisplay(v: TypedValue): InspectorValue {
 			return { text: v.code, state: 'error' };
 		case 'scalar':
 		case 'quantity':
-			return { text: String(Number(v.value.toPrecision(13))), state: 'value' };
+			return { text: format(v), state: 'value' };
 		case 'string':
 			return { text: v.value, state: 'value' };
 		case 'boolean':

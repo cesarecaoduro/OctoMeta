@@ -9,5 +9,4 @@ export * from './codec';
 export * from './serialize';
 export * from './client';
 export * from './saver';
-export * from './sheet-snapshots';
 export * from './svelte';

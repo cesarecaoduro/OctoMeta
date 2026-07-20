@@ -31,8 +31,6 @@ const para = (text: string, blockId?: string | null): PMJson => ({
 
 const doc = (...content: PMJson[]): PMJson => ({ type: 'doc', content });
 
-const sheet = (blockId: string): PMJson => ({ type: 'sheetBlock', attrs: { blockId } });
-
 beforeEach(() => {
 	vi.useFakeTimers();
 });
@@ -93,71 +91,30 @@ describe('reconcile: structure', () => {
 		});
 	});
 
-	it('never removes unmanaged (viewer, V2) blocks it does not render', () => {
+	it('moves equations and prose with absolute blocksOrder positions', () => {
 		const { graph, host } = makeHost();
 		host.commit({
 			op: 'blockOp',
 			action: 'add',
-			blockId: 'blk-viewer',
-			block: { docId: 'doc1', type: 'viewer' }
+			blockId: 'blk-equation',
+			block: {
+				docId: 'doc1',
+				type: 'equation',
+				equation: { mode: 'static', tex: 'x = 1' }
+			}
 		});
 		const sync = createBlockSync(host);
-		sync.reconcile(doc(para('prose', null)));
-		expect(graph.blocks.has('blk-viewer')).toBe(true);
-	});
-
-	it('sheet blocks (V1-5-2) reconcile structurally: a vanished sheetBlock node commits blockOp remove', () => {
-		const { graph, host } = makeHost();
-		host.commit({
-			op: 'blockOp',
-			action: 'add',
-			blockId: 'blk-sheet',
-			block: { docId: 'doc1', type: 'sheet' }
+		const equation = (blockId: string): PMJson => ({
+			type: 'equationBlock',
+			attrs: {
+				blockId,
+				equation: { mode: 'static', tex: 'x = 1' }
+			}
 		});
-		const sync = createBlockSync(host);
-		// Doc still shows the sheet: nothing happens.
-		sync.reconcile(doc(sheet('blk-sheet'), para('prose', null)));
-		expect(graph.blocks.has('blk-sheet')).toBe(true);
-		// The user deleted the sheet node: the block is removed through commit.
-		sync.reconcile(doc(para('prose', 'blk-1')));
-		expect(graph.blocks.has('blk-sheet')).toBe(false);
-		expect(graph.undoLog.at(-1)?.mutation).toMatchObject({
-			op: 'blockOp',
-			action: 'remove',
-			blockId: 'blk-sheet'
-		});
-	});
-
-	it('sheet blocks never receive content updates (structure-only spec)', () => {
-		const { graph, host } = makeHost();
-		host.commit({
-			op: 'blockOp',
-			action: 'add',
-			blockId: 'blk-sheet',
-			block: { docId: 'doc1', type: 'sheet' }
-		});
-		const sync = createBlockSync(host);
-		const before = graph.undoLog.length;
-		sync.reconcile(doc(sheet('blk-sheet')));
-		vi.advanceTimersByTime(1000);
-		expect(sync.hasPending()).toBe(false);
-		expect(graph.undoLog.length).toBe(before);
-	});
-
-	it('moves mix sheets and prose with absolute blocksOrder positions', () => {
-		const { graph, host } = makeHost();
-		host.commit({
-			op: 'blockOp',
-			action: 'add',
-			blockId: 'blk-sheet',
-			block: { docId: 'doc1', type: 'sheet' }
-		});
-		const sync = createBlockSync(host);
-		sync.reconcile(doc(sheet('blk-sheet'), para('a', null), para('b', null)));
-		expect(graph.blocksOrder).toEqual(['blk-sheet', 'blk-1', 'blk-2']);
-		// Sheet moves to the middle; prose shifts around it.
-		sync.reconcile(doc(para('a', 'blk-1'), sheet('blk-sheet'), para('b', 'blk-2')));
-		expect(graph.blocksOrder).toEqual(['blk-1', 'blk-sheet', 'blk-2']);
+		sync.reconcile(doc(equation('blk-equation'), para('a', null), para('b', null)));
+		expect(graph.blocksOrder).toEqual(['blk-equation', 'blk-1', 'blk-2']);
+		sync.reconcile(doc(para('a', 'blk-1'), equation('blk-equation'), para('b', 'blk-2')));
+		expect(graph.blocksOrder).toEqual(['blk-1', 'blk-equation', 'blk-2']);
 		expect(graph.blocksOrder.map((id) => graph.blocks.get(id)?.position)).toEqual([0, 1, 2]);
 	});
 
@@ -268,7 +225,7 @@ describe('moves never trigger recalc (SCHEMA.md §5: position is layout-only)', 
 		const evaluate = vi.fn(() => ({ kind: 'scalar', value: 0 }) as const);
 		const r = commit(
 			graph,
-			{ op: 'blockOp', action: 'move', blockId: 'blk-beam-sheet', position: 0 },
+			{ op: 'blockOp', action: 'move', blockId: 'blk-beam-intro', position: 0 },
 			HUMAN,
 			{ registry, evaluate }
 		);

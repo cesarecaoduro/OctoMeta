@@ -7,6 +7,7 @@
  */
 
 import { setupConvex, useConvexClient } from 'convex-svelte';
+import type { ConvexClient } from 'convex/browser';
 import { api } from '../../convex/_generated/api';
 import type { Persistence } from './client';
 import { createPersistence } from './client';
@@ -15,8 +16,8 @@ import { createPersistence } from './client';
  * Register the backend client in Svelte context. Call once, from the root
  * layout, with `PUBLIC_CONVEX_URL`.
  */
-export function setupPersistence(url: string): void {
-	setupConvex(url);
+export function setupPersistence(url: string): ConvexClient {
+	return setupConvex(url);
 }
 
 /** Get the document persistence facade from context (root layout must have called `setupPersistence`). */

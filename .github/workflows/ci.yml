@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PUBLIC_CONVEX_URL: ${{ vars.CONVEX_DEV_URL }}
+      PUBLIC_CONVEX_SITE_URL: ${{ vars.CONVEX_DEV_SITE_URL }}
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm audit --prod --audit-level=high
+      - run: pnpm secret:scan
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e

@@ -7,8 +7,8 @@
  * low-level primitives that keep the indexes consistent, never policy.
  */
 
-import type { CellRef, NodeId } from './types';
-import { contentHash } from './types';
+import type { CellRef, NodeId, SheetId, SheetMeta, WorkbookManifest } from './types';
+import { contentHash, createDefaultWorkbook } from './types';
 import type { GraphNode } from './node';
 import type { Block, ChipBinding } from './block';
 import type { FormulaAST } from './formula';
@@ -22,7 +22,7 @@ const KEY_SEP = '\u001f'; // unit separator: keeps composite keys unambiguous
 
 /** Index key for a reference: distinct keyspaces for cell refs and names. */
 export function refKey(ref: CellRef | { name: string }): string {
-	return isNameRef(ref) ? `name:${ref.name}` : `cell:${ref.sheetBlockId}${KEY_SEP}${ref.a1}`;
+	return isNameRef(ref) ? `name:${ref.name}` : `cell:${ref.sheetId}${KEY_SEP}${ref.a1}`;
 }
 
 /**
@@ -93,6 +93,30 @@ export function nodeOpId(node: GraphNode): string {
 /** Change subscriber — invoked by `notify` after recalc settles a node (V1-2-2). */
 export type NodeSubscriber = (node: GraphNode) => void;
 
+/** A published alias together with the one source node it directly targets. */
+export interface ResolvedPublishedTarget {
+	publishedNode: GraphNode;
+	targetNode: GraphNode;
+}
+
+/**
+ * Resolve exactly one `namedOutput` alias hop.
+ *
+ * The published node remains the stable binding identity for chips and
+ * equations; callers use the target kind/value to decide whether it is an
+ * editable input or a read-only output. Alias chains are returned as a
+ * `namedOutput` target and therefore remain read-only in R1.
+ */
+export function resolvePublishedTarget(
+	doc: DocumentGraph,
+	publishedNodeId: NodeId
+): ResolvedPublishedTarget | null {
+	const publishedNode = doc.nodes.get(publishedNodeId);
+	if (publishedNode?.kind !== 'namedOutput' || publishedNode.inputs.length !== 1) return null;
+	const targetNode = doc.nodes.get(publishedNode.inputs[0]);
+	return targetNode ? { publishedNode, targetNode } : null;
+}
+
 /**
  * The in-memory document graph. Owns the invariants:
  * - `blocksOrder` is canonical; every `block.position` equals its index
@@ -102,6 +126,8 @@ export type NodeSubscriber = (node: GraphNode) => void;
  * - The undo log truncates the redo tail on push and caps at `UNDO_CAP`.
  */
 export class DocumentGraph {
+	/** Canonical workbook-tab identity, display names, and order. */
+	readonly workbook: WorkbookManifest;
 	/** All graph nodes by id — the single source of truth (SCHEMA.md §3). */
 	readonly nodes = new Map<NodeId, GraphNode>();
 	/** All document blocks by id (SCHEMA.md §8). */
@@ -125,6 +151,53 @@ export class DocumentGraph {
 	/** waiter id → its registered unresolved refKeys (for cleanup). */
 	private unresolvedByNode = new Map<NodeId, Set<string>>();
 	private subscribers = new Map<NodeId, Set<NodeSubscriber>>();
+
+	/**
+	 * Create a document graph with an owned workbook manifest.
+	 * Callers may provide restored metadata; the input is cloned and normalized.
+	 */
+	constructor(workbook: WorkbookManifest = createDefaultWorkbook()) {
+		this.workbook = structuredClone(workbook);
+		if (this.workbook.sheets.length === 0) {
+			this.workbook.sheets.push(...createDefaultWorkbook().sheets);
+		}
+		this.renumberSheets();
+	}
+
+	// -----------------------------------------------------------------------
+	// Workbook manifest (policy and history live in mutations.ts)
+	// -----------------------------------------------------------------------
+
+	/** Return one tab's canonical metadata. */
+	sheet(sheetId: SheetId): SheetMeta | undefined {
+		return this.workbook.sheets.find((sheet) => sheet.id === sheetId);
+	}
+
+	/** Insert a tab at its requested position and normalize all positions. */
+	insertSheet(sheet: SheetMeta): void {
+		const at = clampIndex(sheet.position, this.workbook.sheets.length);
+		this.workbook.sheets.splice(at, 0, structuredClone(sheet));
+		this.renumberSheets();
+	}
+
+	/** Rename a tab without changing its stable identity or order. */
+	renameSheet(sheetId: SheetId, name: string): void {
+		const sheet = this.sheet(sheetId);
+		if (sheet) sheet.name = name;
+	}
+
+	/** Remove a tab and normalize the surviving tab positions. */
+	deleteSheet(sheetId: SheetId): void {
+		const at = this.workbook.sheets.findIndex((sheet) => sheet.id === sheetId);
+		if (at >= 0) this.workbook.sheets.splice(at, 1);
+		this.renumberSheets();
+	}
+
+	private renumberSheets(): void {
+		for (let i = 0; i < this.workbook.sheets.length; i++) {
+			this.workbook.sheets[i].position = i;
+		}
+	}
 
 	// -----------------------------------------------------------------------
 	// Reference resolution

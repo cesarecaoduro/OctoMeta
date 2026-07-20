@@ -1,4 +1,4 @@
-import adapter from '@sveltejs/adapter-auto';
+import adapter from '@sveltejs/adapter-vercel';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vitest/config';
 
@@ -11,10 +11,30 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 
-			// adapter-auto only supports some environments, see https://svelte.dev/docs/kit/adapter-auto for a list.
-			// If your environment is not supported, or you settled on a specific environment, switch out the adapter.
-			// See https://svelte.dev/docs/kit/adapters for more information about adapters.
-			adapter: adapter()
+			adapter: adapter(),
+			csp: {
+				mode: 'auto',
+				directives: {
+					'default-src': ['self'],
+					'script-src': ['self'],
+					'style-src': ['self', 'unsafe-inline'],
+					// Univer's icon font is embedded in its pinned core stylesheet.
+					// Keep data: limited to fonts; application fonts remain self-hosted.
+					'font-src': ['self', 'data:'],
+					'img-src': ['self', 'data:', 'blob:', 'https://*.convex.cloud'],
+					'connect-src': [
+						'self',
+						'https://*.convex.cloud',
+						'wss://*.convex.cloud',
+						'https://*.convex.site'
+					],
+					'worker-src': ['self', 'blob:'],
+					'object-src': ['none'],
+					'base-uri': ['none'],
+					'frame-ancestors': ['none'],
+					'form-action': ['self']
+				}
+			}
 		})
 	],
 

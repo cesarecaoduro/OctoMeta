@@ -29,7 +29,7 @@ import type {
 	NodeId,
 	TypedValue
 } from '../engine';
-import { buildDerivation } from '../engine';
+import { buildDerivation, format } from '../engine';
 
 /** The name of the TipTap inline node that renders value chips (chip-node.ts). */
 export const CHIP_NODE_NAME = 'valueChip';
@@ -60,14 +60,6 @@ export interface ChipDisplay {
 	label: string;
 	/** Deep-link target: the error's origin node (error state only). */
 	origin?: NodeId;
-}
-
-/** Kill binary float noise for display without touching the stored value. */
-function displayNumber(value: number, digits?: number): string {
-	if (digits !== undefined && Number.isFinite(digits)) {
-		return value.toFixed(Math.max(0, Math.min(20, Math.trunc(digits))));
-	}
-	return String(Number(value.toPrecision(13)));
 }
 
 /** The human name of a bound node: published name, cell address, or its id. */
@@ -103,7 +95,7 @@ export function chipDisplay(
 			};
 		case 'scalar':
 		case 'quantity': {
-			const text = displayNumber(v.value, binding.format?.digits);
+			const text = format(v, binding.format);
 			return { state: 'value', text, label: `${name}: ${text}` };
 		}
 		case 'string':

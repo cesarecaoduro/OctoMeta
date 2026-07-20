@@ -16,7 +16,6 @@
 
 import type {
 	Actor,
-	BlockId,
 	CellRef,
 	CommitResult,
 	DocumentGraph as DocumentGraphType,
@@ -27,25 +26,24 @@ import type {
 	MutationError,
 	NodeId,
 	Result,
+	SheetId,
 	TypedValue
 } from '../../engine';
 import {
 	DocumentGraph,
 	booleanValue,
-	collectRefs,
 	commit as engineCommit,
 	commitRedo as engineCommitRedo,
 	commitUndo as engineCommitUndo,
 	createBuiltinRegistry,
 	evaluateWithDerivations,
 	emptyProvenance,
-	isNameRef,
 	parseFormula,
 	scalar,
 	stringValue,
 	ulid
 } from '../../engine';
-import { cellRefFor, refersToCell, renameNameRefs, type ClassifiedEdit } from './cell-text';
+import { cellRefFor, refersToCell, type ClassifiedEdit } from './cell-text';
 
 // ---------------------------------------------------------------------------
 // Session
@@ -125,17 +123,22 @@ export function createGraphSession(opts: GraphSessionOptions = {}): GraphSession
 }
 
 /**
- * Make sure a sheet block exists in the graph (idempotent). Sheet adapters
- * call this on attach so hosted cell nodes always have a valid `blockId`.
+ * Make sure a workbook tab exists in the graph manifest (idempotent).
+ * Workbook tabs are document state, never report blocks.
  */
-export function ensureSheetBlock(session: GraphSession, blockId: BlockId): void {
-	if (session.doc.blocks.has(blockId)) return;
-	session.commit({
-		op: 'blockOp',
-		action: 'add',
-		blockId,
-		block: { id: blockId, docId: session.docId, type: 'sheet' }
-	});
+export function ensureSheetBlock(session: GraphSession, sheetId: SheetId): void {
+	if (!session.doc.sheet(sheetId)) {
+		session.commit({
+			op: 'workbookOp',
+			action: 'add',
+			sheet: {
+				id: sheetId,
+				name: `Sheet ${session.doc.workbook.sheets.length + 1}`,
+				position: session.doc.workbook.sheets.length
+			},
+			activate: false
+		});
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -175,15 +178,17 @@ const FORMULA_KIND: GraphNode['kind'] = 'computed';
  */
 export function applyCellEdit(
 	session: GraphSession,
-	blockId: BlockId,
+	sheetId: SheetId,
 	a1: string,
 	edit: ClassifiedEdit
 ): CellEditOutcome {
-	const ref = cellRefFor(blockId, a1);
+	const ref = cellRefFor(sheetId, a1);
 	const existingId = session.doc.resolveRef(ref);
 	const existing = existingId !== undefined ? session.doc.nodes.get(existingId) : undefined;
 
 	switch (edit.kind) {
+		case 'invalid':
+			return rejected(edit.message);
 		case 'clear': {
 			if (existingId === undefined) return { kind: 'noop' };
 			const r = session.commit({ op: 'removeNode', id: existingId });
@@ -194,7 +199,7 @@ export function applyCellEdit(
 		case 'value':
 			return applyValueEdit(session, ref, existing, toTypedValue(edit.value));
 		case 'formula': {
-			const parsed = parseFormula(edit.text, { sheetBlockId: blockId });
+			const parsed = parseFormula(edit.text, { sheetId });
 			if (!parsed.ok) {
 				// Unparseable formula text: keep it visible as a string input.
 				return applyValueEdit(session, ref, existing, stringValue(edit.text));
@@ -204,7 +209,8 @@ export function applyCellEdit(
 	}
 }
 
-function toTypedValue(value: number | string | boolean): TypedValue {
+function toTypedValue(value: number | string | boolean | TypedValue): TypedValue {
+	if (typeof value === 'object') return value;
 	if (typeof value === 'number') return scalar(value);
 	if (typeof value === 'boolean') return booleanValue(value);
 	return stringValue(value);
@@ -234,7 +240,6 @@ function applyValueEdit(
 			node: {
 				id: nodeId,
 				kind: 'input',
-				blockId: ref.sheetBlockId,
 				cellRef: ref,
 				provenance: emptyProvenance()
 			}
@@ -263,7 +268,7 @@ function applyFormulaEdit(
 	// Fresh cell or kind change. The engine's cycle pre-check runs against
 	// resolved inputs, but a brand-new node's own-cell reference cannot resolve
 	// yet — catch the direct self-reference here, before any structural change.
-	if (refersToCell(ast, ref.sheetBlockId, ref.a1)) {
+	if (refersToCell(ast, ref.sheetId, ref.a1)) {
 		return rejected(`formula references its own cell ${ref.a1}`, '#CYCLE!');
 	}
 	if (existing) {
@@ -277,7 +282,6 @@ function applyFormulaEdit(
 			id: nodeId,
 			kind: FORMULA_KIND,
 			formula: ast,
-			blockId: ref.sheetBlockId,
 			cellRef: ref,
 			provenance: emptyProvenance()
 		}
@@ -304,12 +308,12 @@ export type NameOutcome = { ok: true; nodeId: NodeId } | { ok: false; message: s
  */
 export function publishCellName(
 	session: GraphSession,
-	blockId: BlockId,
+	sheetId: SheetId,
 	a1: string,
 	name: string,
 	seed?: TypedValue
 ): NameOutcome {
-	const ref = cellRefFor(blockId, a1);
+	const ref = cellRefFor(sheetId, a1);
 	if (session.doc.resolveRef(ref) === undefined) {
 		const created = applyValueEdit(session, ref, undefined, seed ?? scalar(0));
 		if (created.kind === 'rejected') return { ok: false, message: created.message };
@@ -323,12 +327,8 @@ export function publishCellName(
 }
 
 /**
- * Rename a published name with Excel semantics: dependents follow the rename.
- * Sequence (each step a separate `commit`, so undo replays them faithfully):
- * 1. publish the new name on the same cell,
- * 2. rewrite every dependent formula's `oldName` refs to `newName` via
- *    `setFormula`,
- * 3. remove the old NamedOutputNode (no dependents left, so no `#REF!`).
+ * Rename a published name in one engine mutation. The alias NodeId is stable,
+ * dependent formulas are rewritten atomically, and undo sees one user action.
  */
 export function renamePublishedName(
 	session: GraphSession,
@@ -339,31 +339,11 @@ export function renamePublishedName(
 	const oldId = doc.resolveRef({ name: oldName });
 	if (oldId === undefined) return { ok: false, message: `unknown name "${oldName}"` };
 	const oldNode = doc.nodes.get(oldId);
-	if (!oldNode || oldNode.kind !== 'namedOutput' || !oldNode.formula) {
+	if (!oldNode || oldNode.kind !== 'namedOutput') {
 		return { ok: false, message: `"${oldName}" is not a published name` };
 	}
-	const refs = collectRefs(oldNode.formula);
-	const cellRef = refs.find((r): r is CellRef => !isNameRef(r));
-	if (!cellRef) return { ok: false, message: `"${oldName}" does not alias a cell` };
-
-	const published = session.commit({ op: 'publishName', cellRef, name: newName });
-	if (!published.ok) return { ok: false, message: published.error.message };
-
-	for (const depId of doc.dependentsOf(oldId)) {
-		const dep = doc.nodes.get(depId);
-		if (!dep?.formula) continue;
-		const rewritten = renameNameRefs(dep.formula, oldName, newName);
-		const r = session.commit({ op: 'setFormula', id: depId, formula: rewritten });
-		if (!r.ok) return { ok: false, message: r.error.message };
-	}
-
-	const removed = session.commit({ op: 'removeNode', id: oldId });
-	if (!removed.ok) return { ok: false, message: removed.error.message };
-
-	const nodeId = doc.resolveRef({ name: newName });
-	return nodeId !== undefined
-		? { ok: true, nodeId }
-		: { ok: false, message: `rename lost "${newName}"` };
+	const renamed = session.commit({ op: 'renameName', nodeId: oldId, name: newName });
+	return renamed.ok ? { ok: true, nodeId: oldId } : { ok: false, message: renamed.error.message };
 }
 
 /**
@@ -385,18 +365,18 @@ export function unpublishName(session: GraphSession, name: string): NameOutcome 
 /** The graph node currently bound to a cell, via the graph's cellRef index. */
 export function nodeForCell(
 	session: GraphSession,
-	blockId: BlockId,
+	sheetId: SheetId,
 	a1: string
 ): GraphNode | undefined {
-	const id = session.doc.resolveRef(cellRefFor(blockId, a1));
+	const id = session.doc.resolveRef(cellRefFor(sheetId, a1));
 	return id !== undefined ? session.doc.nodes.get(id) : undefined;
 }
 
 /** Every graph node hosted by (bound to a cell of) the given sheet block. */
-export function nodesForSheet(session: GraphSession, blockId: BlockId): GraphNode[] {
+export function nodesForSheet(session: GraphSession, sheetId: SheetId): GraphNode[] {
 	const out: GraphNode[] = [];
 	for (const node of session.doc.nodes.values()) {
-		if (node.cellRef?.sheetBlockId === blockId) out.push(node);
+		if (node.cellRef?.sheetId === sheetId) out.push(node);
 	}
 	return out;
 }
