@@ -12,25 +12,33 @@ const GREY_3 = '#E4E4E1';
 const GREY_4 = '#F1F1EF';
 const PAPER = '#FAFAF9';
 const SURFACE = '#FFFFFF';
-const ACCENT = '#0B5FFF';
+const ACCENT = '#6C5CE7';
+const ACCENT_2 = '#2B2E83';
+const NAVY = '#0B1020';
 
 const FONT_DISPLAY = "'Inter Tight',Helvetica,Arial,sans-serif";
 const FONT_BODY = "Inter,Helvetica,Arial,sans-serif";
 const FONT_MONO = "'JetBrains Mono',SFMono-Regular,Consolas,monospace";
 
-// Same construction as static/favicon.svg and the compact Logo.svelte glyph
-// (the mark shown in the NavBar and footer below 24px), with static colors
-// in place of currentColor/var(--accent) for email-client compatibility.
-const MARK_SVG = `<svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="OctoMeta">
-<g stroke="${INK}" stroke-width="1.8" stroke-linecap="round">
-<path d="M 13.05 10.85 C 9.09 14.67, 6.5 18.5, 6.5 23.5"/>
-<path d="M 16.00 12.10 C 16.00 17.60, 16 22, 16 27"/>
-<path d="M 18.95 10.85 C 22.91 14.67, 25.5 18.5, 25.5 23.5"/>
-</g>
-<circle cx="16" cy="8" r="4.6" fill="${INK}"/>
-<circle cx="6.5" cy="23.5" r="2.1" fill="${INK}"/>
-<circle cx="16" cy="27" r="2.1" fill="${INK}"/>
-<circle cx="25.5" cy="23.5" r="2.1" fill="${ACCENT}"/>
+// Same construction as static/favicon.svg and the compact Logo.svelte
+// variant (the mark shown below 48px), with static colors in place of
+// CSS custom properties for email-client compatibility.
+const MARK_SVG = `<svg width="28" height="28" viewBox="0 0 1000 1000" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="OctoMeta">
+<defs>
+<linearGradient id="octoMailGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+<stop offset="0%" stop-color="${NAVY}"/>
+<stop offset="55%" stop-color="${ACCENT_2}"/>
+<stop offset="100%" stop-color="${ACCENT}"/>
+</linearGradient>
+</defs>
+<path d="M 500 115 C 365 115 285 215 285 335 C 285 420 325 475 355 515 C 315 560 270 600 200 610 C 125 620 90 680 105 745 C 120 815 190 850 250 820 C 300 795 325 745 315 695 C 350 670 390 645 425 620 C 450 650 470 685 470 730 L 470 785 C 420 800 390 845 400 900 C 410 960 470 995 525 975 C 575 955 600 900 580 850 C 565 815 535 795 510 785 L 510 730 C 510 685 530 650 555 620 C 590 645 630 670 665 695 C 655 745 680 795 730 820 C 790 850 860 815 875 745 C 890 680 855 620 780 610 C 710 600 665 560 625 515 C 655 475 695 420 695 335 C 695 215 615 115 500 115 Z" fill="url(#octoMailGrad)"/>
+<circle cx="210" cy="715" r="58" fill="${PAPER}"/>
+<circle cx="490" cy="885" r="58" fill="${PAPER}"/>
+<circle cx="770" cy="715" r="58" fill="${PAPER}"/>
+<path d="M 390 650 C 430 705 460 735 500 760 C 540 735 570 705 610 650" fill="none" stroke="${PAPER}" stroke-width="15" stroke-linecap="round" opacity="0.92"/>
+<circle cx="390" cy="650" r="18" fill="${ACCENT}" stroke="${PAPER}" stroke-width="9"/>
+<circle cx="500" cy="760" r="20" fill="${ACCENT}" stroke="${PAPER}" stroke-width="9"/>
+<circle cx="610" cy="650" r="18" fill="${ACCENT}" stroke="${PAPER}" stroke-width="9"/>
 </svg>`;
 
 function escapeHtml(value: string): string {
