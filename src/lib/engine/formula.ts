@@ -395,6 +395,65 @@ export function printFormula(ast: FormulaAST): string {
 }
 
 // ---------------------------------------------------------------------------
+// Range expansion (ranges are call-argument sugar: SUM(A1:A3) = SUM(A1,A2,A3))
+// ---------------------------------------------------------------------------
+
+/** A range's `a1` text (`A1:B2`) — keeps the guard below from swallowing
+ * plain cell refs out of the narrowed-else branch. */
+type RangeA1 = `${string}:${string}`;
+
+/** Narrow a ref payload to a cell range (`A1:B2`). */
+export function isRangeRef(ref: CellRef | { name: string }): ref is CellRef & { a1: RangeA1 } {
+	return !isNameRef(ref) && ref.a1.includes(':');
+}
+
+/** Ranges expand to at most this many cells (bounds inputs and the healing index). */
+export const MAX_RANGE_CELLS = 1024;
+
+const CORNER_RE = /^([A-Z]{1,3})(\d+)$/;
+
+function colIndex(letters: string): number {
+	let n = 0;
+	for (const ch of letters) n = n * 26 + (ch.charCodeAt(0) - 64);
+	return n;
+}
+
+function colLetters(index: number): string {
+	let out = '';
+	for (let n = index; n > 0; ) {
+		const rem = (n - 1) % 26;
+		out = String.fromCharCode(65 + rem) + out;
+		n = (n - 1 - rem) / 26;
+	}
+	return out;
+}
+
+/**
+ * Expand a range ref into its constituent cell refs, row-major, corners
+ * normalized (`B2:A1` covers the same rectangle as `A1:B2`). Malformed or
+ * oversized ranges yield an error *value* (SCHEMA.md §2), never a throw.
+ */
+export function expandRange(ref: CellRef): CellRef[] | ErrorValue {
+	const [start, end] = ref.a1.split(':');
+	const s = CORNER_RE.exec(start);
+	const e = CORNER_RE.exec(end ?? '');
+	if (!s || !e) return errorValue('#REF!', `malformed range ${ref.a1}`);
+	const [colLo, colHi] = [colIndex(s[1]), colIndex(e[1])].sort((a, b) => a - b);
+	const [rowLo, rowHi] = [Number(s[2]), Number(e[2])].sort((a, b) => a - b);
+	const count = (colHi - colLo + 1) * (rowHi - rowLo + 1);
+	if (count > MAX_RANGE_CELLS) {
+		return errorValue('#VALUE!', `range ${ref.a1} has ${count} cells (max ${MAX_RANGE_CELLS})`);
+	}
+	const cells: CellRef[] = [];
+	for (let row = rowLo; row <= rowHi; row++) {
+		for (let col = colLo; col <= colHi; col++) {
+			cells.push({ sheetBlockId: ref.sheetBlockId, a1: `${colLetters(col)}${row}` });
+		}
+	}
+	return cells;
+}
+
+// ---------------------------------------------------------------------------
 // Reference resolution (edges are derived — SCHEMA.md §3)
 // ---------------------------------------------------------------------------
 
@@ -414,15 +473,19 @@ export function resolveInputs(ast: FormulaAST, resolve: RefResolver): NodeId[] |
 			case 'lit':
 				return null;
 			case 'ref': {
-				const id = resolve(node.ref);
-				if (id === undefined) {
-					return isNameRef(node.ref)
-						? errorValue('#NAME?', `unknown name "${node.ref.name}"`)
-						: errorValue('#REF!', `unresolved cell ${node.ref.a1}`);
-				}
-				if (!seen.has(id)) {
-					seen.add(id);
-					inputs.push(id);
+				const refs = isRangeRef(node.ref) ? expandRange(node.ref) : [node.ref];
+				if (!Array.isArray(refs)) return refs;
+				for (const ref of refs) {
+					const id = resolve(ref);
+					if (id === undefined) {
+						return isNameRef(ref)
+							? errorValue('#NAME?', `unknown name "${ref.name}"`)
+							: errorValue('#REF!', `unresolved cell ${ref.a1}`);
+					}
+					if (!seen.has(id)) {
+						seen.add(id);
+						inputs.push(id);
+					}
 				}
 				return null;
 			}

@@ -216,7 +216,9 @@ describe('built-ins (V1-1-4)', () => {
 		});
 	});
 
-	it('SHOWSTEPS stays stubbed until V1-5-4', () => {
+	// V1-5-4: SHOWSTEPS derivations run through evaluate.ts (which needs the
+	// ref and graph access); direct registry dispatch stays a graceful error.
+	it('SHOWSTEPS on direct dispatch yields a graceful #VALUE!', () => {
 		expect(r.call('SHOWSTEPS', [scalar(1)], ctx)).toMatchObject({
 			kind: 'error',
 			code: '#VALUE!',

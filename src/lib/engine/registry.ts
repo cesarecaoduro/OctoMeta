@@ -346,8 +346,11 @@ export function createBuiltinRegistry(): FunctionRegistry {
 		returns: 'string',
 		pure: true,
 		origin: 'builtin',
-		// Un-stubbed in V1-5-4: renders the substituted derivation of `ref`.
-		impl: () => errorValue('#VALUE!', 'SHOWSTEPS is not available yet')
+		// V1-5-4: SHOWSTEPS is evaluated specially by evaluate.ts — it needs
+		// the reference argument and graph access, not the eager value. The
+		// signature stays registered so the adapter lists it into Univer; this
+		// impl is only reachable on direct dispatch, where no graph is in scope.
+		impl: () => errorValue('#VALUE!', 'SHOWSTEPS: derivation unavailable')
 	});
 	return r;
 }

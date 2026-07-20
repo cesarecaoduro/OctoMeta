@@ -49,12 +49,12 @@ Do not implement anything beyond this task's scope.
 
 | # | Name | Duration | User-visible checkpoint at exit |
 |---|---|---|---|
-| **V1-0** | De-risk spikes (Univer) | 1.5–2 wk | (internal) Univer-in-TipTap and custom functions proven; go/no-go recorded |
+| **V1-0** | De-risk spikes (Univer) | 1.5–2 wk | ✅ done · (internal) Univer-in-TipTap and custom functions proven; go/no-go recorded |
 | **V1-1** | Engine: values, units, formulas | 2 wk (starts during V1-0) | ✅ done · (internal) `5 kN * 2` → `10 kN`; `kN + m` → `#UNIT!`, all in tests. Units layer stays engine-only/dormant until V2 (decision 19 Jul 2026) |
 | **V1-2** | Engine: mutations + reactive recalc | 1.5 wk | ✅ done · (internal) Edit an input, dependents recompute in order; undo/redo; `#CYCLE!` |
-| **V1-3** | Univer adapter | 2 wk | Standalone sheet: graph-evaluated formulas, named ranges publish to the graph |
-| **V1-4** | Persistence | 1 wk (parallel with V1-3/V1-5) | Documents survive reload bit-for-bit; reproducibility test in CI |
-| **V1-5** | The document | 3 wk | **The prototype:** prose + images + sheets + chips + show-steps + provenance, all reactive |
+| **V1-3** | Univer adapter | 2 wk | ✅ done · Standalone sheet: graph-evaluated formulas, named ranges publish to the graph |
+| **V1-4** | Persistence | 1 wk (parallel with V1-3/V1-5) | ✅ done · Documents survive reload bit-for-bit; reproducibility test in CI |
+| **V1-5** | The document | 3 wk | ✅ done · **The prototype:** prose + images + sheets + chips + show-steps + provenance, all reactive |
 
 Engine work (V1-1/V1-2) overlaps the spikes; persistence overlaps the adapter and editor. Realistic wall-clock to the V1-5 checkpoint: **~8–9 weeks**.
 
@@ -148,6 +148,8 @@ Engine work (V1-1/V1-2) overlaps the spikes; persistence overlaps the adapter an
 - **Out:** No document canvas hosting (V1-5-2); a single standalone sheet page is fine here; no geometry functions; **no unit literals, unit rendering, or display-unit conversion in cells** (units surface in V2 · decision 19 Jul 2026; the engine layer already exists in V1-1-2).
 - **Acceptance:** Playwright: type `=5 * 2` → cell shows `10`; `=beam.span` in another sheet resolves; rename the named range → dependents update; a self-referencing formula shows `#CYCLE!`; a cell edit reaches the graph *only* through `applyMutation` (spy in a unit test of the adapter layer).
 
+> **Status: done (20 Jul 2026).** Shipped and tested (40 adapter unit tests, 9 Playwright). Recalc demotion is structural — formulas are stripped from the Univer model (`f: null`), the graph owns every AST. Conventions recorded in ARCHITECTURE.md "Adapter conventions (V1-3-1)". Spike routes deleted; `/sheet` is the standalone reference page.
+
 ---
 
 ## 7. V1-4 — Persistence (1 week, parallel with V1-3/V1-5)
@@ -156,6 +158,8 @@ Engine work (V1-1/V1-2) overlaps the spikes; persistence overlaps the adapter an
 - **In:** Convex tables `documents`, `graphNodes`, `blocks`, `sheetSnapshots`, `chipBindings`, `undoLog` (SCHEMA.md §10; `versions` is V2) behind a thin `src/lib/persistence/` interface so **no UI component imports `convex` directly**. Save: debounced full-node upsert on recalc settle (keep it simple; optimize when it hurts, V2-6), undo entries + `documents.undoCursor` written with the same debounce and pruned to the 200-entry cap. Load: rows → graph → verify hashes → restore the undo stack and cursor. Document create/list/rename/delete. **CI reproducibility test:** load each fixture doc, re-evaluate all from inputs, assert every `contentHash` matches stored, byte-for-byte (SCHEMA.md §5: "restart & run all is a no-op").
 - **Out:** No version snapshots; no auth; no conflict handling (single user); no offline mode.
 - **Acceptance:** Kill the tab mid-work, reload → identical values and hashes, and `undo()` after reload reverts the last pre-reload edit (redo tail preserved too); reproducibility test runs in CI on ≥2 fixture documents; grep shows zero `convex` imports outside `src/lib/persistence/` + `src/convex/`.
+
+> **Status: done (20 Jul 2026).** Shipped and tested; the reproducibility gate and the convex-import boundary both run in CI (`reproducibility.convex.test.ts`, `boundary.test.ts`). Θ→THETA codec, wipe-and-replace save, pure `hydrateGraph` load. Conventions in ARCHITECTURE.md "Persistence conventions (V1-4-1)"; fixtures exported for V1-5-6.
 
 ---
 
@@ -175,26 +179,38 @@ Engine work (V1-1/V1-2) overlaps the spikes; persistence overlaps the adapter an
 - **Out:** No sheet blocks yet (V1-5-2), no chips (V1-5-3), no equation blocks (V2), no sharing.
 - **Acceptance:** Playwright: author text/headings/images with markdown shortcuts, reorder, reload intact; undo spans block ops; Vitest: moving blocks never triggers recalc (spy).
 
+> **Status: done (20 Jul 2026).** Shipped and tested (24 editor unit tests, 4 Playwright). TipTap history disabled — engine undo is the one history; trailing paragraph is ephemeral until it gains content. Conventions in ARCHITECTURE.md "Editor conventions (V1-5-1/V1-5-2)".
+
 **V1-5-2 · Sheet blocks in the canvas** · *Size L · Deps: V1-5-1, V1-3-1*
 - **In:** Promote the V1-3-1 adapter into a canvas NodeView (V1-0-2 patterns): multiple sheet blocks per document, each with its own Univer snapshot (`sheetSnapshots`), all publishing into the one document graph; cross-sheet dotted-name references verified in-canvas; focus management between prose and grid; sheet edits and block ops share one undo history. Each sheet block is a full Univer instance (docs/v1-0-findings.md landmine 2): measure mount time + memory at N sheets and, if it hurts, lazy-mount only visible sheets (off-screen sheets render from their snapshot).
 - **Out:** No viewer blocks (V2).
 - **Acceptance:** Playwright: two sheets in one doc; sheet A publishes `beam.span`, sheet B consumes it; block move never changes values (SCHEMA.md §5); reload restores both snapshots and all graph state; mount time + memory at 2/4/8 sheet blocks measured and recorded in ARCHITECTURE.md with the mount strategy decision (eager vs lazy).
 
+> **Status: done (20 Jul 2026).** Shipped and tested (6 Playwright). Mount metrics at 2/4/8 sheets recorded in ARCHITECTURE.md → decision: **eager** (~3.4 s/sheet, flat; revisit thresholds documented). In-grid undo chords intercepted at window-capture and routed to engine undo (Univer's ShortcutService also binds window-capture).
+
 **V1-5-3 · Inline live value chips** · *Size L · Deps: V1-5-1, V1-3-1*
 - **In:** Inline TipTap node + `ChipBinding` (SCHEMA.md §8): insert-by-name picker (`@beam.span`), renders live value per `format` (plain numbers in V1; units V2), recompute flash per DESIGN.md §5 (accent → dim, 700 ms; reduced-motion honored), busy state during recalc, error chips show the code and **deep-link to `origin`** (click scrolls to the failing block/cell, SCHEMA.md §11). `rebindChip` through `applyMutation` only. Deleted node → chip shows `#REF!`. Labeled for screen readers (PRD §10).
 - **Acceptance:** Playwright: chip in prose updates on cell edit with flash; error chip navigates to root cause; chips survive copy/paste within the doc; Vitest: rebind through `applyMutation` only.
+
+> **Status: done (20 Jul 2026).** Shipped and tested (23 chip unit tests + 5 engine lifecycle tests, 5 Playwright). Chip lifecycle is a new `chipOp create/remove` mutation (SCHEMA.md §9 updated); conventions (undo ordering, busy-as-value, deep-link fallback, paste semantics) in ARCHITECTURE.md "Chip conventions (V1-5-3)".
 
 **V1-5-4 · Show-steps rendering** · *Size M · Deps: V1-1-4, V1-5-3*
 - **In:** For any computed node: substituted derivation from the stored AST via the V1-1-3 printer — formula with names, then values substituted (units in the substitution arrive with V2), then intermediate results, then final (PRD §4: 100% of computed nodes). Surfaces: chip expansion in-canvas and `SHOWSTEPS(ref)` (un-stub from V1-1-4) rendering as a block. Plain-text representation available (accessibility, PRD §10). Mono for all computational text (DESIGN.md §4).
 - **Acceptance:** Vitest: derivation corpus over the V1-5-6 fixture (every computed node yields well-formed steps); Playwright: expand chip → steps.
 
+> **Status: done (20 Jul 2026).** Engine half: `src/lib/engine/showsteps.ts` (derivation builder + plain-text renderer, 19 tests incl. the fixture corpus), `SHOWSTEPS(ref)` un-stubbed via `evaluateFormula` interception + optional `EvalEnv.nodeById`. UI half: value chips expand to an in-canvas steps panel; `=SHOWSTEPS(name)` cells settle to derivation text; evaluator wired in `createGraphSession` + `hydrateGraph` (4 Playwright scenarios incl. reload with zero hydration mismatches). Conventions in ARCHITECTURE.md "Show-steps conventions (V1-5-4)".
+
 **V1-5-5 · Provenance inspector (read-only)** · *Size S · Deps: V1-1-1, V1-5-3*
 - **In:** Side-panel on chip/cell/named-value select: name, kind, formula (canonical text), value, `authoredBy/At`, direct inputs and dependents as navigable links (provenance queries are the reviewability story, PRD §2 — this panel is why there is no node canvas). Read-only.
 - **Acceptance:** Playwright: select chip → inspector; walk inputs to a source input; walk dependents back down; template-authored fixture displays attribution.
 
+> **Status: done (20 Jul 2026).** Shipped and tested (16 view-model unit tests, 4 Playwright; template/agent attribution covered in Vitest against real-actor fixtures). Alt+click/Alt+Enter inspects a chip; graph-bound cell selection inspects, intent-gated so mount-time programmatic selections never open the panel. Conventions in ARCHITECTURE.md "Inspector conventions (V1-5-5)".
+
 **V1-5-6 · V1 checkpoint: the prototype demo** · *Size S · Deps: all V1-5, V1-4-1*
 - **In:** A scripted fixture document (also a CI fixture for V1-4-1's reproducibility test): a short beam calc authored as prose + image + two sheets + chips + show-steps. One Playwright scenario end-to-end: create doc → markdown prose → sheet with inputs/formulas and published names → chips in prose → edit a cell, chips flash and follow → cross-sheet reference → introduce and fix a `#CYCLE!` and a `#VALUE!` → expand a chip to show-steps → open the inspector and walk the dependency chain → reload, state intact → undo/redo across the whole session, including undoing a pre-reload edit after the reload.
 - **Acceptance:** The scenario passes in CI and takes < 3 minutes to demo live. This is the V1 exit gate.
+
+> **Status: done (20 Jul 2026) — V1 exit gate passed.** `buildDemoFixture` (simply-supported beam: `beam.moment = w * L^2 / 8`, deflection chain, cross-sheet `beam.util`, SHOWSTEPS cell) joined `FIXTURE_BUILDERS` and rides the reproducibility gate; `e2e/v1-demo.spec.ts` walks the full scenario end-to-end through the real UI in ~16 s (image block covered by app-editor.spec.ts instead; noted in the spec). Full suite: 504 Vitest + 33/33 Playwright. CI-workflow wiring (GitHub Actions + Convex secret) is a separate pending decision.
 
 ---
 

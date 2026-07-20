@@ -1,15 +1,15 @@
 <script lang="ts">
 	import Logo from './Logo.svelte';
-	import { useConvexClient } from 'convex-svelte';
-	import { api } from '../../convex/_generated/api';
+	import { useWaitlist } from '$lib/persistence';
 
 	/**
-	 * Waitlist signup. Submissions go to the Convex `waitlist.join` mutation,
-	 * which stores the signup and queues a confirmation email through the
-	 * Resend component. The client is configured in +layout.svelte.
+	 * Waitlist signup. Submissions go to the backend `waitlist.join` mutation
+	 * (via $lib/persistence), which stores the signup and queues a confirmation
+	 * email through the Resend component. The client is configured in
+	 * +layout.svelte via setupPersistence.
 	 */
 
-	const client = useConvexClient();
+	const waitlist = useWaitlist();
 
 	let email = $state('');
 	let name = $state('');
@@ -33,7 +33,7 @@
 		}
 		submitting = true;
 		try {
-			await client.mutation(api.waitlist.join, {
+			await waitlist.join({
 				email: email.trim(),
 				name: name.trim() || undefined,
 				role: role || undefined,

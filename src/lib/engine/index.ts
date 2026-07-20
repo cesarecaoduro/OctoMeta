@@ -13,4 +13,5 @@ export * from './topo';
 export * from './graph';
 export * from './mutations';
 export * from './evaluate';
+export * from './showsteps';
 export * from './recalc';

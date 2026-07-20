@@ -8,10 +8,14 @@
  * @module
  */
 
+import type * as chips from "../chips.js";
 import type * as crons from "../crons.js";
+import type * as documents from "../documents.js";
 import type * as emailTemplates from "../emailTemplates.js";
 import type * as emails from "../emails.js";
+import type * as files from "../files.js";
 import type * as http from "../http.js";
+import type * as sheets from "../sheets.js";
 import type * as waitlist from "../waitlist.js";
 
 import type {
@@ -21,10 +25,14 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  chips: typeof chips;
   crons: typeof crons;
+  documents: typeof documents;
   emailTemplates: typeof emailTemplates;
   emails: typeof emails;
+  files: typeof files;
   http: typeof http;
+  sheets: typeof sheets;
   waitlist: typeof waitlist;
 }>;
 

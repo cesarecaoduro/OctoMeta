@@ -1,14 +1,14 @@
 <script lang="ts">
 	import { PUBLIC_CONVEX_URL } from '$env/static/public';
-	import { setupConvex } from 'convex-svelte';
+	import { setupPersistence } from '$lib/persistence';
 	import '$lib/styles/tokens.css';
 	import '$lib/styles/base.css';
 
 	let { children } = $props();
 
-	// Registers the Convex client in Svelte context; pages consume it with
-	// useQuery/useConvexClient once backend functions exist (none yet).
-	setupConvex(PUBLIC_CONVEX_URL);
+	// Registers the backend client in Svelte context; components consume it
+	// through $lib/persistence helpers (never convex/convex-svelte directly).
+	setupPersistence(PUBLIC_CONVEX_URL);
 </script>
 
 {@render children()}

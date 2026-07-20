@@ -19,8 +19,53 @@ export default defineConfig({
 	],
 
 	test: {
-		// Engine tests are pure TypeScript with no DOM; adapters get their own path in V1-3.
-		include: ['src/lib/engine/**/*.test.ts'],
-		environment: 'node'
+		projects: [
+			{
+				// Engine tests are pure TypeScript with no DOM; adapters get their own path in V1-3.
+				test: {
+					name: 'engine',
+					include: ['src/lib/engine/**/*.test.ts'],
+					environment: 'node'
+				}
+			},
+			{
+				// Univer adapter tests (V1-3-1): pure mapping + graph-sync logic. The
+				// Univer runtime itself is exercised by Playwright, so plain node here.
+				test: {
+					name: 'adapters',
+					include: ['src/lib/adapters/**/*.test.ts'],
+					environment: 'node'
+				}
+			},
+			{
+				// Persistence unit tests (codec, serializer, saver, import boundary) — plain node.
+				test: {
+					name: 'persistence',
+					include: ['src/lib/persistence/**/*.test.ts'],
+					exclude: ['src/lib/persistence/**/*.convex.test.ts'],
+					environment: 'node'
+				}
+			},
+			{
+				// Editor tests (V1-5-1): pure-JSON block mapping + blockOp sync over a
+				// real DocumentGraph — no DOM, so plain node.
+				test: {
+					name: 'editor',
+					include: ['src/lib/editor/**/*.test.ts'],
+					environment: 'node'
+				}
+			},
+			{
+				// Convex function tests via convex-test — edge-runtime mirrors the
+				// Convex JS runtime (convex-test requirement); includes the V1-4-1
+				// reproducibility CI gate (IMPLEMENTATION_PLAN.md §11 rule 6).
+				test: {
+					name: 'convex',
+					include: ['src/lib/persistence/**/*.convex.test.ts'],
+					environment: 'edge-runtime',
+					server: { deps: { inline: ['convex-test'] } }
+				}
+			}
+		]
 	}
 });

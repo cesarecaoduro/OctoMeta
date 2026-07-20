@@ -12,7 +12,7 @@ import { contentHash } from './types';
 import type { GraphNode } from './node';
 import type { Block, ChipBinding } from './block';
 import type { FormulaAST } from './formula';
-import { isNameRef, printFormula } from './formula';
+import { expandRange, isNameRef, isRangeRef, printFormula } from './formula';
 import type { Actor, GraphMutation, UndoEntry } from './mutations';
 
 /** The undo log keeps at most this many entries, pruned oldest-first (SCHEMA.md §9). */
@@ -39,10 +39,17 @@ export function collectRefs(ast: FormulaAST): (CellRef | { name: string })[] {
 			case 'lit':
 				return;
 			case 'ref': {
-				const key = refKey(node.ref);
-				if (!seen.has(key)) {
-					seen.add(key);
-					out.push(node.ref);
+				// Ranges contribute their constituent cells (per-cell inputs and
+				// healing). Malformed/oversized ranges keep the raw ref: it can
+				// never resolve, so the node settles on the unresolved error.
+				const expanded = isRangeRef(node.ref) ? expandRange(node.ref) : [node.ref];
+				const refs = Array.isArray(expanded) ? expanded : [node.ref];
+				for (const ref of refs) {
+					const key = refKey(ref);
+					if (!seen.has(key)) {
+						seen.add(key);
+						out.push(ref);
+					}
 				}
 				return;
 			}

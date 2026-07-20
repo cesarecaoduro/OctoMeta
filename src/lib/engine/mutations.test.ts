@@ -178,6 +178,42 @@ describe('undo/redo round-trips (deep-equal incl. hashes and provenance)', () =>
 		expect(doc.chips.get('ch1')?.nodeId).toBe('b');
 	});
 
+	it('chipOp create and remove (V1-5-3 chip lifecycle)', () => {
+		const doc = new DocumentGraph();
+		addBlock(doc, 'blk-text');
+		addInput(doc, 'a', 'A1');
+		roundTrip(doc, {
+			op: 'chipOp',
+			action: 'create',
+			chipId: 'ch1',
+			chip: { blockId: 'blk-text', nodeId: 'a', format: { digits: 2 } }
+		});
+		expect(doc.chips.get('ch1')).toEqual({
+			id: 'ch1',
+			blockId: 'blk-text',
+			nodeId: 'a',
+			format: { digits: 2 }
+		});
+		roundTrip(doc, { op: 'chipOp', action: 'remove', chipId: 'ch1' });
+		expect(doc.chips.has('ch1')).toBe(false);
+	});
+
+	it('chipOp never touches values: AffectedSet is empty', () => {
+		const doc = new DocumentGraph();
+		addBlock(doc, 'blk-text');
+		addInput(doc, 'a', 'A1');
+		const created = must(
+			applyMutation(
+				doc,
+				{ op: 'chipOp', action: 'create', chipId: 'ch1', chip: { blockId: 'blk-text', nodeId: 'a' } },
+				HUMAN
+			)
+		);
+		expect(created).toEqual([]);
+		const removed = must(applyMutation(doc, { op: 'chipOp', action: 'remove', chipId: 'ch1' }, HUMAN));
+		expect(removed).toEqual([]);
+	});
+
 	it('blockOp add / move / update', () => {
 		const doc = new DocumentGraph();
 		addBlock(doc, 'b1');
@@ -404,6 +440,40 @@ describe('invalid mutations reject with zero partial writes', () => {
 		const doc = seeded();
 		rejects(doc, { op: 'publishName', cellRef: cell('Z9'), name: 'beam.span' });
 		rejects(doc, { op: 'publishName', cellRef: cell('A1'), name: '3bad.name' });
+	});
+
+	it('chipOp validation', () => {
+		const doc = seeded();
+		addBlock(doc, 'blk-text');
+		must(
+			applyMutation(
+				doc,
+				{ op: 'chipOp', action: 'create', chipId: 'ch1', chip: { blockId: 'blk-text', nodeId: 'a' } },
+				HUMAN
+			)
+		);
+		// create is strict: fresh id, existing node, existing block, payload required.
+		rejects(doc, {
+			op: 'chipOp',
+			action: 'create',
+			chipId: 'ch1',
+			chip: { blockId: 'blk-text', nodeId: 'a' }
+		});
+		rejects(doc, {
+			op: 'chipOp',
+			action: 'create',
+			chipId: 'ch2',
+			chip: { blockId: 'blk-text', nodeId: 'nope' }
+		});
+		rejects(doc, {
+			op: 'chipOp',
+			action: 'create',
+			chipId: 'ch2',
+			chip: { blockId: 'no-such-block', nodeId: 'a' }
+		});
+		rejects(doc, { op: 'chipOp', action: 'create', chipId: 'ch2' });
+		rejects(doc, { op: 'chipOp', action: 'create', chipId: '', chip: { blockId: 'blk-text', nodeId: 'a' } });
+		rejects(doc, { op: 'chipOp', action: 'remove', chipId: 'nope' });
 	});
 
 	it('blockOp validation', () => {

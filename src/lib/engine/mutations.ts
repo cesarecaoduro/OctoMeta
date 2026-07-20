@@ -49,10 +49,17 @@ export type Actor = { kind: 'human' | 'template' | 'agent'; id?: string };
  *   contentHash, provenance, pending) — §9's public ops cannot carry full
  *   prior state, and inverses are captured at apply time with exactly that.
  * - `restoreChip` is its chip-binding twin, used by `blockOp remove` inverses
- *   (rebindChip is strict and cannot re-create a dropped binding).
+ *   and by `chipOp remove` inverses (rebindChip is strict and cannot re-create
+ *   a dropped binding).
  *
  * Projections NEVER issue either op; `applyMutation` rejects them — they are
  * reachable only through `undo`/`redo` replaying recorded inverses.
+ *
+ * `chipOp` (V1-5-3) is the chip *lifecycle* op: `create` registers a new
+ * binding (chip id must be fresh; the bound node and hosting block must
+ * exist), `remove` drops one. Rebinding an existing chip stays `rebindChip`.
+ * Chips are projections, not nodes — chip ops never touch values, so their
+ * AffectedSet is always empty and recalc has nothing to do.
  *
  * `publishName.nodeId` is stamped into the recorded entry at apply time when
  * a namedOutput node is created, so `redo` re-creates the identical node id.
@@ -65,6 +72,13 @@ export type GraphMutation =
 	| { op: 'removeNode'; id: NodeId }
 	| { op: 'publishName'; cellRef: CellRef; name: string; nodeId?: NodeId }
 	| { op: 'rebindChip'; chipId: string; nodeId: NodeId }
+	| {
+			op: 'chipOp';
+			action: 'create' | 'remove';
+			chipId: string;
+			/** Required on `create`: the binding minus its id (id = `chipId`). */
+			chip?: Omit<ChipBinding, 'id'>;
+	  }
 	| {
 			op: 'blockOp';
 			action: 'add' | 'remove' | 'move' | 'update';
@@ -98,6 +112,7 @@ const PUBLIC_OPS: ReadonlySet<string> = new Set([
 	'removeNode',
 	'publishName',
 	'rebindChip',
+	'chipOp',
 	'blockOp'
 ]);
 
@@ -200,6 +215,8 @@ function applyInternal(
 			return applyPublishName(doc, m, actor, at);
 		case 'rebindChip':
 			return applyRebindChip(doc, m);
+		case 'chipOp':
+			return applyChipOp(doc, m);
 		case 'blockOp':
 			return applyBlockOp(doc, m, actor, at);
 		case 'restoreNode': {
@@ -416,8 +433,8 @@ function applyRebindChip(
 	doc: DocumentGraph,
 	m: Extract<GraphMutation, { op: 'rebindChip' }>
 ): ApplyResult {
-	// Strict: rebind never creates. Chip bindings arrive via `blockOp update`
-	// projections (V1-5-3) or direct doc.chips seeding in tests.
+	// Strict: rebind never creates. Chip bindings arrive via `chipOp create`
+	// (V1-5-3) or direct doc.chips seeding in tests.
 	const chip = doc.chips.get(m.chipId);
 	if (!chip) return fail(`rebindChip: unknown chip "${m.chipId}"`);
 	if (!doc.nodes.has(m.nodeId)) return fail(`rebindChip: unknown node "${m.nodeId}"`);
@@ -428,6 +445,50 @@ function applyRebindChip(
 		affected: [],
 		inverse: [{ op: 'rebindChip', chipId: m.chipId, nodeId: priorNodeId }]
 	});
+}
+
+/**
+ * Chip lifecycle (V1-5-3). `create` requires a fresh chip id, an existing
+ * bound node, and an existing hosting block; its inverse is `chipOp remove`.
+ * `remove` drops the binding; its inverse is the undo-internal `restoreChip`
+ * carrying the full prior binding. Chips are projections — AffectedSet is
+ * always empty (nothing to recalc).
+ */
+function applyChipOp(doc: DocumentGraph, m: Extract<GraphMutation, { op: 'chipOp' }>): ApplyResult {
+	if (typeof m.chipId !== 'string' || m.chipId === '') return fail('chipOp: chipId is required');
+	switch (m.action) {
+		case 'create': {
+			if (doc.chips.has(m.chipId)) return fail(`chipOp create: chip "${m.chipId}" already exists`);
+			const c = m.chip;
+			if (!c) return fail('chipOp create: a chip payload is required');
+			if (typeof c.blockId !== 'string' || !doc.blocks.has(c.blockId)) {
+				return fail(`chipOp create: unknown block "${String(c.blockId)}"`);
+			}
+			if (typeof c.nodeId !== 'string' || !doc.nodes.has(c.nodeId)) {
+				return fail(`chipOp create: unknown node "${String(c.nodeId)}"`);
+			}
+			const chip: ChipBinding = {
+				id: m.chipId,
+				blockId: c.blockId,
+				nodeId: c.nodeId,
+				...(c.format !== undefined ? { format: structuredClone(c.format) } : {})
+			};
+			doc.chips.set(chip.id, chip);
+			return ok({
+				affected: [],
+				inverse: [{ op: 'chipOp', action: 'remove', chipId: m.chipId }]
+			});
+		}
+		case 'remove': {
+			const chip = doc.chips.get(m.chipId);
+			if (!chip) return fail(`chipOp remove: unknown chip "${m.chipId}"`);
+			doc.chips.delete(m.chipId);
+			return ok({
+				affected: [],
+				inverse: [{ op: 'restoreChip', chip: structuredClone(chip) }]
+			});
+		}
+	}
 }
 
 /** Block fields `blockOp update` may never touch (order is owned by add/move/remove). */

@@ -187,7 +187,9 @@ type GraphMutation =
   | { op:'addNode';     node:Omit<GraphNode,'value'|'contentHash'|'inputs'> }
   | { op:'removeNode';  id:NodeId }
   | { op:'publishName'; cellRef:CellRef; name:string }
-  | { op:'rebindChip';  chipId:string; nodeId:NodeId }
+  | { op:'rebindChip';  chipId:string; nodeId:NodeId }   // strict update-only
+  | { op:'chipOp';      action:'create'|'remove';
+                        chipId:string; chip?:Omit<ChipBinding,'id'> }
   | { op:'blockOp';     action:'add'|'remove'|'move'|'update';
                         blockId:BlockId; block?:Partial<Block>; position?:number }
   ;
@@ -195,6 +197,8 @@ type Actor = { kind: 'human' | 'template' | 'agent'; id?: string };  // stamped 
 applyMutation(m: GraphMutation, actor: Actor): Result<AffectedSet, MutationError>
 ```
 Every call is validated (types, dims, cycles), recorded to the undo log, stamped with provenance, then recalc runs (§4). Humans, templates, and — later — agents are all just `actor`s. **No projection may write around this API.**
+
+`chipOp` (added V1-5-3, 20 Jul 2026) is the chip lifecycle: `create` requires a fresh `chipId` plus existing node and block (inverse: `chipOp remove`); `remove`'s inverse is the undo-internal `restoreChip`. `rebindChip` stays strict update-only. Chips are projections, so `chipOp`'s AffectedSet is always `[]` — nothing recalcs.
 
 ```ts
 interface UndoEntry {

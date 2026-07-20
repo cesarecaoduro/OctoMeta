@@ -33,6 +33,9 @@ importers:
         specifier: ^0.14.0
         version: 0.14.0(@sveltejs/kit@2.69.3(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.6)(vite@8.1.5(@types/node@26.1.1)(esbuild@0.27.0)))(svelte@5.56.6)(typescript@6.0.3)(vite@8.1.5(@types/node@26.1.1)(esbuild@0.27.0)))(convex@1.42.3(react@19.2.7))(svelte@5.56.6)
     devDependencies:
+      '@edge-runtime/vm':
+        specifier: 5.0.0
+        version: 5.0.0
       '@playwright/test':
         specifier: 1.61.1
         version: 1.61.1
@@ -45,6 +48,9 @@ importers:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^7.1.2
         version: 7.2.0(svelte@5.56.6)(vite@8.1.5(@types/node@26.1.1)(esbuild@0.27.0))
+      convex-test:
+        specifier: 0.0.54
+        version: 0.0.54(convex@1.42.3(react@19.2.7))
       svelte:
         specifier: ^5.56.1
         version: 5.56.6
@@ -59,7 +65,7 @@ importers:
         version: 8.1.5(@types/node@26.1.1)(esbuild@0.27.0)
       vitest:
         specifier: 4.1.10
-        version: 4.1.10(@types/node@26.1.1)(vite@8.1.5(@types/node@26.1.1)(esbuild@0.27.0))
+        version: 4.1.10(@edge-runtime/vm@5.0.0)(@types/node@26.1.1)(vite@8.1.5(@types/node@26.1.1)(esbuild@0.27.0))
 
 packages:
 
@@ -87,6 +93,14 @@ packages:
     peerDependencies:
       convex: ^1.36.1
       convex-helpers: ^0.1.94
+
+  '@edge-runtime/primitives@6.0.0':
+    resolution: {integrity: sha512-FqoxaBT+prPBHBwE1WXS1ocnu/VLTQyZ6NMUBAdbP7N2hsFTTxMC/jMu2D/8GAlMQfxeuppcPuCUk/HO3fpIvA==}
+    engines: {node: '>=18'}
+
+  '@edge-runtime/vm@5.0.0':
+    resolution: {integrity: sha512-NKBGBSIKUG584qrS1tyxVpX/AKJKQw5HgjYEnPLC0QsTw79JrGn+qUr8CXFb955Iy7GUdiiUv1rJ6JBGvaKb6w==}
+    engines: {node: '>=18'}
 
   '@emnapi/core@1.11.1':
     resolution: {integrity: sha512-RSvbQmHzdKzNsLYa/wHrbc3KN4sYLKAdPZxqiM2HATqv/SBk2/ENSHpvXGaLOMcsAyz0poEGqkmmKYG3OWiJEQ==}
@@ -1636,6 +1650,11 @@ packages:
       convex: ^1.30.0
       svelte: ^5.19.0
 
+  convex-test@0.0.54:
+    resolution: {integrity: sha512-C0v2SQcuxrELAJRNzE6fQ686XDPor7UFoC22jcoJXeCRqhLo8ZIMZ4jyUHoo1UdAL2enCb0AbiprCVpLDN8u9Q==}
+    peerDependencies:
+      convex: ^1.32.0
+
   convex@1.42.3:
     resolution: {integrity: sha512-7Tz/lH6UlZdiqzLPF/zrlH6Rlo/DOp836dL+GZkUMEQ2jaGGNnBIiIDcOOiEqtfSehuQ65r/rdNMnb4LupowaA==}
     engines: {node: '>=18.0.0', npm: '>=7.0.0'}
@@ -2393,6 +2412,12 @@ snapshots:
     dependencies:
       convex: 1.42.3(react@19.2.7)
       convex-helpers: 0.1.120(@standard-schema/spec@1.1.0)(convex@1.42.3(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
+
+  '@edge-runtime/primitives@6.0.0': {}
+
+  '@edge-runtime/vm@5.0.0':
+    dependencies:
+      '@edge-runtime/primitives': 6.0.0
 
   '@emnapi/core@1.11.1':
     dependencies:
@@ -4605,6 +4630,10 @@ snapshots:
       - '@sveltejs/kit'
       - zod
 
+  convex-test@0.0.54(convex@1.42.3(react@19.2.7)):
+    dependencies:
+      convex: 1.42.3(react@19.2.7)
+
   convex@1.42.3(react@19.2.7):
     dependencies:
       esbuild: 0.27.0
@@ -5180,7 +5209,7 @@ snapshots:
     optionalDependencies:
       vite: 8.1.5(@types/node@26.1.1)(esbuild@0.27.0)
 
-  vitest@4.1.10(@types/node@26.1.1)(vite@8.1.5(@types/node@26.1.1)(esbuild@0.27.0)):
+  vitest@4.1.10(@edge-runtime/vm@5.0.0)(@types/node@26.1.1)(vite@8.1.5(@types/node@26.1.1)(esbuild@0.27.0)):
     dependencies:
       '@vitest/expect': 4.1.10
       '@vitest/mocker': 4.1.10(vite@8.1.5(@types/node@26.1.1)(esbuild@0.27.0))
@@ -5203,6 +5232,7 @@ snapshots:
       vite: 8.1.5(@types/node@26.1.1)(esbuild@0.27.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
+      '@edge-runtime/vm': 5.0.0
       '@types/node': 26.1.1
     transitivePeerDependencies:
       - msw

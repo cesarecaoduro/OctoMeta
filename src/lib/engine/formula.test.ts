@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
 	type FormulaAST,
+	MAX_RANGE_CELLS,
+	expandRange,
 	parseFormula,
 	printFormula,
 	resolveInputs
@@ -147,8 +149,9 @@ describe('parse errors (V1-1-3)', () => {
 describe('resolveInputs — edges are derived (V1-1-3)', () => {
 	const nodes = new Map<string, NodeId>([
 		[`${SHEET}!A1`, 'node-a1'],
+		[`${SHEET}!A2`, 'node-a2'],
+		[`${SHEET}!B1`, 'node-b1'],
 		[`${SHEET}!B2`, 'node-b2'],
-		[`${SHEET}!A1:B2`, 'node-range'],
 		['beam.span', 'node-span']
 	]);
 	const resolver = (ref: CellRef | { name: string }): NodeId | undefined =>
@@ -162,11 +165,20 @@ describe('resolveInputs — edges are derived (V1-1-3)', () => {
 		]);
 	});
 
-	it('resolves ranges and call arguments', () => {
+	it('expands ranges into their constituent cells, row-major', () => {
 		expect(resolveInputs(parse('SUM(A1:B2, beam.span)'), resolver)).toEqual([
-			'node-range',
+			'node-a1',
+			'node-b1',
+			'node-a2',
+			'node-b2',
 			'node-span'
 		]);
+	});
+
+	it('a range with a missing constituent cell → #REF! naming that cell', () => {
+		const err = resolveInputs(parse('SUM(A1:A3)'), resolver);
+		expect(err).toMatchObject({ kind: 'error', code: '#REF!' });
+		if ('kind' in err) expect(err.message).toContain('A3');
 	});
 
 	it('a formula with no refs has no inputs', () => {
@@ -190,5 +202,50 @@ describe('resolveInputs — edges are derived (V1-1-3)', () => {
 			'node-a1',
 			'node-b2'
 		]);
+	});
+});
+
+describe('expandRange — ranges are call-argument sugar', () => {
+	const a1s = (ref: { a1: string }): ReturnType<typeof expandRange> | string[] => {
+		const r = expandRange({ sheetBlockId: SHEET, ...ref });
+		return Array.isArray(r) ? r.map((c) => c.a1) : r;
+	};
+
+	it('expands a column range', () => {
+		expect(a1s({ a1: 'A1:A3' })).toEqual(['A1', 'A2', 'A3']);
+	});
+
+	it('expands a rectangle row-major', () => {
+		expect(a1s({ a1: 'A1:B2' })).toEqual(['A1', 'B1', 'A2', 'B2']);
+	});
+
+	it('normalizes reversed corners', () => {
+		expect(a1s({ a1: 'B2:A1' })).toEqual(['A1', 'B1', 'A2', 'B2']);
+	});
+
+	it('carries the sheet through to every cell', () => {
+		const cells = expandRange({ sheetBlockId: SHEET, a1: 'A1:A2' });
+		expect(cells).toEqual([
+			{ sheetBlockId: SHEET, a1: 'A1' },
+			{ sheetBlockId: SHEET, a1: 'A2' }
+		]);
+	});
+
+	it('crosses the Z→AA column boundary', () => {
+		expect(a1s({ a1: 'Z1:AB1' })).toEqual(['Z1', 'AA1', 'AB1']);
+	});
+
+	it(`caps expansion at ${MAX_RANGE_CELLS} cells with a #VALUE!`, () => {
+		expect(expandRange({ sheetBlockId: SHEET, a1: 'A1:A2000' })).toMatchObject({
+			kind: 'error',
+			code: '#VALUE!'
+		});
+	});
+
+	it('rejects malformed ranges with a #REF!', () => {
+		expect(expandRange({ sheetBlockId: SHEET, a1: 'A1:' })).toMatchObject({
+			kind: 'error',
+			code: '#REF!'
+		});
 	});
 });

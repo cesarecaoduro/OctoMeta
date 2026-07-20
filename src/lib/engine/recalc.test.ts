@@ -474,3 +474,48 @@ describe('undo/redo recompute', () => {
 		expect(bValues).toEqual([4, 20]);
 	});
 });
+
+describe('range formulas — SUM(A1:A3) and friends', () => {
+	it('a range call sums its constituent cells and recalcs reactively', () => {
+		const doc = new DocumentGraph();
+		addInput(doc, 'a1', 'A1', 10);
+		addInput(doc, 'a2', 'A2', 20);
+		addInput(doc, 'a3', 'A3', 30);
+		addComputed(doc, 'total', 'B1', '=SUM(A1:A3)');
+		expect(num(doc, 'total')).toBe(60);
+		expect(doc.nodes.get('total')?.inputs).toEqual(['a1', 'a2', 'a3']);
+
+		must(commit(doc, { op: 'setInput', id: 'a2', value: scalar(200) }, HUMAN, OPTS));
+		expect(num(doc, 'total')).toBe(240);
+	});
+
+	it('a range over a missing cell is #REF! until the cell heals it', () => {
+		const doc = new DocumentGraph();
+		addInput(doc, 'a1', 'A1', 1);
+		addInput(doc, 'a2', 'A2', 2);
+		addComputed(doc, 'total', 'B1', '=SUM(A1:A3)');
+		const before = doc.nodes.get('total')?.value;
+		expect(before).toMatchObject({ kind: 'error', code: '#REF!' });
+		if (before?.kind === 'error') expect(before.message).toContain('A3');
+
+		addInput(doc, 'a3', 'A3', 4);
+		expect(num(doc, 'total')).toBe(7);
+		expect(doc.nodes.get('total')?.inputs).toEqual(['a1', 'a2', 'a3']);
+	});
+
+	it('MIN/MAX/AVERAGE accept ranges alongside plain args', () => {
+		const doc = new DocumentGraph();
+		addInput(doc, 'a1', 'A1', 5);
+		addInput(doc, 'a2', 'A2', 9);
+		addComputed(doc, 'best', 'B1', '=MAX(A1:A2, 7)');
+		expect(num(doc, 'best')).toBe(9);
+	});
+
+	it('a range outside a function call is #VALUE!', () => {
+		const doc = new DocumentGraph();
+		addInput(doc, 'a1', 'A1', 1);
+		addInput(doc, 'a2', 'A2', 2);
+		addComputed(doc, 'bad', 'B1', '=A1:A2 + 1');
+		expect(doc.nodes.get('bad')?.value).toMatchObject({ kind: 'error', code: '#VALUE!' });
+	});
+});
