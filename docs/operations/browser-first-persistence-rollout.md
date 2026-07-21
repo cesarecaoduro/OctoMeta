@@ -67,6 +67,8 @@ As of 2026-07-21, the two Convex URL variables and the `CONVEX_DEPLOY_KEY`, `VER
 
 Convex deployment variables required by the current application are documented in `.env.example`. Verify names only before deployment.
 
+The production Convex deployment currently has only `RESEND_API_KEY` configured. Before deployment, configure `BETTER_AUTH_SECRET`, `SITE_URL`, `AUTH_TRUSTED_ORIGINS`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `RESEND_WEBHOOK_SECRET` with production-specific values. Keep `RESET_ENVIRONMENT` and `DEV_RESET_TOKEN` absent from production.
+
 ## Credential Rotation
 
 Rotate the development credentials exposed in prior diagnostic output before deploying the hotfix:
@@ -74,7 +76,7 @@ Rotate the development credentials exposed in prior diagnostic output before dep
 | Variable | Status |
 |---|---|
 | `BETTER_AUTH_SECRET` | Rotated directly in the development Convex deployment on 2026-07-21 |
-| `RESEND_API_KEY` | Pending coordinated provider rotation |
+| `RESEND_API_KEY` | Pending coordinated provider rotation; development and production currently reference the same provider token |
 | `RESEND_WEBHOOK_SECRET` | Pending coordinated provider rotation |
 | `DEV_RESET_TOKEN` | Not configured in the development Convex deployment; no active value to rotate |
 
@@ -122,5 +124,7 @@ Observe these invariants for 24 hours. Record timestamps, baseline/observed coun
 | 2026-07-21 | GitHub Production environment | Convex URLs/deploy key and Vercel project identifiers configured | Partial — dedicated `VERCEL_TOKEN` pending |
 | 2026-07-21 | Disposable non-production | Snapshot restore drill, product/storage count parity, and bounded cleanup execution | Pass — source snapshot contained zero product/auth rows and files |
 | 2026-07-21 | Development Convex | `BETTER_AUTH_SECRET` rotated without exposing its value | Pass |
+| 2026-07-21 | Development/Production Convex | Resend API key separation | Fail — both deployments reference the same token; provider-side replacement/revocation pending |
+| 2026-07-21 | Production Convex | Required application variable names present | Fail — only `RESEND_API_KEY` is configured |
 | 2026-07-21 | Production Convex | Function-call, database-I/O, and data-egress monthly warning/disable thresholds | Pass |
 | 2026-07-21 | Production Convex | Outstanding scheduled functions before hotfix deployment | Pass — zero outstanding runs; post-deploy observation pending |

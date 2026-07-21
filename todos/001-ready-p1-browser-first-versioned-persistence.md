@@ -186,6 +186,8 @@ Execute Option 1 on `feat/browser-first-versioned-persistence`. Treat the source
 
 - Convex emails team members when a production usage threshold is reached, and scheduled executions count toward the function-call metric.
 - Outstanding scheduled functions are not a separate configurable usage-limit metric, so their zero/cron-cadence invariant remains part of the dashboard observation gate.
+- Development and production currently reference the same Resend API token, and that token cannot manage API keys through the provider API; safe rotation requires the authenticated provider dashboard and revocation of the shared value.
+- Production Convex currently has only `RESEND_API_KEY`; the remaining production auth/site/webhook variable names must be configured before deployment.
 
 ## Notes
 
