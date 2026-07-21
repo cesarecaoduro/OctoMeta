@@ -10,11 +10,11 @@
 <nav class:scrolled>
 	<div class="wrap nav-inner">
 		<Lockup />
-		<ul class="nav-links">
-			<li class="hide-m"><a href="#graph">The graph</a></li>
-			<li class="hide-m"><a href="#geometry">Geometry</a></li>
-			<li class="hide-m"><a href="#deliverable">Deliverables</a></li>
-			<li><a href="#waitlist" class="btn btn-primary btn-sm">Join the waitlist</a></li>
+			<ul class="nav-links">
+				<li class="hide-m"><a href="#outcomes">Product</a></li>
+				<li class="hide-m"><a href="#graph">The graph</a></li>
+				<li class="hide-m"><a href="#trust">Engineering trust</a></li>
+				<li><a href="#waitlist" class="btn btn-primary btn-sm">Join the beta</a></li>
 		</ul>
 	</div>
 </nav>

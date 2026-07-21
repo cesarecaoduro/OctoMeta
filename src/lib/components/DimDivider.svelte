@@ -48,11 +48,16 @@
 		font-family: var(--font-mono);
 		font-size: 0.72rem;
 		letter-spacing: 0.12em;
-		color: var(--grey-2);
+		color: var(--grey-1);
 	}
 	/* the § number takes the accent: dimension lines are on the accent
 	   allowlist (DESIGN.md §3); the name tag stays grey */
 	.tag:first-child {
 		color: var(--accent);
+	}
+	@media (max-width: 600px) {
+		.dim-divider {
+			margin: var(--s4) 0 var(--s3);
+		}
 	}
 </style>

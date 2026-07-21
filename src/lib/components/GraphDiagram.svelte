@@ -16,6 +16,7 @@
 
 	onMount(() => {
 		if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+		if (typeof IntersectionObserver === 'undefined') return;
 		const io = new IntersectionObserver(
 			(entries) => entries.forEach((e) => e.isIntersecting && fire()),
 			{ threshold: 0.5 }
@@ -32,7 +33,16 @@
 	});
 </script>
 
-<div class="graphdiagram" class:inview bind:this={el}>
+<!-- Keyboard focus is intentional: this region scrolls horizontally on narrow screens. -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<div
+	class="graphdiagram"
+	class:inview
+	bind:this={el}
+	role="region"
+	tabindex="0"
+	aria-label="Scrollable dependency graph"
+>
 	<svg viewBox="0 0 960 190" role="img" aria-label="Prose, grid and 3D panels linked by dependency lines">
 		<rect class="gnode" x="20" y="55" width="230" height="80" rx="10" />
 		<rect class="gnode" x="365" y="55" width="230" height="80" rx="10" />
@@ -88,7 +98,7 @@
 	.gnode-sub {
 		font-family: var(--font-body);
 		font-size: 10.5px;
-		fill: var(--grey-2);
+		fill: var(--grey-1);
 	}
 	.gedge {
 		stroke: var(--grey-3);

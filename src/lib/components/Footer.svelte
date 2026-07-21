@@ -6,9 +6,9 @@
 	<div class="wrap foot">
 		<Lockup size={22} fontSize="0.95rem" />
 		<ul class="links">
-			<li><a href="#graph">Product</a></li>
-			<li><a href="#geometry">Geometry</a></li>
-			<li><a href="#waitlist">Docs (soon)</a></li>
+			<li><a href="#outcomes">Product</a></li>
+			<li><a href="#graph">The graph</a></li>
+			<li><a href="#trust">Engineering trust</a></li>
 			<li><a href="mailto:hello@octometa.app">Contact</a></li>
 		</ul>
 		<span class="fine">The living engineering document · © 2026 OctoMeta</span>
@@ -34,6 +34,9 @@
 		list-style: none;
 	}
 	.foot a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 44px;
 		font-size: 0.85rem;
 		color: var(--grey-1);
 		text-decoration: none;
@@ -44,6 +47,6 @@
 	.fine {
 		font-family: var(--font-mono);
 		font-size: 0.72rem;
-		color: var(--grey-2);
+		color: var(--grey-1);
 	}
 </style>
