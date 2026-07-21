@@ -117,14 +117,11 @@
 		drawDeps();
 		document.fonts?.ready.then(drawDeps);
 		addEventListener('resize', drawDeps);
-		const io =
-			typeof IntersectionObserver !== 'undefined'
-				? new IntersectionObserver(
-						(entries) => entries.forEach((e) => (onScreen = e.isIntersecting)),
-						{ threshold: 0.35 }
-					)
-				: null;
-		io?.observe(demoBody);
+		const io = new IntersectionObserver(
+			(entries) => entries.forEach((e) => (onScreen = e.isIntersecting)),
+			{ threshold: 0.35 }
+		);
+		io.observe(demoBody);
 		const loop = setInterval(() => {
 			if (!looping || !onScreen) return;
 			let v = b + 0.1 * loopDir;
@@ -139,21 +136,18 @@
 		}, 2600);
 		return () => {
 			removeEventListener('resize', drawDeps);
-			io?.disconnect();
+			io.disconnect();
 			clearInterval(loop);
 			clearTimeout(idleTimer);
 		};
 	});
 </script>
 
-<div class="demo-intro">
-	<div>
-		<span class="preview-label">Private beta preview</span>
-		<strong>Drag the footing width. Watch the document settle.</strong>
-	</div>
-	<p>One input recomputes the report, the checked value, and the 3D geometry.</p>
-</div>
-<div class="demo" aria-label="Interactive private beta preview">
+<div
+	class="demo"
+	id="demo"
+	aria-label="Live demo: edit footing.B and watch the bearing pressure, the report text, and the 3D footing recompute"
+>
 	<div class="demo-chrome">
 		<span class="dot"></span><span class="dot"></span><span class="dot"></span>
 		<span class="title">footing-check.octo · live document</span>
@@ -184,9 +178,9 @@
 			</div>
 			<div>
 				<span class="eyebrow blocklabel">Sheet · bearing</span>
-				<div class="sheet" bind:this={sheetEl}>
+				<div class="sheet" role="table" aria-label="Calculation sheet" bind:this={sheetEl}>
 					<div class="fbar"><span class="fx">fx</span><span>=col.load / footing.B²</span></div>
-					<table aria-label="Calculation sheet">
+					<table>
 						<tbody>
 							<tr bind:this={cellBRow}>
 								<td class="name">footing.B</td>
@@ -217,9 +211,7 @@
 					step="0.1"
 					value={b}
 					oninput={onInput}
-					name="footing-width"
 					aria-label="footing.B in metres"
-					aria-valuetext={`${b.toFixed(1)} metres`}
 				/>
 			</div>
 		</div>
@@ -262,35 +254,6 @@
 </div>
 
 <style>
-	.demo-intro {
-		display: flex;
-		justify-content: space-between;
-		align-items: end;
-		gap: var(--s4);
-		margin-top: var(--s5);
-		padding-top: var(--s3);
-		border-top: 1px solid var(--grey-3);
-	}
-	.demo-intro > div {
-		display: grid;
-		gap: var(--s1);
-	}
-	.preview-label {
-		color: var(--accent);
-		font: 500 0.68rem var(--font-mono);
-		letter-spacing: 0.1em;
-		text-transform: uppercase;
-	}
-	.demo-intro strong {
-		font-family: var(--font-display);
-		font-size: 1.25rem;
-	}
-	.demo-intro p {
-		max-width: 42ch;
-		color: var(--grey-1);
-		font-size: 0.88rem;
-		text-align: right;
-	}
 	.demo {
 		position: relative;
 		margin-top: var(--s4);
@@ -298,6 +261,7 @@
 		border-radius: var(--radius-panel);
 		background: var(--surface);
 		overflow: hidden;
+		box-shadow: 0 32px 80px -36px rgba(11, 11, 12, 0.18);
 	}
 	.demo-chrome {
 		display: flex;
@@ -315,7 +279,7 @@
 	.demo-chrome .title {
 		font-family: var(--font-mono);
 		font-size: 0.72rem;
-		color: var(--grey-1);
+		color: var(--grey-2);
 		letter-spacing: 0.08em;
 	}
 	.demo-body {
@@ -368,7 +332,7 @@
 		color: var(--grey-1);
 	}
 	.fbar .fx {
-		color: var(--grey-1);
+		color: var(--grey-2);
 		font-style: italic;
 	}
 	.sheet table {
@@ -393,10 +357,9 @@
 		text-align: right;
 		font-weight: 500;
 		white-space: nowrap;
-		font-variant-numeric: tabular-nums;
 	}
 	.sheet td.unit {
-		color: var(--grey-1);
+		color: var(--grey-2);
 		font-family: var(--font-mono);
 		font-size: 0.74rem;
 		width: 1%;
@@ -417,17 +380,16 @@
 	.spanctl label {
 		font-family: var(--font-mono);
 		font-size: 0.72rem;
-		color: var(--grey-1);
+		color: var(--grey-2);
 		letter-spacing: 0.06em;
 	}
 	input[type='range'] {
 		-webkit-appearance: none;
 		appearance: none;
 		width: 100%;
-		height: 44px;
+		height: 22px;
 		background: transparent;
 		cursor: ew-resize;
-		touch-action: manipulation;
 	}
 	input[type='range']::-webkit-slider-runnable-track {
 		height: 1px;
@@ -439,16 +401,16 @@
 	}
 	input[type='range']::-webkit-slider-thumb {
 		-webkit-appearance: none;
-		width: 18px;
-		height: 18px;
-		margin-top: -8.5px;
+		width: 15px;
+		height: 15px;
+		margin-top: -7px;
 		border-radius: 50%;
 		background: var(--paper);
 		border: 2px solid var(--accent);
 	}
 	input[type='range']::-moz-range-thumb {
-		width: 18px;
-		height: 18px;
+		width: 12px;
+		height: 12px;
 		border-radius: 50%;
 		background: var(--paper);
 		border: 2px solid var(--accent);
@@ -516,12 +478,6 @@
 	}
 
 	@media (max-width: 900px) {
-		.demo-intro {
-			align-items: start;
-			flex-direction: column;
-			gap: var(--s1);
-		}
-		.demo-intro p { text-align: left; }
 		.demo-body {
 			grid-template-columns: minmax(0, 1fr);
 		}
@@ -530,11 +486,7 @@
 			border-bottom: 1px solid var(--grey-3);
 		}
 		.viewer {
-			min-height: 176px;
+			min-height: 210px;
 		}
-	}
-	@media (max-width: 600px) {
-		.demo-intro { margin-top: var(--s4); }
-		.demo-left, .demo-right { padding: var(--s2); }
 	}
 </style>

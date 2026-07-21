@@ -23,7 +23,7 @@ export default defineConfig({
 		{
 			name: 'desktop',
 			dependencies: ['setup'],
-			testIgnore: [/auth\.setup\.ts/, /\.narrow\.spec\.ts/, /\.webkit\.spec\.ts/],
+			testIgnore: [/auth\.setup\.ts/, /\.narrow\.spec\.ts/],
 			use: { browserName: 'chromium', storageState: authFile, viewport: { width: 1440, height: 900 } }
 		},
 		{
@@ -31,11 +31,6 @@ export default defineConfig({
 			dependencies: ['setup'],
 			testMatch: /\.narrow\.spec\.ts/,
 			use: { browserName: 'chromium', storageState: authFile, viewport: { width: 390, height: 844 } }
-		},
-		{
-			name: 'landing-webkit',
-			testMatch: /landing\.webkit\.spec\.ts/,
-			use: { browserName: 'webkit', viewport: { width: 390, height: 844 } }
 		}
 	],
 	webServer: {
