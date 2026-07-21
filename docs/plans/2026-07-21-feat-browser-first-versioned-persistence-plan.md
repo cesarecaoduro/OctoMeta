@@ -2,7 +2,7 @@
 title: "feat: Browser-first, versioned document persistence"
 type: feat
 date: 2026-07-21
-status: proposed
+status: in_progress
 source: docs/brainstorms/2026-07-21-browser-first-versioned-persistence-brainstorm.md
 deepened: true
 deepened_on: 2026-07-21
@@ -33,7 +33,7 @@ Deepening the agreed brainstorm added the execution detail needed to implement a
 - Reconciliation compares an authored-state projection, excluding computed graph values/hashes and graph-projected workbook values that would otherwise produce false conflicts.
 - Version-to-asset references and staged uploads make immutable-history reachability indexed and failed uploads cleanable without scanning every block or undo entry.
 - The shared-device policy is resolved: explicit sign-out requires save/export/discard of unfinished work, then deletes that account's entire browser namespace before ending the session.
-- Viewer behavior is resolved: online/read-only, no IndexedDB document cache, no export/duplicate/branch/offline access, and authorized asset bytes rather than reusable Convex bearer URLs.
+- Viewer behavior is resolved: online/read-only, account-scoped list metadata only in IndexedDB, no locally persisted authored bundle/assets, no export/duplicate/branch/offline access, and authorized asset bytes rather than reusable Convex bearer URLs.
 - Migration is additive, resumable, per-document, and canaried. A converted document can no longer accept the legacy mutable save path; legacy rows remain read-only through the observation window.
 - Performance budgets, hostile-archive limits, local generation fencing, service-worker update behavior, deployment gates, and a complete browser/Convex/unit test matrix are specified below.
 
@@ -190,6 +190,7 @@ type WorkspaceId = 'main' | (string & { readonly __workspaceId: unique symbol })
 type AssetId = string & { readonly __assetId: unique symbol };
 type OperationId = string & { readonly __operationId: unique symbol };
 type Sha256 = string & { readonly __sha256: unique symbol };
+type VersionRef = { versionId: VersionId; versionNumber: number; hash: Sha256 };
 
 type AuthoredDocumentBundle = {
   schemaVersion: 1;
@@ -203,7 +204,24 @@ type AuthoredDocumentBundle = {
 
 type LocalDocumentBundle = {
   authored: AuthoredDocumentBundle;
-  undo: { entries: PersistedUndoEntry[]; cursor: number };
+  undo: PersistedWorkspaceHistory;
+};
+
+type PersistedWorkspaceHistory = {
+  epochs: Array<{
+    epochId: string;
+    entries: PersistedUndoEntry[];       // GraphMutation entries for this epoch
+    cursor: number;
+  }>;
+  boundaries: Array<{
+    beforeEpochId: string;
+    afterEpochId: string;
+    beforeSnapshotHash: Sha256;
+    afterSnapshotHash: Sha256;
+    beforeBase: VersionRef | null;
+    afterBase: VersionRef | null;
+  }>;
+  activeEpochId: string;
 };
 ```
 
@@ -212,7 +230,7 @@ Required structural guarantees:
 - `serializeAuthoredDocument` has no undo parameter and its return type has no undo fields.
 - `serializeLocalDocument` adds the undo contract explicitly.
 - `hydrateAuthoredDocument` always starts with an empty undo stack.
-- `hydrateLocalDocument` restores local undo and checks its cursor/sequence bounds.
+- `hydrateLocalDocument` restores the active graph-mutation epoch and validates every epoch, cursor, boundary, checkpoint, and base reference.
 - Title, graph authored fields, workbook manifest/snapshot, and referenced asset manifest all contribute to the authored bundle SHA-256.
 - `schemaVersion` belongs to authored content; IndexedDB database version and `.octometa` format version remain separate.
 - Existing `toConvexJson`/`fromConvexJson` remains a backend impedance codec. The portable format uses its own versioned JSON contract and does not expose `THETA` rewriting as a file-format rule.
@@ -290,10 +308,10 @@ Use database name `octometa-workspaces` and the following stores:
 
 | Store | Key | Indexes | Purpose |
 |---|---|---|---|
-| `profiles` | `accountId` | `by-last-seen` | Last authenticated local account marker and storage-prompt state. |
+| `profiles` | `accountId` | `by-last-seen` | Last authenticated local account marker, storage-prompt state, and durable `active`/`deleting` cleanup state. |
 | `cloudDocuments` | `[accountId, documentId]` | `by-account-updated`, `by-account-role` | Last-known metadata/role/head summary. Never authoritative for viewer offline access. |
 | `workspaces` | `[accountId, documentId, workspaceId]` | `by-account-updated`, `by-document` | Current local main/branch generation and undo. |
-| `baseSnapshots` | `[accountId, documentId, snapshotHash]` | `by-document` | Deduplicated immutable authored bases for reconciliation. |
+| `baseSnapshots` | `[accountId, documentId, snapshotHash]` | `by-document` | Deduplicated immutable authored bases and undo-transition checkpoints. |
 | `assets` | `[accountId, documentId, assetId]` | `by-document`, `by-document-content-hash` | Local blobs, hashes, MIME, size, and optional cloud mapping. Content-hash lookup is scoped to the account and document. |
 | `pendingOperations` | `[accountId, operationId]` | `by-workspace`, `by-created` | Immutable exact cloud-save inputs and generation payload retained until acknowledgement is committed locally. |
 
@@ -334,6 +352,8 @@ The workspace controller owns one `captureGeneration()` callback supplied by the
 
 Tests must cover queued cell and defined-name events plus a prose edit arriving during hash/write, proving the capture barrier makes the first generation coherent and the second is persisted afterward.
 
+The existing `DocumentGraph.undo()/redo()` remains synchronous and owns only `GraphMutation` entries inside the active epoch. Add an async workspace-history controller above it; route/editor undo and redo callbacks call that controller. It delegates within an epoch, but at an epoch edge it loads and verifies the referenced checkpoint from IndexedDB, atomically replaces graph/workbook/base state, hydrates the adjacent epoch into `DocumentGraph`, and advances the boundary cursor only after the swap commits locally. While a boundary loads, disable further mutations/undo; on read/hash/hydration failure leave graph and cursor unchanged. This avoids teaching `GraphMutation` how to resolve IndexedDB hashes and makes epoch-aware pruning an explicit workspace responsibility.
+
 ### Multi-Tab Coordination
 
 - Lock name: `octometa:<accountId>:<documentId>:<workspaceId>`.
@@ -353,7 +373,7 @@ Additional limits:
 - At most 100 referenced assets per authored document.
 - At most 100 MiB aggregate referenced asset bytes per document.
 - Authored JSON bundle at most 4 MiB; workbook snapshot at most 750 KiB.
-- Local undo at most 200 entries and 8 MiB encoded; prune the oldest complete entries and adjust the cursor when either cap is reached.
+- Local undo at most 200 entries and 8 MiB encoded. Transition checkpoints have a separate 64 MiB per-document cap. Prune the oldest complete undo epochs plus their unreferenced checkpoints and adjust the cursor when a cap is reached; always retain the active reconciliation base and current boundary.
 
 Before accepting a new blob, call `navigator.storage.estimate()` and require enough estimated room for the blob plus the next bundle write and a reserve of `max(50 MiB, 10% of quota)`. Estimates are advisory; still handle `QuotaExceededError` transactionally.
 
@@ -373,9 +393,9 @@ Conservatively retain local assets referenced by current content or undo. A firs
 
 1. Enumerate local-only, dirty, divergent, and branch workspaces for the authenticated account.
 2. If none exist, confirm and delete the namespace.
-3. Otherwise present each unfinished workspace and allow: Save to cloud (online owner only), Export, Discard local work, or Cancel sign-out.
+3. Otherwise present each unfinished workspace and allow: Publish/Save for a non-divergent main, Reconcile for a branch/divergent main (online owner only), Export, Discard local work, or Cancel sign-out.
 4. Offline mode offers Export, Discard, or Cancel.
-5. Before the first bounded deletion, mark the profile namespace `deleting`. After resolution, release locks, close DB handles, revoke object URLs, and delete cached summaries, workspaces, base snapshots, pending operations, assets, and finally the profile in resumable bounded transactions.
+5. Before the first bounded deletion, mark the profile namespace `deleting`. After resolution, release locks, close DB handles, revoke object URLs, cancel/clear any invitation handoff cookie, and delete cached summaries, workspaces, base snapshots, pending operations, assets, and finally the profile in resumable bounded transactions.
 6. Then call Better Auth sign-out and navigate to `/signin`.
 
 Verify the namespace is empty before Better Auth sign-out. If deletion fails, retain/resume the `deleting` marker and keep sign-out/account entry blocked. A different authenticated subject may never list, inspect, or export the prior subject's titles or documents; the only choices are reauthenticate as the prior subject or perform a blind confirmed deletion. Session expiry is different from explicit sign-out: keep persisting the already-bound local workspace, disable cloud operations, and require reauthentication as the same subject.
@@ -430,9 +450,9 @@ If the imported title collides, append a deterministic local display suffix such
 
 ### Additive Compatibility Schema
 
-The first schema deployment must remain compatible with existing rows and the existing browser build. Add target fields/tables without removing existing validators or indexes. Retain the legacy asset `docId` field and `by_doc` index throughout compatibility; populate both legacy and new relations during transition, switch every reader, backfill/verify, and remove the legacy field only in a later cleanup deployment.
+The first schema deployment must remain compatible with existing rows and the existing browser build. Add target fields/tables without removing existing validators or indexes. The shapes below are the post-backfill target; in the first compatibility validator, every newly added field on the existing `documents` and `assets` tables is optional, and absent `persistenceMode` means `legacy`. Retain the legacy asset `docId` field and `by_doc` index throughout compatibility; populate both legacy and new relations during transition, switch every reader, backfill/verify, and tighten/remove legacy fields only in a later cleanup deployment. Head fields remain optional permanently for atomic v1 creation.
 
-Expose a small authenticated `getPersistenceCapabilities` query. In production it reads a server-only global kill switch plus server-managed subject/document cohorts; the browser cannot self-enroll. Cache a granted owner capability locally only to permit that same subject's offline local workspace behavior. The row's `persistenceMode` is always authoritative: every compatibility client routes a versioned row through version reads/local workspaces even if exposure flags are off, while flags control only conversion eligibility and browser-first exposure for legacy/local-only documents. Every cloud function still checks document mode/role independently.
+Expose a small authenticated `getPersistenceCapabilities` query. In production it reads a server-only global kill switch plus owner canary cohort; explicit migration-job selection controls document conversion. The browser cannot self-enroll. Cache a granted owner capability locally only to permit that same subject's offline local workspace behavior. The row's `persistenceMode` is always authoritative: every compatibility client routes a versioned row through version reads/local workspaces even if exposure flags are off, while flags control only conversion eligibility and browser-first exposure for legacy/local-only documents. Every cloud function still checks document mode/role independently.
 
 Target shapes (Convex `_id` fields omitted):
 
@@ -443,11 +463,16 @@ documents: {
   title: string;                        // denormalized current-head title
   status: 'live' | 'trashed' | 'purging';
   persistenceMode: 'legacy' | 'versioned';
+  migrationState?: 'none' | 'draining' | 'converted';
   mainVersionId?: Id<'documentVersions'>; // optional permanently so v1 can be inserted atomically
   mainVersionNumber?: number;
   mainHash?: string;
   versionCount: number;
   versionBytes: number;
+  retainedAssetCount: number;
+  retainedAssetBytes: number;
+  recoveryCaptureCount: number;
+  recoveryCaptureBytes: number;
   stats: DocumentStats;
   createdAt: number;
   updatedAt: number;
@@ -528,11 +553,25 @@ documentInvitations: {
   tokenHash: string;
   role: 'viewer';
   status: 'pending' | 'accepted' | 'revoked';
+  deliveryStatus: 'pending' | 'sent' | 'failed';
+  sendAttempts: number;
+  lastSentAt?: number;
+  lastDeliveryError?: string;
   invitedBy: string;
   acceptedBy?: string;
   expiresAt: number;
   createdAt: number;
   updatedAt: number;
+};
+
+invitationHandoffs: {
+  invitationId: Id<'documentInvitations'>;
+  handoffHash: string;
+  invitationTokenHash: string;
+  status: 'pending' | 'used' | 'cancelled';
+  expiresAt: number;
+  createdAt: number;
+  usedAt?: number;
 };
 
 documentMigrationJobs: {
@@ -543,6 +582,9 @@ documentMigrationJobs: {
   cursor?: string;
   sourceRevision?: number;
   sourceHash?: string;
+  drainStartedAt?: number;
+  lastLegacyWriteAt?: number;
+  lastCompatibilityAckAt?: number;
   rowsProcessed: number;
   bytesProcessed: number;
   leaseUntil?: number;
@@ -554,13 +596,49 @@ documentMigrationJobs: {
 
 documentPurgeJobs: {
   documentRowId: Id<'documents'>;
-  stage: 'references' | 'chunks' | 'versions' | 'access' | 'assets' | 'verify';
+  stage: 'recovery' | 'references' | 'chunks' | 'versions' | 'access' | 'assets' | 'verify';
   cursor?: string;
   leaseUntil?: number;
   attempts: number;
   lastError?: string;
   startedAt: number;
   updatedAt: number;
+};
+
+accountStorageUsage: {
+  ownerId: string;
+  retainedAssetCount: number;
+  retainedAssetBytes: number;
+  updatedAt: number;
+};
+
+legacyRecoveryCaptures: {
+  captureId: string;
+  documentRowId: Id<'documents'>;
+  source: 'legacy-save' | 'legacy-rename';
+  authoredHash: string;
+  sourceLegacyRevision?: number;
+  state: 'ready' | 'imported' | 'discarded';
+  byteLength: number;
+  chunkCount: number;
+  expiresAt?: number;                   // set only after import/discard resolution
+  createdAt: number;
+  resolvedAt?: number;
+};
+
+legacyRecoveryChunks: {
+  captureId: Id<'legacyRecoveryCaptures'>;
+  index: number;
+  bytes: ArrayBuffer;
+  byteLength: number;
+  chunkHash: string;
+};
+
+legacyRecoveryAssets: {
+  captureId: Id<'legacyRecoveryCaptures'>;
+  storageId: Id<'_storage'>;
+  assetId?: string;
+  createdAt: number;
 };
 ```
 
@@ -578,6 +656,7 @@ Required indexes:
 | `snapshotChunks` | `by_version_index` | `versionId, index` |
 | `assets` | `by_doc` | `docId` (legacy compatibility) |
 | `assets` | `by_document_asset` | `documentRowId, assetId` |
+| `assets` | `by_document_state_asset` | `documentRowId, state, assetId` |
 | `assets` | `by_public_document_operation_asset` | `ownerId, publicDocumentId, uploadOperationId, assetId` |
 | `assets` | `by_document_operation_asset` | `documentRowId, uploadOperationId, assetId` |
 | `assets` | `by_owner_state` | `ownerId, state` |
@@ -592,10 +671,21 @@ Required indexes:
 | `documentInvitations` | `by_document_email` | `documentRowId, emailNormalized` |
 | `documentInvitations` | `by_token_hash` | `tokenHash` |
 | `documentInvitations` | `by_status_expiry` | `status, expiresAt` |
+| `invitationHandoffs` | `by_handoff_hash` | `handoffHash` |
+| `invitationHandoffs` | `by_invitation_status` | `invitationId, status` |
+| `invitationHandoffs` | `by_status_expiry` | `status, expiresAt` |
 | `documentMigrationJobs` | `by_document_operation` | `documentRowId, operationId` |
 | `documentMigrationJobs` | `by_status_updated` | `status, updatedAt` |
 | `documentPurgeJobs` | `by_document` | `documentRowId` |
 | `documentPurgeJobs` | `by_stage_updated` | `stage, updatedAt` |
+| `accountStorageUsage` | `by_owner` | `ownerId` |
+| `legacyRecoveryCaptures` | `by_capture_id` | `captureId` |
+| `legacyRecoveryCaptures` | `by_document_hash` | `documentRowId, authoredHash` |
+| `legacyRecoveryCaptures` | `by_document_state_created` | `documentRowId, state, createdAt` |
+| `legacyRecoveryCaptures` | `by_state_expiry` | `state, expiresAt` |
+| `legacyRecoveryChunks` | `by_capture_index` | `captureId, index` |
+| `legacyRecoveryAssets` | `by_capture` | `captureId` |
+| `legacyRecoveryAssets` | `by_storage` | `storageId` |
 
 Convex does not provide foreign keys or declarative unique constraints. Mutation code and tests enforce uniqueness by indexed `.unique()` reads inside serializable transactions.
 
@@ -613,7 +703,9 @@ Convex does not provide foreign keys or declarative unique constraints. Mutation
 - A cloud bundle cannot encode undo entries, undo cursor, selection, or local workspace state.
 - A staged asset may be temporarily keyed by owner/public document/operation before v1 exists. Every `available` asset has an internal `documentRowId` relation.
 - Within a document, one `assetId` is immutably bound to one `(contentHash, contentType, size)` tuple. Reusing it with different bytes/metadata fails closed. Every asset referenced by a retained version is `available`, belongs to that document, matches the immutable tuple, and has exactly one `(versionId, assetId)` reference.
+- Document/account retained-asset counters equal unique storage bytes still in `available` or `pendingDeletion` state. Promotion increments them only for a newly available unique asset; successful storage deletion decrements them. Version references do not double-count reused assets.
 - History/head/load queries return only active versions. Migration staging versions are invisible and can be deleted only by their migration job while they are non-head.
+- Legacy recovery captures are a migration-only quarantine, never main/history and never viewer-readable. They contain authored state with undo removed, are hash/chunk verified, protect referenced assets, and are bounded to 50 captures/256 MiB per document. A legacy endpoint returns its old success shape only after the capture commits; at the cap it fails rather than acknowledging uncaptured work.
 - No cleanup path deletes an asset referenced by any retained version.
 - A no-change save creates no version.
 - Viewer authorization is independently applied to document summary, head, history, version chunks, and asset bytes. Viewer write functions do not exist.
@@ -630,8 +722,10 @@ Retain the current server caps unless explicitly changed in a later product deci
 - 100 assets, 10 MiB each, 100 MiB aggregate referenced asset bytes.
 - 200 staged assets and 200 MiB staged bytes per owner across incomplete operations; staged uploads expire after 24 hours.
 - 200 immutable versions and 256 MiB authored version bytes per document.
+- 1,000 retained unique assets and 1 GiB retained asset bytes per document across all history.
+- 10,000 retained unique assets and 10 GiB retained asset bytes per owner across documents.
 
-The save mutation checks prospective `versionCount`/`versionBytes` before writing and returns `HISTORY_LIMIT` with current/max values. The UI offers Export and Duplicate current document; it never silently deletes history.
+The save mutation checks prospective version and retained-asset document/account counters before writing. It returns `HISTORY_LIMIT` or `ASSET_STORAGE_LIMIT` with current/max values. The UI offers Export and Duplicate current document; it never silently deletes history or assets reachable from history.
 
 ## Cloud Operations
 
@@ -647,7 +741,7 @@ A local-only document has a public app ID but no internal Convex document row. P
    - if a document exists for another owner or incompatible operation, fail without exposing its existence;
    - otherwise validate stable ID, bundle, limits, hashes, and every matching staged asset owned by the actor.
 5. Read at most 101 pre-document staged rows through `by_public_document_operation_asset`, reject an over-limit result, and validate the claimed manifest in memory; do not issue one database query per claimed asset.
-6. In one Convex transaction, insert the document header with optional head fields absent, insert active version 1/chunks/version-assets, bind and promote staged assets to the new internal document ID, and patch the complete head/title/stats/counters.
+6. Check prospective document/account retained-asset limits. In one Convex transaction, insert the document header with optional head fields absent, insert active version 1/chunks/version-assets, bind and promote staged assets to the new internal document row ID, update/create account usage, and patch the complete head/title/stats/version/asset counters.
 7. If any validation/write fails, no document/version becomes visible; staged uploads expire through bounded cleanup.
 
 This preserves the user's mental model: the cloud document does not exist until the first complete version commits. A lost response retries against the now-existing public ID and returns the original v1.
@@ -667,17 +761,17 @@ Persist the pending operation locally before network I/O:
    - canonicalizes and recomputes bundle hash/size and validates the entire authored contract;
    - returns `unchanged` if the content is already current;
    - checks expected head number/hash;
-   - reads at most 101 available document assets plus at most 101 assets staged for this operation through two bounded index ranges, rejects over-limit pages, builds maps, and validates the at-most-100 claimed manifest in memory rather than issuing one query per asset;
+   - reads at most 101 assets staged for this operation in one range, then resolves any remaining claimed asset IDs with at most 100 exact `by_document_asset` lookups; it validates state and immutable hash/type/size in memory without scanning every unique asset retained by older versions;
    - splits canonical bytes into 700 KiB chunks and computes chunk hashes;
    - inserts version, chunks, and version-asset rows;
-   - promotes referenced staged assets;
-   - patches title, main head/hash/number, stats, version counters, and `updatedAt` atomically.
+   - promotes referenced staged assets and increments document/account retained-asset counters only for new unique available mappings;
+   - patches title, main head/hash/number, stats, version/history/asset counters, account usage, and `updatedAt` atomically.
 7. The client uses the immutable pending bytes as the acknowledged base. In one local transaction, insert/deduplicate that authored base snapshot, patch public base version ID/number/hash, preserve the current live bundle when generation `G+1` exists, clear `workspace.pendingOperationId`, and delete the pending row. If generation is still `G`, it becomes cloud-clean; otherwise the newer generation remains dirty against saved base `G`.
 8. If the acknowledgement patch fails, retain the pending row and retry that local patch before starting another cloud operation. Clear it only after both the saved-`G` base snapshot and workspace metadata commit.
 
 If the response is lost, reload/retry the exact same immutable pending operation. It returns the committed version instead of creating another one. If asset upload succeeds but version commit fails, staged rows remain bounded cleanup candidates. For a no-change response, the client applies the current head as the base and clears the pending row locally; a retry is a fresh comparison because no cloud receipt exists.
 
-At the maximum fixture, save performs a constant set of auth/document/idempotency/head reads, two asset range reads capped at 101 rows each, and no table scan. Its worst write set is one version, at most six chunks, at most 100 version references, at most 100 staged-asset promotions, and one document patch (208 rows plus transaction metadata), well below the documented Convex row and 16 MiB transaction limits. Add an assertion/metric for actual read/write row counts so future schema changes cannot silently turn this into N+1 work.
+At the maximum fixture, save performs a constant set of auth/document/idempotency/head reads, one staged-asset range capped at 101 rows, at most 100 exact indexed available-asset lookups, and no table scan. Its worst write set is one version, at most six chunks, at most 100 version references, at most 100 staged-asset promotions, document plus account-usage patches (209 rows plus transaction metadata), well below the documented Convex row and 16 MiB transaction limits. Add assertions/metrics for actual bounded query/write counts so future schema changes cannot introduce an unbounded scan.
 
 Classify failures for UI/actionability: offline/transport, authentication expired, head advanced, validation/integrity, history/size limit, asset upload/validation, maintenance mode, and transient server failure.
 
@@ -729,6 +823,7 @@ Immutable history makes the current one-mutation `purgeDocument` unsafe. Replace
 ```text
 trashed past retention
 → status purging
+→ verify no unresolved legacy recovery capture; delete resolved capture rows/chunks in bounded pages
 → delete versionAssets and snapshotChunks in bounded pages
 → delete version headers and access/invitation rows
 → mark document assets pendingDeletion
@@ -739,7 +834,19 @@ trashed past retention
 
 Each cron invocation processes a bounded amount and waits for the next normal interval. No function infers progress solely because a page is full.
 
-Starting purge atomically sets `status='purging'` and creates the unique durable `documentPurgeJobs` row. Restore/cancel is permitted only before the first active version reference/chunk is deleted; that first deletion is the explicit irreversible point. Each invocation acquires/renews the short job lease, advances a persisted stage/cursor only after committed work, increments attempts, and records a sanitized error for retry. During all purge stages, generic asset cleanup excludes assets whose document is purging. The purge job alone marks assets `pendingDeletion`, and only after all version references/chunks/headers are gone; the document header and purge job are deleted last after zero-dependent-row verification.
+Starting purge atomically sets `status='purging'` and creates the unique durable `documentPurgeJobs` row only when no `ready` legacy recovery capture remains; otherwise extend retention and require owner import/discard. Restore/cancel is permitted only before the first active version reference/chunk is deleted; that first deletion is the explicit irreversible point. Each invocation acquires/renews the short job lease, advances a persisted stage/cursor only after committed work, increments attempts, and records a sanitized error for retry. During all purge stages, generic asset cleanup excludes assets whose document is purging. The purge job alone marks assets `pendingDeletion`, and only after all recovery/version references/chunks/headers are gone. It decrements document/account retained-asset counters only after each storage object is actually deleted; the document header, zeroed usage relation, and purge job are deleted last after zero-dependent-row verification.
+
+### Legacy Client Drain and Recovery Quarantine
+
+Deploy this compatibility protocol before converting any legacy document:
+
+1. A migration job first sets `migrationState='draining'` while `persistenceMode` remains `legacy`. Legacy save and rename operations still commit normally and update `lastLegacyWriteAt`; the compatibility client flushes its legacy saver/title path, creates/verifies the IndexedDB workspace, then records `lastCompatibilityAckAt` for the source revision/hash/title.
+2. Activation waits for a five-minute quiet interval after the last legacy write and rechecks the exact source revision/hash in its serial transaction. An in-flight legacy save either commits first and aborts activation through that recheck, or runs after activation and follows the recovery path below.
+3. Once `persistenceMode='versioned'`, a request to the old legacy save/upload/rename endpoints can never mutate normalized rows, denormalized head title, or main. For save, the compatibility backend strips undo/UI state and canonicalizes the authored legacy payload. Because the old save payload omits title, a late legacy rename instead loads/verifies the current active head, replaces only its authored title with the validated requested value, and builds a complete `legacy-rename` recovery capture. Both paths deduplicate by document/authored hash, store bounded verified chunks plus asset references, and only then return their legacy-shaped success response. A legacy image upload is marked recovery-staged and protected/counted under the same asset limits until its capture resolves.
+4. The next compatible owner client shows “Recovered changes from an older tab.” The owner can verify/import the capture as a fresh local branch with empty undo, Export it, or Discard it; it never auto-merges or advances main. Viewers and unrelated owners cannot read capture metadata or bytes.
+5. Keep unresolved captures and referenced assets through the 30-day compatibility window; expiry applies only after owner resolution or an explicitly documented longer recovery deadline. Decommission requires zero unresolved captures. This migration-only quarantine is the narrow exception to the normal “no cloud backup of unfinished branches” rule.
+
+This covers dirty/in-flight/offline legacy save and title paths without permitting stale state to overwrite immutable main. Separate old save and rename arrivals may yield separate recovery branches for explicit owner review; the backend never guesses how to merge them.
 
 ## Authorization and Viewer Invitations
 
@@ -761,14 +868,15 @@ The current password flow permits unverified email accounts, so an email string 
 
 1. Add Better Auth email-verification sending through the existing Resend component/templates. Existing users may still sign in, but accepting an invitation requires `emailVerified === true`.
 2. Owner submits a normalized email to an authenticated invitation action. The server resolves the owner from auth; the client cannot submit `principalId`, `ownerId`, or `grantedBy`.
-3. The action generates a cryptographically random token with at least 128 bits of entropy, stores only SHA-256(token), expiry (7 days), and normalized email, then sends the raw token in the acceptance URL. Return generic failures, apply per-IP/account/document rate limits, and never log the token or request path.
+3. The action generates a cryptographically random token with at least 128 bits of entropy, stores only SHA-256(token), expiry (7 days), normalized email, and `deliveryStatus='pending'`, then sends `/invitations/accept#token=<raw-token>` to a public content-free handoff route. The fragment is never sent in HTTP request URLs. On provider acceptance, patch `sent/lastSentAt`; on failure, patch `failed` plus a sanitized error and report no successful invite. A retry rotates the token, invalidates prior handoffs, and only a successful send starts the resend cooldown. Return generic failures, apply per-IP/account/document rate limits, and never log the token or mutation arguments containing it.
 4. Reinviting the same pending email rotates the token and expiry rather than creating multiple active invitations.
-5. The signed-in recipient opens `/app/invitations/[token]`; that page sets `Referrer-Policy: no-referrer`, loads no third-party resources, exchanges the token once, and immediately removes it from visible history with `history.replaceState`. The server checks token hash, pending state, expiry, verified current email equality, document live state, and that the recipient is not the owner.
-6. One transaction creates/returns the unique viewer ACL and marks the invitation accepted with the authenticated subject. Acceptance retry after response loss returns the same ACL without replaying the token into logs or a second grant.
-7. Access remains bound to the accepted subject if that account later changes email.
-8. Owner revocation deletes the ACL and revokes any pending invitation for that email. It blocks future metadata/version/asset reads; UI must not claim already displayed bytes can be clawed back.
+5. Before optional resource/telemetry work, the public route reads the fragment, removes it with `history.replaceState`, and POSTs it to a same-origin handoff endpoint. The endpoint validates the invitation generically, creates a 30-minute random opaque handoff whose hash is stored in `invitationHandoffs`, and sets the raw handoff only in a `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/invitations/complete` cookie. The page sets `Referrer-Policy: no-referrer`, loads no third-party resources, and never puts the invitation token in `localStorage`, `sessionStorage`, query parameters, or a request URL.
+6. If no session exists, send the user through password, magic-link, or OAuth sign-in with the fixed same-origin return `/invitations/complete`; if the account is unverified, send it through verification with the same return. Because the handoff is a first-party cookie, a same-browser email/OAuth tab can resume without propagating the raw invite token. Cancel clears the cookie and marks the handoff cancelled.
+7. A GET only renders the content-free completion screen; acceptance requires an explicit same-origin POST with Origin/CSRF validation. The completion endpoint consumes the pending handoff and cookie in one authenticated flow, rechecks invitation token generation, pending state, expiry, verified current email equality, document live state, and non-ownership, then creates/returns the unique viewer ACL and marks the invitation accepted. It clears the cookie on every terminal result. A same-subject completion retry after response loss returns that ACL without a second grant; any other replay gets the same generic invalid result as an unknown handoff.
+8. Access remains bound to the accepted subject if that account later changes email.
+9. Owner revocation deletes the ACL, revokes any pending invitation for that email, and cancels its outstanding handoffs. It blocks future metadata/version/asset reads; UI must not claim already displayed bytes can be clawed back.
 
-On accept/revoke, repurpose `expiresAt` as the record-retention deadline (`now + 30 days`). Delete expired pending invitations and accepted/revoked invitation records using `by_status_expiry` in bounded cron pages. Invitation email addresses and token hashes are not permanent document history.
+On accept/revoke, repurpose `expiresAt` as the record-retention deadline (`now + 30 days`). Delete expired pending invitations and accepted/revoked invitation records using `by_status_expiry` in bounded cron pages. Delete expired/used/cancelled handoffs in bounded pages. Invitation email addresses, token hashes, handoffs, and cookies are not permanent document history.
 
 Limit one document to 100 accepted viewers plus pending invitations. Enforce at least a 60-second resend cooldown for one document/email pair and return the existing pending invitation during the cooldown.
 
@@ -829,7 +937,7 @@ After choices:
 5. Persist the reviewed result as a new local generation before enabling commit.
 6. Commit with current reviewed main as CAS parent and a new operation ID.
 
-Undo/redo never crosses an authored-base transition with stale inverses. Before clean fast-forward or accepting a reviewed reconciliation result, persist the pre-transition workspace as an immutable local checkpoint and begin a new undo epoch whose first entry is an atomic `replace-authored-state(before, after)` transition. Undoing that entry restores the exact pre-transition authored state and moves the workspace back to its prior base/divergence classification; redoing reapplies the fast-forward/merge. Existing earlier entries remain attached to the prior epoch and become reachable only after undoing the boundary, so saving/reconciling does not discard history and no old inverse is applied to merged entities. `Keep branch` preserves its original undo epochs unchanged; successful cloud save changes sync metadata only and adds no boundary. Enforce the existing 200-entry/8 MiB cap by pruning whole oldest epochs/checkpoints together, never half a boundary.
+Undo/redo never crosses an authored-base transition with stale inverses. Before clean fast-forward or accepting a reviewed reconciliation result, persist the pre- and post-transition authored states as deduplicated immutable checkpoints and start a new graph-mutation epoch joined by a workspace boundary record referencing their hashes. The async workspace-history controller restores the exact pre-transition state/base classification on boundary undo and reapplies the fast-forward/merge on redo. Existing earlier entries remain attached to the prior epoch and become reachable only after crossing the boundary, so saving/reconciling does not discard history and no old inverse is applied to merged entities. `Keep branch` preserves its original history unchanged; successful cloud save changes sync metadata only and adds no boundary. Enforce the caps by pruning whole oldest epochs and their now-unreferenced checkpoints together, never half a boundary.
 
 If main advances during review, commit fails and the reviewed result remains local; start another reconciliation against the new head. Cancel never discards the branch/divergent main. Successful reconciliation does not automatically delete the branch; offer Keep branch or Discard branch after the main version is confirmed.
 
@@ -866,6 +974,7 @@ Requirements:
 - Search/sort run over the merged view. Stable document/workspace IDs key rows; never key by title/position.
 - Trash stays a cloud view and is unavailable offline. Local work related to a remotely trashed document remains separately visible as non-reconcilable with Export/Duplicate/Remove actions; Restore may relink it. A remotely purged lineage is a permanent orphan and never republishes under the old ID.
 - Viewer rows are never sourced from cached IndexedDB content while offline.
+- Follow `DESIGN.md` tokens and existing workbench density/type conventions; express access and durability with text plus icon/status semantics, never color alone.
 
 ### Workbench Header
 
@@ -938,8 +1047,9 @@ This is a separate hotfix release and must deploy before any browser-first work.
 - [ ] Split local/authored serialization as specified; keep a temporary legacy serializer for migration and old endpoints.
 - [ ] Add canonical UTF-8 bytes and async SHA-256 helpers using `crypto.subtle.digest` in browser and Convex runtime.
 - [ ] Add known SHA-256 vectors, canonical key-order fixtures, and cross-runtime byte/hash parity tests.
+- [ ] Add the shared browser/Convex-safe exact runtime validators used by cloud mutations and portable import; replace reliance on deep `unknown`/`v.any()` acceptance at the boundary.
 - [ ] Define authored comparison projection and fixtures before implementing reconciliation.
-- [ ] Update `src/lib/persistence/README.md`, `ARCHITECTURE.md`, and `SCHEMA.md` with ownership and invariants.
+- [ ] Document every public controller/repository/adapter method and update `src/lib/persistence/README.md`, `ARCHITECTURE.md`, and `SCHEMA.md` with ownership and invariants.
 
 **Gate:** Type system makes it impossible to pass a local bundle where a cloud/portable authored bundle is required; cloud/portable fixtures contain no undo keys; browser and Convex compute identical hashes.
 
@@ -956,13 +1066,15 @@ This is a separate hotfix release and must deploy before any browser-first work.
 - [ ] Add Web Locks/BroadcastChannel coordination and read-only second-tab/takeover UX.
 - [ ] Add sign-out resolution/namespace deletion before Better Auth sign-out.
 - [ ] Add the generic content-free owner app shell, `src/service-worker.ts`, offline-local auth mode, and service-worker/app/IndexedDB compatibility handshake now; Phase 6's offline-reload gate depends on them. Keep viewer offline behavior disabled.
+- [ ] Add and pass targeted Chromium, Firefox, and WebKit projects for IndexedDB, Web Locks/read-only fallback, files, service workers, update waiting, and offline reload before owner cutover.
 - [ ] Update the document list to show local-only documents and workspace state under the flag.
 
-**Gate:** Create/edit/image/undo/reload works with Convex product calls blocked; 100 edits plus undo/redo produce exactly zero Convex product calls; a failed IndexedDB write never replaces the prior generation or displays “Stored.”
+**Gate:** Create/edit/image/undo/reload works with Convex product calls blocked in targeted Chromium, Firefox, and WebKit coverage; 100 edits plus undo/redo produce exactly zero Convex product calls; a failed IndexedDB write never replaces the prior generation or displays “Stored.”
 
 ### Phase 3 — Portable Export/Import
 
 - [ ] Implement format-v1 manifest, streamed writer, file picker/download fallback, and member hashes.
+- [ ] Freeze a known format-v1 fixture proving `manifest.json` is excluded from its own member hash table and can be read across releases.
 - [ ] Implement complete hostile-import validation and all-or-nothing new-document commit.
 - [ ] Add owner workbench/list Export and Import actions with progress, cancellation before commit, and accessible error summaries.
 - [ ] Add missing-cloud-asset download before export and exact offline missing-asset feedback.
@@ -975,7 +1087,8 @@ This is a separate hotfix release and must deploy before any browser-first work.
 - [ ] Add optional compatibility fields and new versions/chunks/assets/references/access/invitation tables/indexes.
 - [ ] Split owner/viewer auth helpers and collapse external missing/unauthorized responses.
 - [ ] Implement stable document resolution and temporary old Convex-ID route resolution/redirect.
-- [ ] Implement authenticated server-derived rollout capabilities with a deployment-wide kill switch plus durable server-side owner/document cohort decisions; a build-wide public value cannot target canaries.
+- [ ] Update the compatibility client to resolve mode before load/save and always use version APIs/local workspaces for `versioned` rows. Deploy this path to every client before Phase 5 converts a row.
+- [ ] Implement authenticated server-derived rollout capabilities with a deployment-wide kill switch plus a server-only owner cohort; migration jobs explicitly select document canaries. A build-wide public value cannot target either safely.
 - [ ] Document the kill-switch/cohort configuration names in `.env.example` and operations docs without committing deployment values. Treat `persistenceMode='versioned'` as the authoritative runtime route regardless of exposure flags.
 - [ ] Implement metadata-only owned/shared lists.
 - [ ] Implement staged asset upload/finalization, authenticated byte loading, and bounded staged cleanup.
@@ -983,7 +1096,8 @@ This is a separate hotfix release and must deploy before any browser-first work.
 - [ ] Implement atomic/idempotent local-only publish v1 with pre-document staged assets.
 - [ ] Implement idempotent explicit save, no-change short circuit, CAS, history limits, chunk writes, and version-asset references.
 - [ ] Implement verified version load/history and owner restore-as-new-version.
-- [ ] Keep legacy functions available only for `persistenceMode='legacy'`; reject legacy save for converted rows.
+- [ ] Keep normal legacy functions available only for `persistenceMode='legacy'`; reject legacy main/normalized writes for converted rows.
+- [ ] Add the migration-only legacy save/upload/rename drain and recovery-quarantine response paths before conversion, including title recovery, chunk/asset protection, capture caps, owner-only listing/import/discard, and legacy-shaped acknowledgement only after durable capture.
 - [ ] Extend maintenance/reset counters and stages for every new table.
 
 **Gate:** Convex tests prove atomicity, idempotent lost-response retry, stale-head rejection, chunk/hash/asset integrity, no undo in cloud, immutable history, restore parent/source semantics, and owner/viewer isolation.
@@ -991,8 +1105,10 @@ This is a separate hotfix release and must deploy before any browser-first work.
 ### Phase 5 — Resumable Legacy Migration and Canary Cutover
 
 - [ ] Implement the indexed `documentMigrationJobs` contract with unique `(documentRowId, operationId)`, ownership, status/cursor/counts/bytes/error/timestamps, dry-run mode, lease/retry behavior, reset/maintenance coverage, and cleanup only after activation plus the observation window.
+- [ ] Run the draining/quiet-period/source-recheck protocol and require a compatible-client local-durability acknowledgement when a current owner session is available; rely on recovery quarantine, never overwrite, for old offline tabs that return later.
 - [ ] Assign each legacy row one stable app document ID idempotently; retain old `_id` resolution for bookmarks.
 - [ ] Hash legacy assets through resumable internal actions that process one storage object (maximum 10 MiB) at a time, then persist progress; never load a document's possible 100 MiB asset set into one 64 MiB Convex action. Map each current storage object to one stable asset ID.
+- [ ] Rebuild and verify per-document/account retained-asset counters during dry run and activation; abort a conversion that would exceed configured limits rather than silently dropping legacy assets.
 - [ ] Read/verify current legacy revision, graph rows, workbook snapshot/hash, bundle hash, and asset ownership.
 - [ ] Produce authored v1 without undo, translate storage IDs to asset IDs, canonicalize/chunk, and write a `state='staging'` version/chunks/references bound to the migration job. Normal history/load/head resolution filters to `active`.
 - [ ] Round-trip load/hydrate/recalculate the staging version and compare authored content with the verified legacy source.
@@ -1028,14 +1144,14 @@ This is a separate hotfix release and must deploy before any browser-first work.
 
 **Gate:** Base-current, base-stale/non-overlap, same-entity, delete/modify, prose, workbook, order, semantic-name collision, rebase-during-review, cancel, restore, and duplicate flows pass without history rewind or branch loss.
 
-### Phase 8 — Viewer Invitations, Read-Only UI, and Offline Shell
+### Phase 8 — Viewer Invitations, Read-Only UI, and Offline Exclusions
 
 - [ ] Add email-verification sending and verified invitation acceptance flow.
 - [ ] Add owner share/revoke UI and recipient acceptance route.
 - [ ] Add shared document-list rows with `VIEW ONLY`, Main vN, and online-only state.
 - [ ] Mount true read-only main/history sessions and authenticated in-memory assets.
 - [ ] Extend the Phase 2 owner shell with viewer-specific caching exclusions and update-ready coverage; do not defer owner offline support to this phase.
-- [ ] Add Chromium, Firefox, and WebKit Playwright projects for targeted persistence/offline flows; retain existing desktop/narrow suites.
+- [ ] Extend the existing cross-browser projects with viewer/invitation/revocation scenarios; retain existing desktop/narrow suites.
 
 **Gate:** viewer cannot call any mutation or persist/export authored content; revocation blocks future metadata/version/asset reads and reload/new sessions without claiming already displayed bytes disappear; viewer offline reload does not expose cached content; a service-worker update does not discard dirty local state.
 
@@ -1046,6 +1162,7 @@ This is a separate hotfix release and must deploy before any browser-first work.
 - [ ] Run bounded deletion of legacy graph/block/undo/chip/workbook rows only after every document is versioned and recovery is signed off.
 - [ ] Verify zero legacy rows, remove legacy reads/writes, then remove legacy schema fields/tables in a later deployment.
 - [ ] Replace old reachability cleanup with version-reference cleanup only.
+- [ ] Resolve or explicitly extend retention for every legacy recovery capture; legacy endpoint/quarantine removal requires zero unresolved captures and no legacy-client traffic during the observation gate.
 - [ ] Update `README.md`, `ARCHITECTURE.md`, `SCHEMA.md`, `IMPLEMENTATION_PLAN.md`, operational recovery docs, and user help for device/cloud/file meanings.
 - [ ] Compound solved migration/offline/reconciliation problems under `docs/solutions/`.
 
@@ -1078,13 +1195,16 @@ This is a separate hotfix release and must deploy before any browser-first work.
 - Save bundle validation, no undo fields, title inclusion, cryptographic hash, contiguous chunks, and atomic rollback.
 - No-change save and same-operation retry after simulated lost response.
 - Operation ID reuse with different input fails.
+- Operation-input hash changes for message, expected public head, source/duplicate provenance, branch base hash, bundle, schema, or asset manifest changes.
 - Stale head rejection leaves old head/version counts unchanged.
 - Edit-during-save client fencing keeps later local generation dirty.
 - Staged asset idempotency, forged/cross-document asset denial, version reachability, expiry, and cleanup retry.
+- Retained asset counters count unique storage once across versions, enforce document/account limits, and decrement only after successful purge storage deletion.
 - History ordering, read-only load, restore parent/source, and main monotonicity.
-- Invitation expiry/rotation/email verification/acceptance/idempotency/revocation, replay, response loss, mail-send failure, generic rate-limited errors, and absence of token/path/referrer logging.
+- Invitation expiry/rotation/email verification/acceptance/idempotency/revocation, handoff expiry/cancellation, replay, response loss, mail-send failure, generic rate-limited errors, and absence of token/path/referrer logging.
 - Bounded durable multi-stage permanent purge, lease/error retry, irreversible point, and asset protection after version references are removed.
 - Legacy dry run, staging invisibility, activation, asset hashing, stale-revision abort, retry, staging-only rollback, job cleanup, route alias, and source/target round-trip.
+- Legacy drain races: dirty old tab, in-flight save/rename serialized before or after activation, and offline old tab returning later. Save and title changes preserve authored recovery without modifying versioned main; capture limits never return false success.
 - Maintenance/reset table allowlist includes every new table.
 
 ### Browser Tests
@@ -1103,6 +1223,7 @@ This is a separate hotfix release and must deploy before any browser-first work.
 - Owner sign-out with clean/dirty/offline work, partial cleanup failure/resume, blind deletion, same-subject reauth, and no other account seeing prior namespace.
 - Remote trash disables reconcile but permits export/duplicate; remote purge creates a permanent orphan and save cannot recreate the lineage.
 - Viewer list/main/history read-only; mutation denial, metadata-only cache policy, no IndexedDB authored content, no export/duplicate, and offline failure. Revocation tests distinguish an already-open display from blocked new asset requests, reload, and new sessions.
+- Invitation handoff works for signed-out password, magic-link, and OAuth flows plus an unverified-recipient verification round trip; cancellation/reload and expired/revoked token/handoff paths clear the cookie without leaking the token.
 - Service-worker update while dirty and after local flush.
 - Existing narrow/mobile workbench behavior, keyboard shortcuts, focus, announcements, and axe scans.
 - Targeted Chromium, Firefox, and WebKit coverage for IDB, locks, files, service workers, and offline reload.
@@ -1119,7 +1240,7 @@ This is a separate hotfix release and must deploy before any browser-first work.
 - Version open: one authorized metadata/chunk operation for one version, no realtime full-bundle subscription.
 - Explicit save: one version mutation after only necessary asset uploads; no full asset/undo/table scan.
 - Maximum six snapshot chunk rows at the 4 MiB limit and 700 KiB target.
-- Maximum save reads include two asset ranges capped at 101 rows; maximum writes are 208 application rows at the largest supported bundle/asset manifest. Assert counts in tests/telemetry.
+- Maximum save asset validation is one staged range capped at 101 rows plus at most 100 exact indexed available-asset lookups; maximum writes are 209 application rows at the largest supported bundle/asset manifest. Assert counts in tests/telemetry.
 - Cleanup/migration calls are bounded and prove progress using cursor/state/count changes.
 - Log operation ID, version, byte/count/latency/result metadata only; never title, prose, formulas, workbook cells, archive contents, tokens, or asset bytes.
 
@@ -1141,7 +1262,7 @@ This is a separate hotfix release and must deploy before any browser-first work.
 - [ ] Full backup/export is downloaded, checksummed, access-controlled, and restore instructions tested in a non-production deployment.
 - [ ] Record baseline counts/bytes for documents by status/mode, legacy child tables, assets by state, versions/chunks/references/access/invitations, and scheduled functions.
 - [ ] Confirm new Convex schema is additive and old browser functions still work for legacy documents.
-- [ ] Confirm compatibility release refuses legacy save for a synthetic versioned document.
+- [ ] Confirm compatibility release refuses legacy main/normalized/title writes for a synthetic versioned document and durably quarantines valid old-client save and rename operations before returning their legacy success shapes.
 - [ ] Confirm the global kill switch defaults off, server-side cohorts can target a test owner/document, and a synthetic versioned row still resolves through version APIs when its exposure cohort is disabled.
 - [ ] Confirm usage alerts and migration stop control.
 
@@ -1175,6 +1296,7 @@ This is a separate hotfix release and must deploy before any browser-first work.
 - A converted document never falls back to stale normalized rows and never accepts legacy save.
 - Local browser edits remain in IndexedDB through server rollback; do not require destructive client cleanup.
 - If migration verification fails, stop the job, leave `persistenceMode='legacy'`, delete only unactivated staging rows by operation ID, fix forward, and rerun.
+- Old-client traffic after conversion never triggers rollback to legacy. Keep the recovery quarantine available through rollback/forward-fix and preserve every unresolved capture.
 - If a head version is valid but the new UI is faulty, disable new cloud writes, keep version reads/export available, and fix forward. Never rewrite the head or delete versions.
 
 ## Acceptance Criteria
@@ -1217,7 +1339,7 @@ This is a separate hotfix release and must deploy before any browser-first work.
 
 - [ ] Both cleanup non-progress loops are fixed and regression-tested before redesign rollout.
 - [ ] Every legacy document/asset converts idempotently with source revision/hash recheck and round-trip verification.
-- [ ] Converted documents reject legacy save and never read stale normalized rows.
+- [ ] Converted documents reject legacy main/normalized writes, never read stale normalized rows, and safely quarantine late old-client authored state for owner recovery.
 - [ ] Permanent deletion is staged, bounded, idempotent, and history/asset safe.
 - [ ] Backups, canary checks, metrics, stop controls, and compatibility rollback are documented and exercised.
 
