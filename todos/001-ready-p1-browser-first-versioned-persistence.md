@@ -101,6 +101,27 @@ Execute Option 1 on `feat/browser-first-versioned-persistence`. Treat the source
 - Phase 0 can be isolated as a small backend/test commit before persistence redesign work.
 - Asset cleanup needs a durable per-row inspection timestamp (or equivalent cursor), not only removal of immediate recursion.
 
+### 2026-07-21 - Phase 0 local containment
+
+**By:** Codex
+
+**Actions:**
+
+- Restricted document expiry to rows with numeric `deletedAt` values inside the expired range, removed immediate cleanup recursion, and returned actual deletions.
+- Added durable asset reachability inspection timestamps and ordered cleanup candidates by inspection age so reachable prefixes cannot starve unreachable tails.
+- Added regression coverage for 26 live documents and multi-run reachable-prefix/unreachable-tail cleanup.
+- Verified deployment variable names from `.env.example` and `.github/workflows/production.yml` without reading or recording secret values.
+- Passed 536 tests, `pnpm check`, `pnpm build`, `pnpm secret:scan`, the high-severity production audit gate, and `git diff --check`.
+
+**Remaining Phase 0 gate:**
+
+- Production backup/export, credential rotation, usage alerts, deployment, dashboard verification, and 24-hour observation require the production environment and remain unchecked.
+
+**Learnings:**
+
+- Optional Convex index fields require an explicit lower bound when `undefined` rows must be excluded.
+- Normal cron cadence plus a durable per-row marker provides bounded progress without scheduled-function recursion.
+
 ## Notes
 
 - The source plan is a living document; mark each completed implementation checkbox there.

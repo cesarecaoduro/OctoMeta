@@ -39,6 +39,7 @@ export const claimValidated = internalMutation({
 			state: 'claimed',
 			createdAt: now,
 			claimedAt: now,
+			lastReachabilityCheckedAt: now,
 			deleteAttempts: 0
 		});
 	}

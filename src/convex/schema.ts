@@ -143,6 +143,7 @@ export default defineSchema({
 		),
 		createdAt: v.number(),
 		claimedAt: v.optional(v.number()),
+		lastReachabilityCheckedAt: v.optional(v.number()),
 		pendingDeletionAt: v.optional(v.number()),
 		deleteAttempts: v.number(),
 		nextAttemptAt: v.optional(v.number()),
@@ -151,6 +152,7 @@ export default defineSchema({
 		.index('by_storage', ['storageId'])
 		.index('by_doc', ['docId'])
 		.index('by_state_next', ['state', 'nextAttemptAt'])
+		.index('by_state_reachability_checked', ['state', 'lastReachabilityCheckedAt'])
 		.index('by_state_created', ['state', 'createdAt']),
 	maintenance: defineTable({
 		key: v.string(),

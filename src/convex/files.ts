@@ -94,6 +94,8 @@ export const cleanupAssets = internalMutation({
 	handler: async (ctx) => {
 		await requireProductWritable(ctx);
 		const now = Date.now();
+		let deleted = 0;
+		let failed = 0;
 		const pending = await ctx.db
 			.query('assets')
 			.withIndex('by_state_next', (q) =>
@@ -104,7 +106,9 @@ export const cleanupAssets = internalMutation({
 			try {
 				await ctx.storage.delete(asset.storageId);
 				await ctx.db.delete(asset._id);
+				deleted += 1;
 			} catch (cause) {
+				failed += 1;
 				const attempts = asset.deleteAttempts + 1;
 				await ctx.db.patch(asset._id, {
 					deleteAttempts: attempts,
@@ -116,24 +120,28 @@ export const cleanupAssets = internalMutation({
 
 		const abandoned = await ctx.db
 			.query('assets')
-			.withIndex('by_state_created', (q) =>
-				q.eq('state', 'claimed').lt('createdAt', now - ABANDONED_AFTER_MS)
+			.withIndex('by_state_reachability_checked', (q) =>
+				q.eq('state', 'claimed').lt('lastReachabilityCheckedAt', now - ABANDONED_AFTER_MS)
 			)
 			.take(DELETE_BATCH);
+		let queued = 0;
 		for (const asset of abandoned) {
-			if (!asset.docId || !(await assetIsReachable(ctx, asset.docId, asset.storageId))) {
+			if (
+				asset.createdAt < now - ABANDONED_AFTER_MS &&
+				(!asset.docId || !(await assetIsReachable(ctx, asset.docId, asset.storageId)))
+			) {
 				await ctx.db.patch(asset._id, {
 					state: 'pendingDeletion',
 					pendingDeletionAt: now,
 					nextAttemptAt: now
 				});
+				queued += 1;
+			} else {
+				await ctx.db.patch(asset._id, { lastReachabilityCheckedAt: now });
 			}
 		}
 
-		if (pending.length === DELETE_BATCH || abandoned.length === DELETE_BATCH) {
-			await ctx.scheduler.runAfter(0, internal.files.cleanupAssets, {});
-		}
-		return { retried: pending.length, inspected: abandoned.length };
+		return { deleted, failed, inspected: abandoned.length, queued };
 	}
 });
 

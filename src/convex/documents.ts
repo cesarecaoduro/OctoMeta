@@ -1,6 +1,5 @@
 import { v } from 'convex/values';
 import { internalMutation, mutation, query } from './_generated/server';
-import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 import { blockFields, chipBindingFields, graphNodeFields, undoLogFields } from './schema';
@@ -235,17 +234,16 @@ export const purgeExpired = internalMutation({
 		const cutoff = Date.now() - RETENTION_MS;
 		const expired = await ctx.db
 			.query('documents')
-			.withIndex('by_deleted_at', (q) => q.lt('deletedAt', cutoff))
+			.withIndex('by_deleted_at', (q) => q.gte('deletedAt', 0).lt('deletedAt', cutoff))
 			.take(25);
+		let deleted = 0;
 		for (const document of expired) {
 			if (document.deletedAt !== undefined && document.deletedAt < cutoff) {
 				await purgeDocument(ctx, document._id);
+				deleted += 1;
 			}
 		}
-		if (expired.length === 25) {
-			await ctx.scheduler.runAfter(0, internal.documents.purgeExpired, {});
-		}
-		return expired.length;
+		return deleted;
 	}
 });
 

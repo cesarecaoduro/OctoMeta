@@ -1025,17 +1025,17 @@ Viewer pages are not cached for offline use. A viewer offline reload shows “Th
 
 This is a separate hotfix release and must deploy before any browser-first work.
 
-- [ ] In `src/convex/documents.ts`, restrict expired queries to explicit trashed rows. As the immediate compatible fix, use a lower/upper numeric bound on `deletedAt`; after `status` backfill, use `by_status_deleted_at` with `status='trashed'`.
-- [ ] Remove unbounded immediate self-recursion. Process a bounded page per normal cron invocation; any continuation must carry an explicit finite remaining budget and be based on actual deletions.
-- [ ] Return actual deleted count, not raw query length.
-- [ ] Extend `reproducibility.convex.test.ts` with at least 26 live documents and zero expired documents; assert zero deletion and no scheduled continuation.
-- [ ] In `src/convex/files.ts`, stop rescheduling reachable full pages and prevent pagination starvation. Persist `lastReachabilityCheckedAt` (or an equivalent durable cursor), index candidates by state/check time, and advance that check marker even when a reachable asset is retained so every candidate is eventually examined at normal cron cadence.
-- [ ] Add a reachable prefix followed by an unreachable tail regression across multiple cron runs, proving zero immediate recurrence and eventual tail cleanup.
+- [x] In `src/convex/documents.ts`, restrict expired queries to explicit trashed rows. As the immediate compatible fix, use a lower/upper numeric bound on `deletedAt`; after `status` backfill, use `by_status_deleted_at` with `status='trashed'`.
+- [x] Remove unbounded immediate self-recursion. Process a bounded page per normal cron invocation; any continuation must carry an explicit finite remaining budget and be based on actual deletions.
+- [x] Return actual deleted count, not raw query length.
+- [x] Extend `reproducibility.convex.test.ts` with at least 26 live documents and zero expired documents; assert zero deletion and no scheduled continuation.
+- [x] In `src/convex/files.ts`, stop rescheduling reachable full pages and prevent pagination starvation. Persist `lastReachabilityCheckedAt` (or an equivalent durable cursor), index candidates by state/check time, and advance that check marker even when a reachable asset is retained so every candidate is eventually examined at normal cron cadence.
+- [x] Add a reachable prefix followed by an unreachable tail regression across multiple cron runs, proving zero immediate recurrence and eventual tail cleanup.
 - [ ] Check the Convex schedules/logs dashboard after deploy and verify invocation/DB I/O return to the expected cron cadence.
 - [ ] Configure Convex usage alerts/limits for function calls, database bandwidth, file bandwidth, and outstanding scheduled functions.
 - [ ] Take a full Convex backup/export before schema or migration work.
 - [ ] Rotate every development credential that appeared in prior diagnostic output (Better Auth, Resend, webhook/reset secrets); never place values in docs, commits, logs, or the plan.
-- [ ] Run `pnpm secret:scan` and verify deployment variables by name only.
+- [x] Run `pnpm secret:scan` and verify deployment variables by name only.
 
 **Gate:** 24 hours with no non-progress cleanup recurrence; live documents and reachable assets remain intact; backup location/restore procedure recorded.
 

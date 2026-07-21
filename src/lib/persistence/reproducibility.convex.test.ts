@@ -1,6 +1,7 @@
 import { convexTest } from 'convex-test';
 import { describe, expect, it, vi } from 'vitest';
 import { api, internal } from '../../convex/_generated/api';
+import type { Id } from '../../convex/_generated/dataModel';
 import { validateResetAuthority } from '../../convex/maintenance';
 import schema from '../../convex/schema';
 import {
@@ -141,6 +142,19 @@ describe('owned document lifecycle', () => {
 		} finally {
 			vi.useRealTimers();
 		}
+	});
+
+	it('does not select or reschedule a full page of live documents', async () => {
+		const t = ownedBackend();
+		for (let index = 0; index < 26; index += 1) {
+			await t.mutation(api.documents.create, { title: `Live ${index + 1}` });
+		}
+
+		expect(await t.mutation(internal.documents.purgeExpired, {})).toBe(0);
+		expect(await t.query(api.documents.list, {})).toHaveLength(26);
+		expect(
+			await t.run(async (ctx) => await ctx.db.system.query('_scheduled_functions').collect())
+		).toEqual([]);
 	});
 });
 
@@ -326,6 +340,81 @@ describe('owned asset lifecycle', () => {
 			).toBeNull();
 			expect(await ctx.db.system.get('_storage', storageId)).toBeNull();
 		});
+	});
+
+	it('advances reachable pages so an unreachable tail is eventually deleted', async () => {
+		const now = Date.UTC(2026, 6, 21, 12);
+		vi.useFakeTimers();
+		vi.setSystemTime(now);
+		try {
+			const t = ownedBackend();
+			const docId = await t.mutation(api.documents.create, { title: 'Reachability cursor' });
+			const storageIds: Id<'_storage'>[] = [];
+			for (let index = 0; index < 51; index += 1) storageIds.push(await store(t));
+			const old = now - 2 * 60 * 60 * 1_000;
+			await t.run(async (ctx) => {
+				for (const [index, storageId] of storageIds.entries()) {
+					await ctx.db.insert('assets', {
+						storageId,
+						ownerId: OWNER_A.subject,
+						docId,
+						contentType: 'image/png',
+						size: 16,
+						state: 'claimed',
+						createdAt: old,
+						claimedAt: old,
+						lastReachabilityCheckedAt: old + index,
+						deleteAttempts: 0
+					});
+					if (index < 50) {
+						await ctx.db.insert('blocks', {
+							docId,
+							blockId: `reachable-${index}`,
+							type: 'image',
+							position: index,
+							image: { storageId: String(storageId) }
+						});
+					}
+				}
+			});
+
+			expect(await t.mutation(internal.files.cleanupAssets, {})).toEqual({
+				deleted: 0,
+				failed: 0,
+				inspected: 50,
+				queued: 0
+			});
+			expect(
+				await t.run(async (ctx) => await ctx.db.system.query('_scheduled_functions').collect())
+			).toEqual([]);
+
+			expect(await t.mutation(internal.files.cleanupAssets, {})).toEqual({
+				deleted: 0,
+				failed: 0,
+				inspected: 1,
+				queued: 1
+			});
+			await t.run(async (ctx) => {
+				const tail = await ctx.db
+					.query('assets')
+					.withIndex('by_storage', (query) => query.eq('storageId', storageIds[50]))
+					.unique();
+				expect(tail?.state).toBe('pendingDeletion');
+			});
+
+			expect(await t.mutation(internal.files.cleanupAssets, {})).toMatchObject({ deleted: 1 });
+			await t.run(async (ctx) => {
+				expect(
+					await ctx.db
+						.query('assets')
+						.withIndex('by_storage', (query) => query.eq('storageId', storageIds[50]))
+						.unique()
+				).toBeNull();
+				expect(await ctx.db.system.get('_storage', storageIds[50])).toBeNull();
+			});
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 });
 
