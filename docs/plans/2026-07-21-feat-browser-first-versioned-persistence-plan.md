@@ -1033,7 +1033,7 @@ This is a separate hotfix release and must deploy before any browser-first work.
 - [x] Add a reachable prefix followed by an unreachable tail regression across multiple cron runs, proving zero immediate recurrence and eventual tail cleanup.
 - [ ] Check the Convex schedules/logs dashboard after deploy and verify invocation/DB I/O return to the expected cron cadence.
 - [ ] Configure Convex usage alerts/limits for function calls, database bandwidth, file bandwidth, and outstanding scheduled functions.
-- [ ] Take a full Convex backup/export before schema or migration work.
+- [x] Take a full Convex backup/export before schema or migration work.
 - [ ] Rotate every development credential that appeared in prior diagnostic output (Better Auth, Resend, webhook/reset secrets); never place values in docs, commits, logs, or the plan.
 - [x] Run `pnpm secret:scan` and verify deployment variables by name only.
 

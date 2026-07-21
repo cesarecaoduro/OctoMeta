@@ -122,6 +122,27 @@ Execute Option 1 on `feat/browser-first-versioned-persistence`. Treat the source
 - Optional Convex index fields require an explicit lower bound when `undefined` rows must be excluded.
 - Normal cron cadence plus a durable per-row marker provides bounded progress without scheduled-function recursion.
 
+### 2026-07-21 - Phase 0 backup and operational evidence
+
+**By:** Codex
+
+**Actions:**
+
+- Created a full production Convex snapshot with file storage outside the repository.
+- Restricted the archive and checksum file to owner read/write access, verified the SHA-256 checksum, and passed ZIP integrity validation.
+- Added `docs/operations/browser-first-persistence-rollout.md` with the backup inventory, isolated restore procedure, credential names, alert checklist, deployment checks, and 24-hour observation evidence table.
+- Audited GitHub configuration by name only and confirmed the Production environment currently has none of the variables or secrets required by `.github/workflows/production.yml`.
+
+**Remaining Phase 0 gate:**
+
+- Provision an isolated disposable Convex deployment and pass the restore drill without overwriting the shared development deployment.
+- Configure the GitHub Production environment, rotate credentials, configure Convex alerts, deploy the hotfix, and observe it for 24 hours.
+
+**Learnings:**
+
+- The authenticated local Convex CLI can export production safely while remaining configured to use development by default.
+- Restore verification must use an isolated target because snapshot import with `--replace-all` is intentionally destructive.
+
 ## Notes
 
 - The source plan is a living document; mark each completed implementation checkbox there.
