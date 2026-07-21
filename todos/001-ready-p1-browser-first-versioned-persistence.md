@@ -143,6 +143,50 @@ Execute Option 1 on `feat/browser-first-versioned-persistence`. Treat the source
 - The authenticated local Convex CLI can export production safely while remaining configured to use development by default.
 - Restore verification must use an isolated target because snapshot import with `--replace-all` is intentionally destructive.
 
+### 2026-07-21 - Phase 0 restore drill
+
+**By:** Codex
+
+**Actions:**
+
+- Provisioned an isolated development deployment with a one-day expiration and deployed the Phase 0-compatible schema/functions.
+- Imported the full production snapshot with destructive replacement confined to that disposable target.
+- Compared every product-table and `_storage` count against production; all counts matched exactly.
+- Executed document and asset cleanup against the restored snapshot; both returned bounded zero-work results and created no cleanup continuation.
+- Restored `.env.local` to the original personal development deployment after the drill.
+
+**Remaining Phase 0 gate:**
+
+- Configure the GitHub Production environment, rotate credentials, configure Convex alerts, deploy the hotfix, and observe it for 24 hours.
+
+**Learnings:**
+
+- Production contained no product/auth rows or stored files at snapshot time, so count parity and function execution are the strongest available restore evidence; owner-document loading was not applicable.
+- An expiring isolated cloud development deployment provides a safer restore target than reusing the personal development database.
+
+### 2026-07-21 - Phase 0 release configuration and usage guardrails
+
+**By:** Codex
+
+**Actions:**
+
+- Configured GitHub Production environment variables for both Convex URLs and secrets for the Convex deploy key and Vercel project identifiers without exposing their values.
+- Created a production-scoped Convex deploy key for CI; left `VERCEL_TOKEN` unset rather than reusing a personal CLI credential.
+- Rotated `BETTER_AUTH_SECRET` directly in the development Convex deployment without printing or storing the replacement.
+- Configured monthly production warning/disable thresholds of 500,000/900,000 function calls, 1/2 GB database I/O, and 1/2 GB data egress.
+- Verified the production Schedules page had zero outstanding runs before hotfix deployment.
+
+**Remaining Phase 0 gate:**
+
+- Rotate the Resend API and webhook credentials at the provider and update Convex atomically.
+- Add a dedicated GitHub Production `VERCEL_TOKEN`.
+- Deploy the hotfix, verify dashboard cadence/I/O, and observe it for 24 hours.
+
+**Learnings:**
+
+- Convex emails team members when a production usage threshold is reached, and scheduled executions count toward the function-call metric.
+- Outstanding scheduled functions are not a separate configurable usage-limit metric, so their zero/cron-cadence invariant remains part of the dashboard observation gate.
+
 ## Notes
 
 - The source plan is a living document; mark each completed implementation checkbox there.

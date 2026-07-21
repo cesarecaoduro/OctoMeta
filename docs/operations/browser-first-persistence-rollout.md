@@ -14,7 +14,7 @@ The pre-schema production snapshot was created on 2026-07-21 with file storage i
 | Permissions | Owner read/write only (`0600`) |
 | Archive validation | `unzip -t` passed |
 | Included data | Convex tables, components, and `_storage` file content |
-| Restore drill | Pending an isolated disposable non-production deployment |
+| Restore drill | Passed in an isolated expiring development deployment on 2026-07-21 |
 
 The local archive is sensitive production data. Keep it outside the repository, do not upload it to general-purpose file sharing, and retain it only in an access-controlled backup location.
 
@@ -54,7 +54,7 @@ Use a newly provisioned disposable Convex deployment. Never run the drill agains
 5. Record the drill date, verifier, count comparison, and result in this runbook.
 6. Destroy the disposable deployment after the evidence is retained.
 
-Do not claim the Phase 0 observation gate until this drill passes.
+The 2026-07-21 drill used `dev/browser-persistence-restore-20260721`, configured to expire after one day. The snapshot imported successfully with `--replace-all`; counts for every product table and `_storage` matched production exactly. Both cleanup functions completed with zero work and no cleanup continuation. Production contained zero product/auth rows and zero stored files at snapshot time, so authenticated owner loading was not applicable to this drill.
 
 ## Production Configuration by Name
 
@@ -63,7 +63,7 @@ The production GitHub workflow expects these GitHub environment values:
 - Variables: `CONVEX_PRODUCTION_URL`, `CONVEX_PRODUCTION_SITE_URL`.
 - Secrets: `CONVEX_DEPLOY_KEY`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `VERCEL_TOKEN`.
 
-As of 2026-07-21, neither repository-level nor `Production` environment-level names are configured. Configure them through GitHub without placing values in files or command output.
+As of 2026-07-21, the two Convex URL variables and the `CONVEX_DEPLOY_KEY`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` secrets are configured directly on the GitHub `Production` environment. `VERCEL_TOKEN` remains intentionally unconfigured; create a dedicated CI token rather than copying the personal CLI token.
 
 Convex deployment variables required by the current application are documented in `.env.example`. Verify names only before deployment.
 
@@ -71,23 +71,28 @@ Convex deployment variables required by the current application are documented i
 
 Rotate the development credentials exposed in prior diagnostic output before deploying the hotfix:
 
-- `BETTER_AUTH_SECRET`
-- `RESEND_API_KEY`
-- `RESEND_WEBHOOK_SECRET`
-- `DEV_RESET_TOKEN`
+| Variable | Status |
+|---|---|
+| `BETTER_AUTH_SECRET` | Rotated directly in the development Convex deployment on 2026-07-21 |
+| `RESEND_API_KEY` | Pending coordinated provider rotation |
+| `RESEND_WEBHOOK_SECRET` | Pending coordinated provider rotation |
+| `DEV_RESET_TOKEN` | Not configured in the development Convex deployment; no active value to rotate |
 
 Invalidate the prior value at its provider, set the replacement directly in the relevant Convex deployment, restart or redeploy consumers when required, and verify the old value no longer authenticates. Do not record either value. Re-run `pnpm secret:scan` after rotation.
 
 ## Usage Alerts and Limits
 
-Configure and verify alerts in the Convex dashboard for:
+The following monthly production warning/disable thresholds were configured on 2026-07-21:
 
-- Function calls
-- Database bandwidth
-- File bandwidth
-- Outstanding scheduled functions
+| Metric | Warning | Disable |
+|---|---:|---:|
+| Function calls | 500,000 calls | 900,000 calls |
+| Database I/O | 1 GB | 2 GB |
+| Data egress, including file delivery | 1 GB | 2 GB |
 
-Record only the configured threshold, notification destination owner, and verification date. Do not record alert delivery credentials.
+Convex emails production threshold events to team members. Scheduled executions count toward the function-call metric. Convex does not expose outstanding scheduled functions as a separate usage-limit metric; the production Schedules page showed zero outstanding runs before deployment, and the post-deploy check must confirm it remains at the expected cron cadence.
+
+Record only configured thresholds, the notification destination owner, and the verification date. Do not record alert delivery credentials.
 
 ## Phase 0 Deploy and Observation
 
@@ -114,5 +119,8 @@ Observe these invariants for 24 hours. Record timestamps, baseline/observed coun
 | Date | Environment | Check | Result |
 |---|---|---|---|
 | 2026-07-21 | Production export | Snapshot with file storage downloaded, checksum verified, archive tested, and permissions restricted | Pass |
-| 2026-07-21 | GitHub Production environment | Required release secret/variable names configured | Fail — configuration absent |
-| 2026-07-21 | Disposable non-production | Snapshot restore drill | Pending — isolated target not provisioned |
+| 2026-07-21 | GitHub Production environment | Convex URLs/deploy key and Vercel project identifiers configured | Partial — dedicated `VERCEL_TOKEN` pending |
+| 2026-07-21 | Disposable non-production | Snapshot restore drill, product/storage count parity, and bounded cleanup execution | Pass — source snapshot contained zero product/auth rows and files |
+| 2026-07-21 | Development Convex | `BETTER_AUTH_SECRET` rotated without exposing its value | Pass |
+| 2026-07-21 | Production Convex | Function-call, database-I/O, and data-egress monthly warning/disable thresholds | Pass |
+| 2026-07-21 | Production Convex | Outstanding scheduled functions before hotfix deployment | Pass — zero outstanding runs; post-deploy observation pending |
