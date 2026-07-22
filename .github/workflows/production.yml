@@ -1,0 +1,52 @@
+name: Production release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    env:
+      PUBLIC_CONVEX_URL: ${{ vars.CONVEX_PRODUCTION_URL }}
+      PUBLIC_CONVEX_SITE_URL: ${{ vars.CONVEX_PRODUCTION_SITE_URL }}
+      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm audit --prod --audit-level=high
+      - run: pnpm secret:scan
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+
+      - name: Deploy Convex
+        run: pnpm exec convex deploy
+
+      - name: Pull Vercel production settings
+        run: pnpm dlx vercel@56.3.2 pull --yes --environment=production --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Build with Vercel
+        run: pnpm dlx vercel@56.3.2 build --prod --token="${{ secrets.VERCEL_TOKEN }}"
+
+      - name: Deploy Vercel production
+        run: pnpm dlx vercel@56.3.2 deploy --prebuilt --prod --token="${{ secrets.VERCEL_TOKEN }}"

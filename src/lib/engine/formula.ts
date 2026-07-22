@@ -151,7 +151,7 @@ class Parser {
 	private i = 0;
 	constructor(
 		private tokens: Token[],
-		private sheetBlockId: BlockId
+		private sheetId: BlockId
 	) {}
 
 	private peek(k = 0): Token {
@@ -247,11 +247,11 @@ class Parser {
 					this.next();
 					return {
 						t: 'ref',
-						ref: { sheetBlockId: this.sheetBlockId, a1: `${start}:${end.text.toUpperCase()}` }
+						ref: { sheetId: this.sheetId, a1: `${start}:${end.text.toUpperCase()}` }
 					};
 				}
 			}
-			return { t: 'ref', ref: { sheetBlockId: this.sheetBlockId, a1: start } };
+			return { t: 'ref', ref: { sheetId: this.sheetId, a1: start } };
 		}
 		// bare published name (single segment)
 		return { t: 'ref', ref: { name: text } };
@@ -323,7 +323,7 @@ class ParseError extends Error {
  */
 export function parseFormula(
 	src: string,
-	opts?: { sheetBlockId?: BlockId }
+	opts?: { sheetId?: BlockId }
 ): ParseResult {
 	const body = src.startsWith('=') ? src.slice(1) : src;
 	const offset = src.length - body.length;
@@ -332,7 +332,7 @@ export function parseFormula(
 		return { ok: false, message: tokens.error, pos: tokens.pos + offset };
 	}
 	try {
-		const ast = new Parser(tokens, opts?.sheetBlockId ?? '').parse();
+		const ast = new Parser(tokens, opts?.sheetId ?? '').parse();
 		return { ok: true, ast };
 	} catch (e) {
 		if (e instanceof ParseError) return { ok: false, message: e.message, pos: e.pos + offset };
@@ -387,7 +387,7 @@ function printNode(ast: FormulaAST): string {
 
 /**
  * Print an AST as canonical source text. `parseFormula(printFormula(ast))`
- * yields a deep-equal AST (given the same sheetBlockId context) — the
+ * yields a deep-equal AST (given the same sheetId context) — the
  * round-trip contract show-steps (V1-5-4) and the inspector rely on.
  */
 export function printFormula(ast: FormulaAST): string {
@@ -447,7 +447,7 @@ export function expandRange(ref: CellRef): CellRef[] | ErrorValue {
 	const cells: CellRef[] = [];
 	for (let row = rowLo; row <= rowHi; row++) {
 		for (let col = colLo; col <= colHi; col++) {
-			cells.push({ sheetBlockId: ref.sheetBlockId, a1: `${colLetters(col)}${row}` });
+			cells.push({ sheetId: ref.sheetId, a1: `${colLetters(col)}${row}` });
 		}
 	}
 	return cells;

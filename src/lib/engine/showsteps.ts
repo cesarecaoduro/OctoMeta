@@ -55,6 +55,12 @@ export interface DerivationStep {
 	kind: DerivationStepKind;
 	/** Canonical expression text (printer contract) or the formatted value. */
 	text: string;
+	/** Original formula tree for a symbolic formula line. */
+	formula?: FormulaAST;
+	/** Structured substituted/reduced tree for substitution and intermediate lines. */
+	expression?: DerivationExpression;
+	/** Typed result for a result line. */
+	value?: TypedValue;
 }
 
 /**
@@ -88,11 +94,13 @@ export interface DerivationSource {
 // Work tree: the substituted expression being reduced pass by pass
 // ---------------------------------------------------------------------------
 
-type Work =
+export type DerivationExpression =
 	| { t: 'val'; value: TypedValue }
-	| { t: 'un'; op: '-' | 'not'; arg: Work }
-	| { t: 'bin'; op: BinOp; left: Work; right: Work }
-	| { t: 'call'; fn: string; args: Work[] };
+	| { t: 'un'; op: '-' | 'not'; arg: DerivationExpression }
+	| { t: 'bin'; op: BinOp; left: DerivationExpression; right: DerivationExpression }
+	| { t: 'call'; fn: string; args: DerivationExpression[] };
+
+type Work = DerivationExpression;
 
 /** Seed the work tree: literals and references become values, structure stays. */
 function seed(ast: FormulaAST, source: DerivationSource): Work {
@@ -256,7 +264,12 @@ export function buildDerivation(
 ): Derivation {
 	const node = source.nodes.get(id);
 	if (!node) {
-		return { nodeId: id, steps: [{ kind: 'result', text: '#REF!' }], error: '#REF!' };
+		const value = errorValue('#REF!', `unknown node "${id}"`);
+		return {
+			nodeId: id,
+			steps: [{ kind: 'result', text: '#REF!', value }],
+			error: '#REF!'
+		};
 	}
 	const steps: DerivationStep[] = [];
 	const push = (s: DerivationStep): void => {
@@ -269,17 +282,19 @@ export function buildDerivation(
 		steps.push(s);
 	};
 	if (node.formula) {
-		push({ kind: 'formula', text: printFormula(node.formula) });
+		push({ kind: 'formula', text: printFormula(node.formula), formula: node.formula });
 		let work = seed(node.formula, source);
-		push({ kind: 'substitution', text: printWork(work) });
+		push({ kind: 'substitution', text: printWork(work), expression: work });
 		for (let pass = 0; pass < MAX_PASSES && work.t !== 'val'; pass++) {
 			const r = collapseOnce(work, id, registry);
 			if (!r.changed) break; // unreducible (call without a registry)
 			work = r.next;
-			if (work.t !== 'val') push({ kind: 'intermediate', text: printWork(work) });
+			if (work.t !== 'val') {
+				push({ kind: 'intermediate', text: printWork(work), expression: work });
+			}
 		}
 	}
-	push({ kind: 'result', text: format(node.value) });
+	push({ kind: 'result', text: format(node.value), value: node.value });
 	return {
 		nodeId: id,
 		...(node.name !== undefined ? { name: node.name } : {}),

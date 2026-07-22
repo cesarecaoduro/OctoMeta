@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { DocumentGraph, collectRefs, nodeOpId, refKey, stableStringify } from './graph';
+import {
+	DocumentGraph,
+	collectRefs,
+	nodeOpId,
+	refKey,
+	resolvePublishedTarget,
+	stableStringify
+} from './graph';
 import { emptyProvenance, type GraphNode } from './node';
 import { parseFormula } from './formula';
 import { scalar, errorValue } from './types';
@@ -25,7 +32,7 @@ describe('stableStringify', () => {
 
 describe('nodeOpId', () => {
 	it('uses the canonical formula text when present, else the stable value JSON', () => {
-		const p = parseFormula('=A1 + 2', { sheetBlockId: 's' });
+		const p = parseFormula('=A1 + 2', { sheetId: 's' });
 		if (!p.ok) throw new Error(p.message);
 		expect(nodeOpId(node({ id: 'a', kind: 'computed', formula: p.ast }))).toBe('computed:A1 + 2');
 		expect(nodeOpId(node({ id: 'b', value: scalar(3) }))).toBe('input:{"kind":"scalar","value":3}');
@@ -34,8 +41,8 @@ describe('nodeOpId', () => {
 
 describe('refKey / collectRefs', () => {
 	it('keeps cell and name keyspaces distinct and collects all refs', () => {
-		expect(refKey({ name: 'beam.span' })).not.toBe(refKey({ sheetBlockId: 'beam', a1: 'span' }));
-		const p = parseFormula('=A1 + beam.span + SUM(B1, A1)', { sheetBlockId: 's' });
+		expect(refKey({ name: 'beam.span' })).not.toBe(refKey({ sheetId: 'beam', a1: 'span' }));
+		const p = parseFormula('=A1 + beam.span + SUM(B1, A1)', { sheetId: 's' });
 		if (!p.ok) throw new Error(p.message);
 		const refs = collectRefs(p.ast);
 		expect(refs).toHaveLength(3); // A1, beam.span, B1 — A1 deduplicated
@@ -43,10 +50,34 @@ describe('refKey / collectRefs', () => {
 });
 
 describe('DocumentGraph store', () => {
+	it('owns a normalized, non-empty workbook manifest', () => {
+		const doc = new DocumentGraph({
+			sheets: [
+				{ id: 'b', name: 'Output', position: 9 },
+				{ id: 'a', name: 'Input', position: 3 }
+			]
+		});
+		expect(doc.workbook.sheets).toEqual([
+			{ id: 'b', name: 'Output', position: 0 },
+			{ id: 'a', name: 'Input', position: 1 }
+		]);
+	});
+
+	it('resolves exactly one published alias hop', () => {
+		const doc = new DocumentGraph();
+		doc.insertNode(node({ id: 'input', kind: 'input' }));
+		doc.insertNode(node({ id: 'alias', kind: 'namedOutput', name: 'beam.depth', inputs: ['input'] }));
+		expect(resolvePublishedTarget(doc, 'alias')).toEqual({
+			publishedNode: doc.nodes.get('alias'),
+			targetNode: doc.nodes.get('input')
+		});
+		expect(resolvePublishedTarget(doc, 'input')).toBeNull();
+	});
+
 	it('indexes names, cellRefs, reverse edges, and unresolved refs incrementally', () => {
 		const doc = new DocumentGraph();
-		doc.insertNode(node({ id: 'a', cellRef: { sheetBlockId: 's', a1: 'A1' } }));
-		const p = parseFormula('=A1 + beam.span', { sheetBlockId: 's' });
+		doc.insertNode(node({ id: 'a', cellRef: { sheetId: 's', a1: 'A1' } }));
+		const p = parseFormula('=A1 + beam.span', { sheetId: 's' });
 		if (!p.ok) throw new Error(p.message);
 		doc.insertNode(
 			node({
@@ -57,7 +88,7 @@ describe('DocumentGraph store', () => {
 				value: errorValue('#NAME?', 'unknown name "beam.span"', 'c')
 			})
 		);
-		expect(doc.resolveRef({ sheetBlockId: 's', a1: 'A1' })).toBe('a');
+		expect(doc.resolveRef({ sheetId: 's', a1: 'A1' })).toBe('a');
 		expect(doc.resolveRef({ name: 'beam.span' })).toBeUndefined();
 		expect(doc.dependentsOf('a')).toEqual(['c']);
 		expect(doc.waitersFor(refKey({ name: 'beam.span' }))).toEqual(['c']);

@@ -16,7 +16,8 @@
  * register functions and trigger one explicit recalc (`recalcAllFormulas`).
  */
 
-import type { FUniver, ICellData, IWorkbookData } from '@univerjs/presets';
+import type { FUniver, ICellData, IWorkbookData, IWorksheetData } from '@univerjs/presets';
+import type { SheetId, SheetMeta } from '../../engine';
 
 /** Univer command/mutation ids the adapter listens for (0.25.1). */
 const SET_RANGE_VALUES_MUTATION = 'sheet.mutation.set-range-values';
@@ -47,6 +48,8 @@ export interface CreateUniverSheetOptions {
 	name?: string;
 	/** Snapshot to rehydrate from (`IWorkbookData`), or null for a fresh sheet. */
 	snapshot?: IWorkbookData | null;
+	/** Stable tabs used when a fresh workbook is created. */
+	sheets?: readonly SheetMeta[];
 }
 
 /**
@@ -66,15 +69,36 @@ export async function createUniverSheet(opts: CreateUniverSheetOptions): Promise
 	const { univer, univerAPI } = createUniver({
 		locale: LocaleType.EN_US,
 		locales: { [LocaleType.EN_US]: mergeLocales(locale.default) },
-		presets: [UniverSheetsCorePreset({ container: opts.container })]
+		presets: [
+			UniverSheetsCorePreset({
+				container: opts.container,
+				header: false,
+				toolbar: false,
+				formulaBar: false,
+				footer: false,
+				contextMenu: false
+			})
+		]
 	});
 
 	// Landmine 1 part one: snapshots must not self-evaluate before our custom
 	// functions are registered. Must run before `createWorkbook`.
 	univerAPI.getFormula().setInitialFormulaComputing(CalculationMode.NO_CALCULATION);
 
+	const sheets = opts.sheets?.length
+		? [...opts.sheets].sort((a, b) => a.position - b.position)
+		: undefined;
 	univerAPI.createWorkbook(
-		opts.snapshot ?? { id: opts.unitId, name: opts.name ?? opts.unitId }
+		opts.snapshot ?? {
+			id: opts.unitId,
+			name: opts.name ?? opts.unitId,
+			sheetOrder: sheets?.map((sheet) => sheet.id),
+			sheets: sheets
+				? Object.fromEntries(
+						sheets.map((sheet) => [sheet.id, { id: sheet.id, name: sheet.name }])
+					)
+				: undefined
+		}
 	);
 
 	// Landmine 1 part two: wait for `Steady` before touching the formula facade
@@ -88,7 +112,36 @@ export async function createUniverSheet(opts: CreateUniverSheetOptions): Promise
 		});
 	});
 
-	return { api: univerAPI, dispose: () => univer.dispose() };
+	const normalizeThirdPartyAccessibility = (): void => {
+		for (const element of document.querySelectorAll<HTMLElement>('[data-u-comp][tabindex]')) {
+			const value = Number(element.getAttribute('tabindex'));
+			if (Number.isFinite(value) && value > 0) element.tabIndex = 0;
+		}
+
+		const notificationRegions = document.querySelectorAll<HTMLElement>(
+			'section[aria-label*="Notifications"]'
+		);
+		notificationRegions.forEach((element, index) => {
+			const label = `Workbook notifications ${index + 1}`;
+			if (element.getAttribute('aria-label') !== label) element.setAttribute('aria-label', label);
+		});
+	};
+	const observer = new MutationObserver(normalizeThirdPartyAccessibility);
+	observer.observe(document.body, {
+		childList: true,
+		subtree: true,
+		attributes: true,
+		attributeFilter: ['tabindex', 'aria-label']
+	});
+	normalizeThirdPartyAccessibility();
+
+	return {
+		api: univerAPI,
+		dispose: () => {
+			observer.disconnect();
+			univer.dispose();
+		}
+	};
 }
 
 // ---------------------------------------------------------------------------
@@ -125,18 +178,34 @@ export function recalcAllFormulas(api: FUniver): void {
 // Cell IO
 // ---------------------------------------------------------------------------
 
-function rangeOf(api: FUniver, a1: string) {
-	return api.getActiveWorkbook()?.getActiveSheet()?.getRange(a1) ?? null;
+function rangeOf(api: FUniver, sheetId: SheetId, a1: string) {
+	return api.getActiveWorkbook()?.getSheetBySheetId(sheetId)?.getRange(a1) ?? null;
+}
+
+function activeSheetId(api: FUniver): SheetId | null {
+	return api.getActiveWorkbook()?.getActiveSheet()?.getSheetId() ?? null;
+}
+
+/** Read a cell's displayed value from an explicit tab. */
+export function readSheetCellValue(api: FUniver, sheetId: SheetId, a1: string): unknown {
+	return rangeOf(api, sheetId, a1)?.getValue() ?? null;
+}
+
+/** Read a cell's raw data from an explicit tab. */
+export function readSheetCellData(api: FUniver, sheetId: SheetId, a1: string): ICellData | null {
+	return rangeOf(api, sheetId, a1)?.getCellData() ?? null;
 }
 
 /** Read a cell's displayed value. */
 export function readCellValue(api: FUniver, a1: string): unknown {
-	return rangeOf(api, a1)?.getValue() ?? null;
+	const sheetId = activeSheetId(api);
+	return sheetId ? readSheetCellValue(api, sheetId, a1) : null;
 }
 
 /** Read a cell's raw data (`v`, `f`, ...). */
 export function readCellData(api: FUniver, a1: string): ICellData | null {
-	return rangeOf(api, a1)?.getCellData() ?? null;
+	const sheetId = activeSheetId(api);
+	return sheetId ? readSheetCellData(api, sheetId, a1) : null;
 }
 
 /**
@@ -165,8 +234,26 @@ export function writeCellDisplay(
 	value: number | string | null,
 	style: CellDisplayStyle = null
 ): void {
+	const sheetId = activeSheetId(api);
+	if (sheetId) writeSheetCellDisplay(api, sheetId, a1, value, style);
+}
+
+/** Write a graph-settled display value into an explicit tab. */
+export function writeSheetCellDisplay(
+	api: FUniver,
+	sheetId: SheetId,
+	a1: string,
+	value: number | string | null,
+	style: CellDisplayStyle = null
+): void {
 	const s = style === null ? null : { cl: { rgb: STYLE_COLORS[style] } };
-	rangeOf(api, a1)?.setValue({ v: value, f: null, si: null, p: null, s } as ICellData);
+	rangeOf(api, sheetId, a1)?.setValue({
+		v: value,
+		f: null,
+		si: null,
+		p: null,
+		s
+	} as ICellData);
 }
 
 /**
@@ -175,7 +262,18 @@ export function writeCellDisplay(
  * the same command pipeline as typing, so the adapter's edit listener fires.
  */
 export function writeCellInput(api: FUniver, a1: string, input: number | string | boolean): void {
-	const range = rangeOf(api, a1);
+	const sheetId = activeSheetId(api);
+	if (sheetId) writeSheetCellInput(api, sheetId, a1, input);
+}
+
+/** Write user-style input into an explicit tab. */
+export function writeSheetCellInput(
+	api: FUniver,
+	sheetId: SheetId,
+	a1: string,
+	input: number | string | boolean
+): void {
+	const range = rangeOf(api, sheetId, a1);
 	if (!range) return;
 	if (typeof input === 'string' && input.startsWith('=')) {
 		range.setValue({ f: input } as ICellData);
@@ -190,6 +288,8 @@ export function writeCellInput(api: FUniver, a1: string, input: number | string 
 
 /** One changed cell from a set-range-values mutation. */
 export interface ChangedCell {
+	/** Tab captured from the mutation before processing is queued. */
+	sheetId: SheetId;
 	row: number;
 	col: number;
 	/** The written cell payload; null means the cell was cleared outright. */
@@ -218,12 +318,17 @@ export function onCellValuesChanged(
 		const opts = options as { fromFormula?: boolean; onlyLocal?: boolean } | undefined;
 		if (opts?.fromFormula || opts?.onlyLocal) return;
 		const params = command.params as SetRangeValuesParams | undefined;
-		if (!params?.cellValue) return;
+		if (!params?.cellValue || !params.subUnitId) return;
 		const cells: ChangedCell[] = [];
 		for (const [rowKey, cols] of Object.entries(params.cellValue)) {
 			if (!cols) continue;
 			for (const [colKey, data] of Object.entries(cols)) {
-				cells.push({ row: Number(rowKey), col: Number(colKey), data: data ?? null });
+				cells.push({
+					sheetId: params.subUnitId,
+					row: Number(rowKey),
+					col: Number(colKey),
+					data: data ?? null
+				});
 			}
 		}
 		if (cells.length > 0) cb(cells);
@@ -245,6 +350,7 @@ export function onWorkbookMutated(api: FUniver, cb: () => void): Disposable {
 
 /** The anchor cell (0-based row/col) of a selection change. */
 export interface SelectionAnchor {
+	sheetId: SheetId;
 	row: number;
 	col: number;
 }
@@ -265,8 +371,72 @@ export function onSelectionChanged(
 	if (!workbook) return { dispose: () => {} };
 	return workbook.onSelectionChange((selections) => {
 		const last = selections[selections.length - 1];
-		cb(last ? { row: last.startRow, col: last.startColumn } : null);
+		const sheetId = workbook.getActiveSheet().getSheetId();
+		cb(last ? { sheetId, row: last.startRow, col: last.startColumn } : null);
 	});
+}
+
+/** Return the workbook's tabs in current order. */
+export function listWorkbookSheets(api: FUniver): SheetMeta[] {
+	return (
+		api
+			.getActiveWorkbook()
+			?.getSheets()
+			.map((sheet, position) => ({
+				id: sheet.getSheetId(),
+				name: sheet.getSheetName(),
+				position
+			})) ?? []
+	);
+}
+
+/** Activate a tab by stable id. */
+export function activateWorkbookSheet(api: FUniver, sheetId: SheetId): boolean {
+	const workbook = api.getActiveWorkbook();
+	const sheet = workbook?.getSheetBySheetId(sheetId);
+	if (!workbook || !sheet) return false;
+	workbook.setActiveSheet(sheet);
+	return true;
+}
+
+/** Activate and visibly select one explicit cell in the document workbook. */
+export function activateWorkbookCell(api: FUniver, sheetId: SheetId, a1: string): boolean {
+	const workbook = api.getActiveWorkbook();
+	const sheet = workbook?.getSheetBySheetId(sheetId);
+	if (!workbook || !sheet) return false;
+	workbook.setActiveSheet(sheet);
+	const range = sheet.getRange(a1);
+	if (!range) return false;
+	range.activate();
+	return true;
+}
+
+/** Insert a tab with an exact immutable id and position. */
+export function insertWorkbookSheet(
+	api: FUniver,
+	sheet: SheetMeta,
+	data?: Partial<IWorksheetData>
+): boolean {
+	const workbook = api.getActiveWorkbook();
+	if (!workbook || workbook.getSheetBySheetId(sheet.id)) return false;
+	workbook.insertSheet(sheet.name, {
+		index: sheet.position,
+		sheet: { ...data, id: sheet.id, name: sheet.name }
+	});
+	return true;
+}
+
+/** Rename a tab without changing its id. */
+export function renameWorkbookSheet(api: FUniver, sheetId: SheetId, name: string): boolean {
+	const sheet = api.getActiveWorkbook()?.getSheetBySheetId(sheetId);
+	if (!sheet) return false;
+	sheet.setName(name);
+	return true;
+}
+
+/** Remove a tab by stable id. */
+export function deleteWorkbookSheet(api: FUniver, sheetId: SheetId): boolean {
+	return api.getActiveWorkbook()?.deleteSheet(sheetId) ?? false;
 }
 
 /** A defined-name lifecycle event lifted from Univer's command stream. */
@@ -277,6 +447,30 @@ export interface DefinedNameChange {
 	name: string;
 	/** Raw ref string, e.g. `Sheet1!$A$1` (see cell-text `refStringToA1`). */
 	ref: string;
+}
+
+/** A serializable defined name used to hydrate adapter bookkeeping. */
+export interface WorkbookDefinedName {
+	id: string;
+	name: string;
+	ref: string;
+}
+
+/** Return every existing workbook-level defined name, including its stable id. */
+export function listWorkbookDefinedNames(api: FUniver): WorkbookDefinedName[] {
+	return (
+		api
+			.getActiveWorkbook()
+			?.getDefinedNames()
+			.map((defined) => {
+				const built = defined.toBuilder().build();
+				return {
+					id: built.id,
+					name: built.name,
+					ref: built.formulaOrRefString
+				};
+			}) ?? []
+	);
 }
 
 interface DefinedNameParams {
@@ -318,6 +512,24 @@ export function onDefinedNameChanged(
 /** Create a defined name pointing at a cell of the active workbook. */
 export function insertSheetDefinedName(api: FUniver, name: string, a1: string): void {
 	api.getActiveWorkbook()?.insertDefinedName(name, a1);
+}
+
+/**
+ * Create a workbook defined name for an explicit tab. Quoting follows A1
+ * notation and safely escapes apostrophes in user-authored sheet names.
+ */
+export function insertWorkbookDefinedName(
+	api: FUniver,
+	name: string,
+	sheetId: SheetId,
+	a1: string
+): boolean {
+	const workbook = api.getActiveWorkbook();
+	const sheet = workbook?.getSheetBySheetId(sheetId);
+	if (!workbook || !sheet) return false;
+	const escaped = sheet.getSheetName().replaceAll("'", "''");
+	workbook.insertDefinedName(name, `'${escaped}'!${a1}`);
+	return true;
 }
 
 /** Rename an existing defined name. Returns false when the name is unknown. */

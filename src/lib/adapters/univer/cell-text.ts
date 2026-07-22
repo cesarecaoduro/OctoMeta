@@ -12,8 +12,8 @@
  * - defined-name bookkeeping keyed by Univer's stable defined-name id
  */
 
-import type { BlockId, CellRef, FormulaAST, TypedValue } from '../../engine';
-import { isNameRef } from '../../engine';
+import type { CellRef, FormulaAST, SheetId, TypedValue } from '../../engine';
+import { format, isNameRef, parseQuantity } from '../../engine';
 
 // ---------------------------------------------------------------------------
 // Cell input classification
@@ -23,7 +23,11 @@ import { isNameRef } from '../../engine';
 export type ClassifiedEdit =
 	| { kind: 'clear' }
 	| { kind: 'formula'; text: string }
-	| { kind: 'value'; value: number | string | boolean };
+	| { kind: 'value'; value: number | string | boolean | TypedValue }
+	| { kind: 'invalid'; message: string };
+
+const QUANTITY_LIKE_RE =
+	/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\s*[A-Za-z°]/;
 
 /**
  * The slice of Univer's `ICellData` the adapter reads. `t` follows Univer's
@@ -49,6 +53,12 @@ export function classifyCellInput(data: RawCellInput | null | undefined): Classi
 	if (v === undefined || v === null || v === '') return { kind: 'clear' };
 	if (typeof v === 'string') {
 		if (v.startsWith('=')) return { kind: 'formula', text: v };
+		if (QUANTITY_LIKE_RE.test(v.trim())) {
+			const parsed = parseQuantity(v);
+			return parsed.kind === 'error'
+				? { kind: 'invalid', message: parsed.message }
+				: { kind: 'value', value: parsed };
+		}
 		return { kind: 'value', value: v };
 	}
 	if (typeof v === 'number') {
@@ -111,9 +121,36 @@ export function refStringToA1(ref: string): string | null {
 	return `${m[1].toUpperCase()}${m[2]}`;
 }
 
+/**
+ * Parse a single-cell Univer reference into an immutable sheet id and A1.
+ * Univer serializes references with sheet names, so callers provide the
+ * manifest lookup rather than relying on whichever tab happens to be active.
+ */
+export function refStringToCellRef(
+	ref: string,
+	sheetIdForName: (name: string) => SheetId | undefined,
+	defaultSheetId?: SheetId
+): CellRef | null {
+	let body = ref.trim();
+	if (body.startsWith('=')) return null;
+	let sheetId = defaultSheetId;
+	const bang = body.lastIndexOf('!');
+	if (bang >= 0) {
+		let sheetName = body.slice(0, bang).trim();
+		if (sheetName.startsWith("'") && sheetName.endsWith("'")) {
+			sheetName = sheetName.slice(1, -1).replaceAll("''", "'");
+		}
+		sheetId = sheetIdForName(sheetName);
+		body = body.slice(bang + 1);
+	}
+	const match = A1_RE.exec(body.trim());
+	if (!match || !sheetId) return null;
+	return { sheetId, a1: `${match[1].toUpperCase()}${match[2]}` };
+}
+
 /** Build the engine `CellRef` for a cell in a sheet block (uppercase A1). */
-export function cellRefFor(sheetBlockId: BlockId, a1: string): CellRef {
-	return { sheetBlockId, a1: a1.toUpperCase() };
+export function cellRefFor(sheetId: SheetId, a1: string): CellRef {
+	return { sheetId, a1: a1.toUpperCase() };
 }
 
 // ---------------------------------------------------------------------------
@@ -136,22 +173,8 @@ function displayNumber(value: number): number {
  * have no single-cell rendering yet and show placeholders.
  */
 export function formatCellDisplay(value: TypedValue): number | string {
-	switch (value.kind) {
-		case 'scalar':
-			return displayNumber(value.value);
-		case 'quantity':
-			return displayNumber(value.value);
-		case 'string':
-			return value.value;
-		case 'boolean':
-			return value.value ? 'TRUE' : 'FALSE';
-		case 'error':
-			return value.code;
-		case 'table':
-			return '[table]';
-		case 'geometry':
-			return value.handle;
-	}
+	if (value.kind === 'scalar') return displayNumber(value.value);
+	return format(value);
 }
 
 // ---------------------------------------------------------------------------
@@ -186,7 +209,7 @@ export function renameNameRefs(ast: FormulaAST, oldName: string, newName: string
 }
 
 /** True when the formula references the given cell directly (self-reference check). */
-export function refersToCell(ast: FormulaAST, sheetBlockId: BlockId, a1: string): boolean {
+export function refersToCell(ast: FormulaAST, sheetId: SheetId, a1: string): boolean {
 	const target = a1.toUpperCase();
 	switch (ast.t) {
 		case 'lit':
@@ -194,15 +217,15 @@ export function refersToCell(ast: FormulaAST, sheetBlockId: BlockId, a1: string)
 		case 'ref':
 			return (
 				!isNameRef(ast.ref) &&
-				ast.ref.sheetBlockId === sheetBlockId &&
+				ast.ref.sheetId === sheetId &&
 				ast.ref.a1.toUpperCase() === target
 			);
 		case 'un':
-			return refersToCell(ast.arg, sheetBlockId, a1);
+			return refersToCell(ast.arg, sheetId, a1);
 		case 'bin':
-			return refersToCell(ast.left, sheetBlockId, a1) || refersToCell(ast.right, sheetBlockId, a1);
+			return refersToCell(ast.left, sheetId, a1) || refersToCell(ast.right, sheetId, a1);
 		case 'call':
-			return ast.args.some((a) => refersToCell(a, sheetBlockId, a1));
+			return ast.args.some((a) => refersToCell(a, sheetId, a1));
 	}
 }
 
@@ -214,8 +237,8 @@ export function refersToCell(ast: FormulaAST, sheetBlockId: BlockId, a1: string)
 export interface DefinedNameRecord {
 	/** The published dotted name (as Univer knows it). */
 	name: string;
-	/** Bare A1 the name points at, or null when the ref is unsupported (range/formula). */
-	a1: string | null;
+	/** Stable tab and A1 target, or null for an unsupported range/formula. */
+	cellRef: CellRef | null;
 }
 
 /**
@@ -228,17 +251,17 @@ export class DefinedNameBook {
 	private byId = new Map<string, DefinedNameRecord>();
 
 	/** Record an inserted defined name. */
-	recordInsert(id: string, name: string, a1: string | null): void {
-		this.byId.set(id, { name, a1 });
+	recordInsert(id: string, name: string, cellRef: CellRef | null): void {
+		this.byId.set(id, { name, cellRef });
 	}
 
 	/**
 	 * Record an update (rename and/or re-ref) and return the previous record,
 	 * or null when the id was never seen (treated as an insert by callers).
 	 */
-	recordUpdate(id: string, name: string, a1: string | null): DefinedNameRecord | null {
+	recordUpdate(id: string, name: string, cellRef: CellRef | null): DefinedNameRecord | null {
 		const prev = this.byId.get(id) ?? null;
-		this.byId.set(id, { name, a1 });
+		this.byId.set(id, { name, cellRef });
 		return prev;
 	}
 

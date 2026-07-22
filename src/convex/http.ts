@@ -1,8 +1,10 @@
 import { httpRouter } from 'convex/server';
 import { httpAction } from './_generated/server';
 import { resend } from './emails';
+import { authComponent, createAuth } from './auth';
 
 const http = httpRouter();
+authComponent.registerRoutes(http, createAuth);
 
 // Resend delivery-event webhook. Point the webhook in the Resend dashboard at
 // https://<deployment>.convex.site/resend-webhook (email.* events) and set

@@ -15,7 +15,7 @@
  */
 
 import type { DocumentGraph } from '../engine';
-import type { DocumentId, Persistence } from './client';
+import type { DocumentId } from './client';
 
 /** Save lifecycle, for the V1-5-1 save-state indicator. */
 export type SaveState = 'idle' | 'pending' | 'saving' | 'error';
@@ -42,10 +42,21 @@ export const DEFAULT_SAVE_DELAY_MS = 500;
  * save-state indicator to it.
  */
 export function createDocumentSaver(
-	persistence: Pick<Persistence, 'saveDocument'>,
+	persistence: {
+		saveDocument(
+			docId: DocumentId,
+			graph: DocumentGraph,
+			workbookSnapshot?: unknown
+		): Promise<unknown>;
+	},
 	docId: DocumentId,
 	graph: DocumentGraph,
-	opts?: { delayMs?: number; onState?: (state: SaveState) => void }
+	opts?: {
+		delayMs?: number;
+		onState?: (state: SaveState) => void;
+		/** Capture the adapter-owned workbook at the same immutable save generation. */
+		workbookSnapshot?: () => unknown;
+	}
 ): DocumentSaver {
 	const delayMs = opts?.delayMs ?? DEFAULT_SAVE_DELAY_MS;
 	let timer: ReturnType<typeof setTimeout> | null = null;
@@ -72,7 +83,9 @@ export function createDocumentSaver(
 			dirty = false;
 			setState('saving');
 			try {
-				await persistence.saveDocument(docId, graph);
+				const snapshot = opts?.workbookSnapshot?.();
+				if (snapshot === undefined) await persistence.saveDocument(docId, graph);
+				else await persistence.saveDocument(docId, graph, snapshot);
 				lastError = null;
 			} catch (error) {
 				lastError = error;

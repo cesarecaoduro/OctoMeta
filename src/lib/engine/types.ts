@@ -11,6 +11,40 @@ export type NodeId = string;
 /** Document block identity (SCHEMA.md §8). */
 export type BlockId = string;
 
+/** Stable workbook-tab identity, independent of its display name and position. */
+export type SheetId = string;
+
+/** The deterministic first tab used by empty in-memory documents and fixtures. */
+export const DEFAULT_SHEET_ID: SheetId = 'sheet-1';
+
+/** Canonical workbook-tab metadata owned by the document graph. */
+export interface SheetMeta {
+	id: SheetId;
+	name: string;
+	position: number;
+}
+
+/** Non-empty workbook tab manifest; positions always equal array indexes. */
+export interface WorkbookManifest {
+	sheets: SheetMeta[];
+}
+
+/**
+ * Formula-demoted Univer state captured for an undoable tab removal.
+ * The engine stores it in history but never interprets the opaque snapshot.
+ */
+export interface SheetProjection {
+	version: 1;
+	sheetId: SheetId;
+	wasActive: boolean;
+	snapshot: unknown;
+}
+
+/** Create a fresh one-tab workbook manifest for a new document graph. */
+export function createDefaultWorkbook(): WorkbookManifest {
+	return { sheets: [{ id: DEFAULT_SHEET_ID, name: 'Sheet 1', position: 0 }] };
+}
+
 /** Opaque geometry handle: `geom:<op>:<hash>` (SCHEMA.md §2; geometry itself is V2). */
 export type GeomHandle = `geom:${string}:${string}`;
 
@@ -50,8 +84,8 @@ export interface ColumnDef {
 	kind: TypedValue['kind'] | 'any';
 }
 
-/** A Univer-hosted cell address: hosting sheet block + A1 (or A1:B2 range) text. */
-export type CellRef = { sheetBlockId: BlockId; a1: string };
+/** A Univer-hosted cell address: stable workbook tab + A1 (or A1:B2 range) text. */
+export type CellRef = { sheetId: SheetId; a1: string };
 
 /**
  * The typed value system (SCHEMA.md §2). Quantities are the default numeric

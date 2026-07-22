@@ -50,6 +50,15 @@ function asQuantity(v: TypedValue): Extract<TypedValue, { kind: 'quantity' }> {
 }
 
 describe('parseQuantity (V1-1-2)', () => {
+	it('round-trips the R1 imperial engineering vocabulary through SI storage', () => {
+		expect(format(q('20 in'))).toBe('20 in');
+		expect(format(q('50 ksi'))).toBe('50 ksi');
+		expect(format(q('38 in²'))).toBe('38 in²');
+		expect(asQuantity(q('20 in')).value).toBeCloseTo(0.508);
+		expect(asQuantity(q('50 ksi')).value).toBeCloseTo(344_737_864.6584);
+		expect(asQuantity(q('38 in²')).value).toBeCloseTo(0.02451608);
+	});
+
 	it.each([
 		['5 kN', 5000, FORCE, 'kN'],
 		['3.2 m', 3.2, dim({ L: 1 }), 'm'],

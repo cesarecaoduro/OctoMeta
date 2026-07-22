@@ -175,3 +175,20 @@ export function waitlistNotificationText(details: WaitlistSignupDetails): string
 
 ${lines.join('\n')}`;
 }
+
+/** Minimal branded magic-link email. The URL is escaped before interpolation. */
+export function magicLinkHtml(url: string): string {
+	const safeUrl = escapeHtml(url);
+	return `<!doctype html><html><body style="margin:0;padding:40px 16px;background:${PAPER};font-family:${FONT_BODY};color:${INK};">
+<div style="max-width:480px;margin:0 auto;padding:32px;background:${SURFACE};border:1px solid ${GREY_3};border-radius:12px;">
+<div style="font-family:${FONT_MONO};font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:${GREY_2};">Secure sign in</div>
+<h1 style="font-family:${FONT_DISPLAY};font-size:26px;margin:14px 0 16px;">Continue to OctoMeta.</h1>
+<p style="line-height:1.6;color:${GREY_1};">Use this one-time link to sign in. If you did not request it, you can ignore this email.</p>
+<p style="margin:24px 0 0;"><a href="${safeUrl}" style="display:inline-block;padding:12px 18px;border-radius:6px;background:${INK};color:${SURFACE};text-decoration:none;font-weight:600;">Sign in</a></p>
+</div></body></html>`;
+}
+
+/** Plain-text fallback for the magic-link email. */
+export function magicLinkText(url: string): string {
+	return `Sign in to OctoMeta\n\nUse this one-time link:\n${url}\n\nIf you did not request it, ignore this email.`;
+}

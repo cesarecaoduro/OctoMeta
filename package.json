@@ -2,6 +2,7 @@
 	"name": "octometa-app",
 	"private": true,
 	"version": "0.0.1",
+	"packageManager": "pnpm@11.10.0",
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
@@ -12,12 +13,14 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test": "vitest run",
 		"test:watch": "vitest",
-		"test:e2e": "playwright test"
+		"test:e2e": "playwright test",
+		"secret:scan": "node scripts/secret-scan.mjs"
 	},
 	"devDependencies": {
+		"@axe-core/playwright": "4.12.1",
 		"@edge-runtime/vm": "5.0.0",
 		"@playwright/test": "1.61.1",
-		"@sveltejs/adapter-auto": "^7.0.1",
+		"@sveltejs/adapter-vercel": "6.3.4",
 		"@sveltejs/kit": "^2.63.0",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"convex-test": "0.0.54",
@@ -28,13 +31,21 @@
 		"vitest": "4.1.10"
 	},
 	"dependencies": {
+		"@convex-dev/better-auth": "0.12.5",
 		"@convex-dev/resend": "^0.2.5",
+		"@fontsource-variable/inter": "5.3.0",
+		"@fontsource-variable/inter-tight": "5.3.0",
+		"@fontsource-variable/jetbrains-mono": "5.3.0",
+		"@mmailaender/convex-better-auth-svelte": "0.8.2",
+		"@opentelemetry/api": "1.9.1",
 		"@tiptap/core": "3.28.0",
 		"@tiptap/pm": "3.28.0",
 		"@tiptap/starter-kit": "3.28.0",
 		"@univerjs/preset-sheets-core": "0.25.1",
 		"@univerjs/presets": "0.25.1",
+		"better-auth": "1.6.23",
 		"convex": "^1.42.3",
-		"convex-svelte": "^0.14.0"
+		"convex-svelte": "^0.14.0",
+		"katex": "0.18.1"
 	}
 }

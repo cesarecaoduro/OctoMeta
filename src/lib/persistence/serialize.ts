@@ -24,8 +24,10 @@ import type {
 	GraphNode,
 	NodeId,
 	Provenance,
+	EquationPayload,
 	TypedValue,
-	UndoEntry
+	UndoEntry,
+	WorkbookManifest
 } from '../engine';
 import { DocumentGraph, createBuiltinRegistry, evaluateWithDerivations, recalc } from '../engine';
 import { fromConvexJson, toConvexJson } from './codec';
@@ -56,7 +58,7 @@ export interface PersistedBlock {
 	position: number;
 	pm?: unknown;
 	image?: { storageId: string; alt?: string; caption?: string };
-	viewer?: unknown;
+	equation?: EquationPayload;
 }
 
 /** One undoLog row (mutation/inverse codec-encoded; actor widened to wire strings). */
@@ -80,6 +82,7 @@ export interface PersistedChip {
 export interface SavePayload {
 	blocksOrder: string[];
 	undoCursor: number;
+	workbookManifest: WorkbookManifest;
 	nodes: PersistedNode[];
 	blocks: PersistedBlock[];
 	undoLog: PersistedUndoEntry[];
@@ -88,7 +91,11 @@ export interface SavePayload {
 
 /** What `hydrateGraph` needs from a `documents.load` result. Extra row fields (`_id`, …) are ignored. */
 export interface LoadedRows {
-	document: { blocksOrder: string[]; undoCursor: number };
+	document: {
+		blocksOrder: string[];
+		undoCursor: number;
+		workbookManifest?: WorkbookManifest;
+	};
 	nodes: PersistedNode[];
 	blocks: (PersistedBlock & { docId?: string })[];
 	undoLog: PersistedUndoEntry[];
@@ -112,8 +119,10 @@ export interface HydrateResult {
 
 /** Snapshot a live graph into the `documents.save` wire payload (codec-encoded). */
 export function serializeGraph(graph: DocumentGraph): SavePayload {
-	const nodes: PersistedNode[] = [...graph.nodes.values()].map((node) =>
-		toConvexJson<PersistedNode>({
+	const nodes: PersistedNode[] = [...graph.nodes.values()]
+		.sort((a, b) => a.id.localeCompare(b.id))
+		.map((node) =>
+			toConvexJson<PersistedNode>({
 			nodeId: node.id,
 			kind: node.kind,
 			name: node.name,
@@ -125,19 +134,23 @@ export function serializeGraph(graph: DocumentGraph): SavePayload {
 			cellRef: node.cellRef,
 			provenance: node.provenance,
 			pending: node.pending
-		})
-	);
-	const blocks: PersistedBlock[] = [...graph.blocks.values()].map((block) =>
-		toConvexJson<PersistedBlock>({
+			})
+		);
+	const blocks: PersistedBlock[] = [...graph.blocks.values()]
+		.sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
+		.map((block) =>
+			toConvexJson<PersistedBlock>({
 			blockId: block.id,
 			type: block.type,
 			position: block.position,
 			pm: block.pm,
 			image: block.image,
-			viewer: block.viewer
-		})
-	);
-	const undoLog: PersistedUndoEntry[] = graph.undoLog.map((entry) =>
+			equation: block.equation
+			})
+		);
+	const undoLog: PersistedUndoEntry[] = [...graph.undoLog]
+		.sort((a, b) => a.seq - b.seq)
+		.map((entry) =>
 		toConvexJson<PersistedUndoEntry>({
 			seq: entry.seq,
 			mutation: entry.mutation,
@@ -145,18 +158,21 @@ export function serializeGraph(graph: DocumentGraph): SavePayload {
 			actor: entry.actor,
 			at: entry.at
 		})
-	);
-	const chips: PersistedChip[] = [...graph.chips.values()].map((chip) =>
-		toConvexJson<PersistedChip>({
+		);
+	const chips: PersistedChip[] = [...graph.chips.values()]
+		.sort((a, b) => a.id.localeCompare(b.id))
+		.map((chip) =>
+			toConvexJson<PersistedChip>({
 			chipId: chip.id,
 			blockId: chip.blockId,
 			nodeId: chip.nodeId,
 			format: chip.format
-		})
-	);
+			})
+		);
 	return {
 		blocksOrder: [...graph.blocksOrder],
 		undoCursor: graph.undoCursor,
+		workbookManifest: structuredClone(graph.workbook),
 		nodes,
 		blocks,
 		undoLog,
@@ -180,7 +196,7 @@ export function hydrateGraph(
 	rows: LoadedRows,
 	opts?: { registry?: FunctionRegistry }
 ): HydrateResult {
-	const graph = new DocumentGraph();
+	const graph = new DocumentGraph(rows.document.workbookManifest);
 
 	// Blocks, in canonical blocksOrder (insertBlock renumbers positions to match).
 	const blockRows = new Map(rows.blocks.map((row) => [row.blockId, row]));
@@ -200,7 +216,7 @@ export function hydrateGraph(
 			position: 0,
 			...(decoded.pm !== undefined && { pm: decoded.pm }),
 			...(decoded.image !== undefined && { image: decoded.image }),
-			...(decoded.viewer !== undefined && { viewer: decoded.viewer as Block['viewer'] })
+			...(decoded.equation !== undefined && { equation: decoded.equation })
 		};
 		graph.insertBlock(block);
 	}

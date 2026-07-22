@@ -115,8 +115,31 @@ h2 {
 	padding: 1px 7px;
 	border-radius: var(--radius-chip);
 	background: var(--accent-dim);
-	color: var(--accent);
+	color: var(--accent-2);
 	transition: background var(--t-med) var(--ease);
+}
+
+.chip-input {
+	min-width: 7rem;
+	width: 10ch;
+	border: 0;
+	border-bottom: 1px solid var(--accent);
+	background: transparent;
+	color: var(--ink);
+	font: inherit;
+	outline: none;
+}
+
+.chip-input[aria-invalid='true'] {
+	border-color: var(--error);
+}
+
+.chip-input-error {
+	display: block;
+	margin-top: 3px;
+	color: var(--error);
+	font: 0.72rem var(--font-body);
+	white-space: normal;
 }
 
 .chip.pulse {

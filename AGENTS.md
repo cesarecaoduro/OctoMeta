@@ -14,3 +14,17 @@
 ## Design
 
 Reference the @DESIGN.md file for desing token and direction
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in this repository's GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The repository uses the canonical five-role triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+The repository uses a single-context glossary and system-wide ADRs. See `docs/agents/domain.md`.

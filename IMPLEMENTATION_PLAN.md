@@ -1,7 +1,8 @@
-# OctoMeta · IMPLEMENTATION_PLAN.md (v3)
-*Actionable expansion of PRD §7–8 into confined, agent-handoverable tasks, sequenced around a three-version arc. V1 is the working prototype: a reactive block document (a Jupyter book for engineering, MathCAD on the web) where text, images, and Univer calculation sheets coexist and every block is connected through one typed graph. V2 connects the geometry viewer. V3 adds MCP and the AI layer.*
+# OctoMeta · IMPLEMENTATION_PLAN.md (v3 + R1.6)
+*Historical V1 milestone briefs plus the implemented R1.6 workbench pivot. V2
+connects the geometry viewer. V3 adds MCP and the AI layer.*
 
-**Status:** Active · **Date:** 19 July 2026 · **Companion docs:** [PRD.md](PRD.md) · [SCHEMA.md](SCHEMA.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [DESIGN.md](DESIGN.md)
+**Status:** R1.6 implemented; production credentials pending · **Date:** 20 July 2026 · **Companion docs:** [docs/v1-6-workbench-plan.md](docs/v1-6-workbench-plan.md) · [SCHEMA.md](SCHEMA.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [DESIGN.md](DESIGN.md)
 
 ---
 
@@ -28,14 +29,21 @@ Do not implement anything beyond this task's scope.
 
 ## 1. The version arc
 
-**V1 · Working prototype (target ~8–9 weeks).** The document that proves the thesis, end to end:
+**V1 · Working prototype (complete; superseded in product shape by R1.6).** The
+original canvas-with-sheet-blocks prototype proved the typed graph, adapter,
+persistence, document, chips, derivations, and provenance. R1.6 retained those
+contracts and moved calculation sheets into one attached workbook:
 
 1. **Schema working.** SCHEMA.md §2–§6, §9, §11 as a pure-TypeScript engine: typed values, dimensions, formula AST, mutation API as the sole write path, topological + content-hash recalc, cycle detection, function registry, error taxonomy.
 2. **Persistence.** Convex (already wired in this repo for the waitlist) behind a thin `src/lib/persistence/` interface. Reload restores the exact document, verified by hash in CI.
-3. **The main editor.** A TipTap block document at `/app/[docId]` where **text (markdown input), headings, images, and Univer sheet blocks coexist**. Univer is the calculation engine: cells carry numbers, formulas evaluate through the graph, named ranges publish dotted names (`beam.span`), and prose references results via live chips. Edit a cell anywhere and every dependent block follows. (Units surface in V2; see below.)
+3. **The main editor.** A TipTap report document at `/app/[docId]` with text,
+   headings, images, equations, and live values, plus one attached multi-tab
+   Univer workbook. Cells and report projections are joined by the typed graph.
 4. **Not a black box.** Show-steps derivations on every computed quantity, a read-only provenance inspector (who/what authored a value, its inputs and dependents), and the full error taxonomy rendered inline with deep-links to the origin. This is the QAQC/handover story and it ships in V1.
 
-**Deliberately out of V1:** the geometry viewer and kernels (V2, per decision 19 Jul 2026), **units in the product** (V2, per decision 19 Jul 2026: the engine quantity/units layer shipped in V1-1-2 and stays dormant — no V1 surface parses, renders, or converts units; V1 numbers are plain scalars), equation blocks (KaTeX/MathLive), PDF export, templates, version snapshots, IFC, auth, collaboration. The graph's geometry hooks and units layer are built dormant so V2 plugs in without engine changes.
+R1.6 subsequently activated the imperial unit surface, KaTeX equation blocks,
+Better Auth ownership, atomic graph/workbook persistence, trash/assets,
+responsive workbench UI, and production delivery gates.
 
 **V2 · Connect the viewer.** Geometry kernels behind `GeometryKernel`, geometry built-ins (`EXTRUDE` in a cell drives a solid), the Three.js viewer block with bidirectional picking, plus the report/deliverable surface: equations, PDF export, templates, versions, performance at 2,000 nodes, IFC.
 
@@ -214,7 +222,31 @@ Engine work (V1-1/V1-2) overlaps the spikes; persistence overlaps the adapter an
 
 ---
 
-## 9. V2 — Connect the viewer (outline; task briefs written at V1 exit)
+## 9. R1.6 — Attached workbook release (complete locally)
+
+The detailed contract, sequencing, risks, and acceptance matrix live in
+[docs/v1-6-workbench-plan.md](docs/v1-6-workbench-plan.md). Completion summary:
+
+| Workstream | Result |
+|---|---|
+| R1-0 contract, ownership, persistence | Stable `SheetId`, typed workbook manifest, Better Auth ownership, atomic revision/hash CAS, fail-closed load |
+| R1-1 workbook | One Univer instance/document, custom tab strip + graph formula line, add/rename/delete/undo/redo, exact cell deep-link |
+| R1-2 parameters + units | Published alias resolver, editable input pills/rail, shared SI/imperial parsing and formatting |
+| R1-3 equations | Static/bound discriminated union, structured TeX derivations, guarded accessible KaTeX |
+| R1-4/5 report + list | Uniform block chrome, live/trash views, search/sort/stats/bulk lifecycle, responsive layouts |
+| R1-6 lifecycle | Recoverable trash, strict 30-day purge, validated owned assets, durable cleanup, guarded dev reset |
+| R1-7 release/demo | Steel demo fixture, Vercel adapter/CSP/headers, CI and protected manual production workflow |
+| R1-8 docs | Architecture/schema/operator docs and compounded resolution note |
+
+Local release gates are green: frozen install, Svelte/TypeScript diagnostics,
+all Vitest projects, production build, desktop/narrow Playwright, axe, dependency
+audit threshold, secret scan, and import boundaries. Production execution is
+intentionally pending the separate production Convex/Vercel credentials and
+protected-environment approval described in the README.
+
+---
+
+## 10. V2 — Connect the viewer (outline; task briefs written at V1 exit)
 
 Geometry updating from calculation results is the V2 headline. The deferred spikes run first, because that's when their answers are needed:
 
@@ -229,7 +261,7 @@ Geometry updating from calculation results is the V2 headline. The deferred spik
 
 Auth + collaboration (former M5) remains its own pre-beta track after V2; the single mutation API (V1-2-1) is what keeps concurrent editing tractable.
 
-## 10. V3 — MCP + AI (outline)
+## 11. V3 — MCP + AI (outline)
 
 The hooks are already live at V1 exit: `pending` slot + provenance (V1-1-1, V1-2-1), single mutation API (V1-2-1), shared `FnSignature` (V1-1-4).
 
@@ -240,7 +272,7 @@ The hooks are already live at V1 exit: `pending` slot + provenance (V1-1-1, V1-2
 
 ---
 
-## 11. Cross-cutting rules for every task
+## 12. Cross-cutting rules for every task
 
 1. **No projection writes around `applyMutation`.** Enforce with a lint rule/test once V1-2-1 lands, not by review vigilance.
 2. **Third-party isolation:** `@univerjs` only under `src/lib/adapters/univer/`; `convex` only under `src/lib/persistence/` (+ `src/convex/`); `@tiptap`/ProseMirror only under the editor components; kernels (V2) only under `src/lib/geometry/`. Cheap to check in review, existential when Univer churns (risk register).

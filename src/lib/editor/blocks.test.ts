@@ -63,9 +63,13 @@ describe('specFromPmNode', () => {
 		expect(spec).toEqual({ type: 'image', image: { storageId: 'st1', alt: 'a beam' } });
 	});
 
-	it('classifies sheetBlock nodes as structure-only sheet specs (no pm payload)', () => {
-		const spec = specFromPmNode({ type: 'sheetBlock', attrs: { blockId: 'b1' } });
-		expect(spec).toEqual({ type: 'sheet' });
+	it('classifies equationBlock nodes with the exact discriminated payload', () => {
+		const equation = { mode: 'bound', nodeId: 'published-area', display: 'steps' } as const;
+		const spec = specFromPmNode({
+			type: 'equationBlock',
+			attrs: { blockId: 'eq1', equation }
+		});
+		expect(spec).toEqual({ type: 'equation', equation });
 	});
 });
 
@@ -87,19 +91,17 @@ describe('pmNodeFromBlock / pmDocFromBlocks', () => {
 		});
 	});
 
-	it('renders sheet blocks as empty sheetBlock atoms (content lives in the graph)', () => {
-		expect(pmNodeFromBlock(block({ id: 'b3', type: 'sheet' }))).toEqual({
-			type: 'sheetBlock',
-			attrs: { blockId: 'b3' }
+	it('round-trips static equation source exactly', () => {
+		const equation = { mode: 'static', tex: String.raw`A = b_f t_f + d t_w` } as const;
+		const node = pmNodeFromBlock(block({ id: 'eq1', type: 'equation', equation }));
+		expect(node).toEqual({
+			type: 'equationBlock',
+			attrs: { blockId: 'eq1', equation }
 		});
+		expect(specFromPmNode(node!)).toEqual({ type: 'equation', equation });
 	});
 
-	it('skips unmanaged block types (viewer, V2) and defaults empty docs to a paragraph', () => {
-		expect(pmNodeFromBlock(block({ id: 'b4', type: 'viewer' }))).toBeNull();
-		expect(pmDocFromBlocks([block({ id: 'b4', type: 'viewer' })])).toEqual({
-			type: 'doc',
-			content: [{ type: 'paragraph' }]
-		});
+	it('defaults empty docs to a paragraph', () => {
 		expect(pmDocFromBlocks([])).toEqual({ type: 'doc', content: [{ type: 'paragraph' }] });
 	});
 

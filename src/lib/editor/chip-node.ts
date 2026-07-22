@@ -67,6 +67,10 @@ export interface ChipNodeOptions {
 	 * triggered by Alt+click / Alt+Enter. Undefined disables the affordance.
 	 */
 	inspect?: (nodeId: NodeId) => void;
+	/** True when the published binding resolves to an editable input node. */
+	editable?: (nodeId: NodeId) => boolean;
+	/** Validate and commit native input text. */
+	edit?: (nodeId: NodeId, text: string) => { ok: true } | { ok: false; message: string };
 }
 
 /** The inline value chip node. Attrs carry ONLY the chip id. */
@@ -106,7 +110,7 @@ export const ChipNode = Node.create<ChipNodeOptions>({
 	},
 
 	addNodeView() {
-		const { resolve, subscribe, navigate, derive, inspect } = this.options;
+		const { resolve, subscribe, navigate, derive, inspect, editable, edit } = this.options;
 		return ({ node }) => {
 			const chipId = String(node.attrs.chipId ?? '');
 
@@ -125,6 +129,49 @@ export const ChipNode = Node.create<ChipNodeOptions>({
 			let pulseTimer: ReturnType<typeof setTimeout> | null = null;
 			/** The expanded show-steps panel, present only while expanded. */
 			let panel: HTMLSpanElement | null = null;
+			let input: HTMLInputElement | null = null;
+			let inputError: HTMLSpanElement | null = null;
+
+			const finishEdit = (): void => {
+				input?.remove();
+				inputError?.remove();
+				input = null;
+				inputError = null;
+				valueEl.hidden = false;
+				render(false);
+				dom.focus();
+			};
+
+			const beginEdit = (): void => {
+				const { binding } = resolve(chipId);
+				if (!binding || !editable?.(binding.nodeId) || !edit || input) return;
+				collapse();
+				valueEl.hidden = true;
+				input = document.createElement('input');
+				input.type = 'text';
+				input.className = 'chip-input';
+				input.value = last?.text ?? '';
+				input.setAttribute('aria-label', `Edit ${dom.getAttribute('aria-label') ?? 'parameter'}`);
+				dom.appendChild(input);
+				input.focus();
+				input.select();
+			};
+
+			const commitEdit = (): void => {
+				const { binding } = resolve(chipId);
+				if (!binding || !input || !edit) return;
+				const result = edit(binding.nodeId, input.value);
+				if (result.ok) {
+					finishEdit();
+					return;
+				}
+				input.setAttribute('aria-invalid', 'true');
+				inputError ??= document.createElement('span');
+				inputError.className = 'chip-input-error';
+				inputError.setAttribute('role', 'alert');
+				inputError.textContent = result.message;
+				if (!inputError.isConnected) dom.appendChild(inputError);
+			};
 
 			/** Restart the recompute flash (remove → reflow → add re-triggers). */
 			const pulse = (): void => {
@@ -249,6 +296,7 @@ export const ChipNode = Node.create<ChipNodeOptions>({
 				return true;
 			};
 			const onClick = (e: MouseEvent): void => {
+				if (input) return;
 				// Clicks inside the panel (text selection, scrolling) never toggle.
 				if (panel && e.target instanceof globalThis.Node && panel.contains(e.target)) return;
 				// Alt+click = inspector (V1-5-5); never falls through to the plain
@@ -262,6 +310,24 @@ export const ChipNode = Node.create<ChipNodeOptions>({
 				activate();
 			};
 			const onKeydown = (e: KeyboardEvent): void => {
+				if (input) {
+					if (e.key === 'Enter') {
+						e.preventDefault();
+						e.stopPropagation();
+						commitEdit();
+					} else if (e.key === 'Escape') {
+						e.preventDefault();
+						e.stopPropagation();
+						finishEdit();
+					}
+					return;
+				}
+				if (e.key === 'F2') {
+					e.preventDefault();
+					e.stopPropagation();
+					beginEdit();
+					return;
+				}
 				if (e.key === 'Enter') {
 					e.preventDefault();
 					e.stopPropagation();
@@ -277,6 +343,7 @@ export const ChipNode = Node.create<ChipNodeOptions>({
 				}
 			};
 			dom.addEventListener('click', onClick);
+			dom.addEventListener('dblclick', beginEdit);
 			dom.addEventListener('keydown', onKeydown);
 
 			return {
@@ -290,11 +357,17 @@ export const ChipNode = Node.create<ChipNodeOptions>({
 				// Events inside the open panel stay with the browser (text
 				// selection, panel scrolling) instead of ProseMirror.
 				stopEvent: (event) =>
-					panel !== null && event.target instanceof globalThis.Node && panel.contains(event.target),
+					(input !== null &&
+						event.target instanceof globalThis.Node &&
+						input.contains(event.target)) ||
+					(panel !== null &&
+						event.target instanceof globalThis.Node &&
+						panel.contains(event.target)),
 				destroy: () => {
 					offSettle();
 					if (pulseTimer !== null) clearTimeout(pulseTimer);
 					dom.removeEventListener('click', onClick);
+					dom.removeEventListener('dblclick', beginEdit);
 					dom.removeEventListener('keydown', onKeydown);
 				}
 			};

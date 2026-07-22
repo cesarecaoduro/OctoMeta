@@ -16,7 +16,7 @@ const REGISTRY = createBuiltinRegistry();
 const OPTS: RecalcOptions = { registry: REGISTRY };
 
 function cell(a1: string): CellRef {
-	return { sheetBlockId: SHEET, a1 };
+	return { sheetId: SHEET, a1 };
 }
 
 function must<T>(r: { ok: true; value: T } | { ok: false; error: MutationError }): T {
@@ -25,7 +25,7 @@ function must<T>(r: { ok: true; value: T } | { ok: false; error: MutationError }
 }
 
 function ast(src: string): FormulaAST {
-	const p = parseFormula(src, { sheetBlockId: SHEET });
+	const p = parseFormula(src, { sheetId: SHEET });
 	if (!p.ok) throw new Error(p.message);
 	return p.ast;
 }
@@ -93,7 +93,11 @@ describe('derivation corpus over persistence fixtures (PRD §4: 100% of computed
 				expect(last.kind).toBe('result');
 				// Computed nodes (any formula) open with the canonical formula text.
 				if (node.formula) {
-					expect(d.steps[0]).toEqual({ kind: 'formula', text: printFormula(node.formula) });
+					expect(d.steps[0]).toMatchObject({
+						kind: 'formula',
+						text: printFormula(node.formula),
+						formula: node.formula
+					});
 					expect(d.steps.length).toBeGreaterThanOrEqual(2);
 				} else {
 					expect(d.steps).toHaveLength(1);
@@ -163,13 +167,13 @@ describe('buildDerivation', () => {
 	it('an input node yields the trivial one-step derivation', () => {
 		const doc = calcDoc();
 		const d = buildDerivation('a', doc, REGISTRY);
-		expect(d.steps).toEqual([{ kind: 'result', text: '6' }]);
+		expect(d.steps).toEqual([{ kind: 'result', text: '6', value: scalar(6) }]);
 		expect(renderStepsText(d)).toBe('6');
 	});
 
 	it('an unknown node id yields a well-formed #REF! derivation, never a throw', () => {
 		const d = buildDerivation('ghost', new DocumentGraph(), REGISTRY);
-		expect(d).toEqual({
+		expect(d).toMatchObject({
 			nodeId: 'ghost',
 			steps: [{ kind: 'result', text: '#REF!' }],
 			error: '#REF!'

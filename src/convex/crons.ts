@@ -5,6 +5,8 @@ import { internalMutation } from './_generated/server';
 const crons = cronJobs();
 
 crons.interval('Remove old emails from the resend component', { hours: 1 }, internal.crons.cleanupResend);
+crons.interval('Purge expired document trash', { hours: 6 }, internal.documents.purgeExpired);
+crons.interval('Retry and clean document assets', { hours: 1 }, internal.files.cleanupAssets);
 
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 

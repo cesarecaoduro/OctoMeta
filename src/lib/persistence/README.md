@@ -1,28 +1,31 @@
 # `src/lib/persistence/`
 
-The only place UI code goes through to load/save documents — `convex` and
-`convex-svelte` may be imported only here and in `src/convex/`
-(IMPLEMENTATION_PLAN.md §11 rule 2, enforced by `boundary.test.ts` in CI).
+The only UI-facing path to Convex. Direct `convex`/`convex-svelte` imports are
+restricted to this directory and `src/convex/` by boundary tests.
 
-| Module | What it does |
+| Module | Responsibility |
 |---|---|
-| `client.ts` | `createPersistence(client)` — the typed facade (document CRUD, full save/load, sheet-snapshot and chip upserts) over the Convex functions in `src/convex/`. Framework-free. |
-| `svelte.ts` | Svelte-context entry points: `setupPersistence(url)` (root layout), `usePersistence()`, and the marketing `useWaitlist()`. |
-| `serialize.ts` | `serializeGraph(graph)` → save payload · `hydrateGraph(rows)` → rebuilt `DocumentGraph` + reproducibility verdict (re-derives every `contentHash` from inputs, SCHEMA.md §5). App and CI share this code path. |
-| `codec.ts` | Convex value codec: renames the non-ASCII `Θ` dimension key to `THETA` and back (Convex requires ASCII object keys), drops `undefined` fields. |
-| `saver.ts` | `createDocumentSaver(...)` — debounced full save on recalc settle; `scheduleSave()` / `flush()` / `dispose()` plus a `SaveState` for the save indicator (V1-5-1). |
-| `fixtures.ts` | Fixture documents built through the real `commit` path — the reproducibility CI gate runs on them; V1-5-6 reuses them. |
+| `client.ts` | Typed owned-document, trash, asset, and atomic-save facade |
+| `svelte.ts` | Root setup/context for product and waitlist clients |
+| `server.ts` | Server token bridge kept inside the Convex import boundary |
+| `serialize.ts` | Graph/bundle serialization and fail-closed hydration |
+| `canonical.ts` | Stable bytes, workbook hash, and complete bundle hash |
+| `saver.ts` | Debounced non-overlapping saves, generations, CAS conflict state |
+| `fixtures.ts` | Fixtures built through real mutations, including the steel demo |
+| `index.ts` | Public persistence surface |
 
-File storage (V1-5-1, image blocks): `Persistence.uploadFile(blob)` runs the
-Convex upload-URL flow (`files.generateUploadUrl` + POST) and returns the
-`storageId` stored in `Block.image`; `Persistence.fileUrl(storageId)` resolves
-a serving URL. Files are deleted with their document (`documents.remove`).
+One save mutation owns graph rows, report blocks/order, chips, undo
+history/cursor, workbook manifest, Univer snapshot, snapshot hash, bundle hash,
+revision, and stats. Convex validates ownership, live state, maintenance lock,
+limits, asset references, hashes, and expected revision before replacing the
+bundle transactionally.
 
-Tests: `*.test.ts` run in node; `*.convex.test.ts` run against `convex-test`
-in the `edge-runtime` vitest project (see `vite.config.ts`). The
-reproducibility gate (`reproducibility.convex.test.ts`) is cumulative CI
-(IMPLEMENTATION_PLAN.md §11 rule 6): save each fixture, load it back,
-re-evaluate everything from inputs, and require every stored `contentHash` to
-reproduce byte-for-byte.
+Load distinguishes live, trashed, missing, unauthorized, and integrity-error.
+Only `live` hydrates an editable graph. Hash/revision mismatch sends no writes.
 
-- Owner task: V1-4-1 (Convex persistence + reproducibility CI).
+Assets are byte/type/owner validated and cleanup is durable. Reachability
+includes retained undo. Trash/purge cascades every product row and asset.
+
+Tests are split between node unit suites and `*.convex.test.ts` under
+`convex-test`; the reproducibility suite re-evaluates fixtures and requires
+stored hashes to match byte-for-byte.

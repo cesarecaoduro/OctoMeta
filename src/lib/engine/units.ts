@@ -95,6 +95,8 @@ const UNITS: Record<string, UnitDef> = {
 	mm: { dim: L, factor: 1e-3 },
 	cm: { dim: L, factor: 1e-2 },
 	km: { dim: L, factor: 1e3 },
+	in: { dim: L, factor: 0.0254 },
+	ft: { dim: L, factor: 0.3048 },
 	// mass
 	kg: { dim: M, factor: 1 },
 	g: { dim: M, factor: 1e-3 },
@@ -116,11 +118,15 @@ const UNITS: Record<string, UnitDef> = {
 	N: { dim: FORCE, factor: 1 },
 	kN: { dim: FORCE, factor: 1e3 },
 	MN: { dim: FORCE, factor: 1e6 },
+	lbf: { dim: FORCE, factor: 4.4482216152605 },
+	kip: { dim: FORCE, factor: 4_448.2216152605 },
 	// pressure / stress
 	Pa: { dim: PRESSURE, factor: 1 },
 	kPa: { dim: PRESSURE, factor: 1e3 },
 	MPa: { dim: PRESSURE, factor: 1e6 },
 	GPa: { dim: PRESSURE, factor: 1e9 },
+	psi: { dim: PRESSURE, factor: 6_894.757293168 },
+	ksi: { dim: PRESSURE, factor: 6_894_757.293168 },
 	// energy · power · frequency
 	J: { dim: ENERGY, factor: 1 },
 	kJ: { dim: ENERGY, factor: 1e3 },

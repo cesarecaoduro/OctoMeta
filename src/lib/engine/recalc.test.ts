@@ -16,7 +16,7 @@ const OPTS: RecalcOptions = { registry: REGISTRY };
 type NewNode = Omit<GraphNode, 'value' | 'contentHash' | 'inputs'>;
 
 function cell(a1: string): CellRef {
-	return { sheetBlockId: SHEET, a1 };
+	return { sheetId: SHEET, a1 };
 }
 
 function must<T>(r: { ok: true; value: T } | { ok: false; error: MutationError }): T {
@@ -25,7 +25,7 @@ function must<T>(r: { ok: true; value: T } | { ok: false; error: MutationError }
 }
 
 function ast(src: string): FormulaAST {
-	const p = parseFormula(src, { sheetBlockId: SHEET });
+	const p = parseFormula(src, { sheetId: SHEET });
 	if (!p.ok) throw new Error(p.message);
 	return p.ast;
 }

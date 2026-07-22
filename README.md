@@ -2,64 +2,131 @@
 
 *The living engineering document. Edit once, everything follows.*
 
-OctoMeta is the living engineering document: your calculations, your report, and your 3D model are views of a single intelligent graph. Edit anywhere, and everything follows.
+OctoMeta is an authenticated engineering workbench. A report canvas, attached
+multi-tab workbook, parameters, equations, derivations, and provenance are
+projections of one typed dependency graph.
 
-**Current state:** marketing landing page (SvelteKit + Svelte 5) with a Convex backend. The waitlist form writes to the `waitlist` table via `waitlist.join`, and confirmation emails are queued through the [Resend component](https://www.convex.dev/components/resend). The site deploys to Vercel (project `octometa`, live at [octometa.vercel.app](https://octometa.vercel.app)). See [ARCHITECTURE.md](ARCHITECTURE.md) for what exists and where, and [PRD.md](PRD.md) for the product plan.
+The R1.6 workbench is implemented on `feat/v1-6-workbench`: owned documents,
+atomic graph/workbook persistence, a single Univer workbook per document,
+imperial engineering units, safe KaTeX equations, trash/retention, durable
+asset cleanup, a guarded development reset, CI, and a protected production
+release workflow.
 
 ## Prerequisites
 
-- Node 20+ and [pnpm](https://pnpm.io)
-- A [Convex](https://convex.dev) account (free) for the dev deployment
+- Node.js 24
+- pnpm 11.10.0 (Corepack is fine)
+- A Convex account for a development deployment
 
-## Setup
-
-```sh
-pnpm install
-npx convex dev --once   # provisions/links a Convex dev deployment, writes .env.local
-```
-
-`.env.local` (gitignored) holds `CONVEX_DEPLOYMENT` and `PUBLIC_CONVEX_URL`. If you're a new contributor, `npx convex dev --once` will walk you through creating or linking a deployment.
-
-## Developing
+## Local setup
 
 ```sh
-pnpm dev          # dev server at http://localhost:5173
-pnpm check        # svelte-check (types + a11y)
+pnpm install --frozen-lockfile
+pnpm exec convex dev --once
+cp .env.example .env.local
 ```
 
-When backend functions exist, run `npx convex dev` alongside `pnpm dev` so function changes deploy on save.
+Keep the Convex-generated `CONVEX_DEPLOYMENT` and `PUBLIC_CONVEX_URL` values in
+`.env.local`. `PUBLIC_CONVEX_SITE_URL` is the deployment's HTTP Actions URL.
 
-## Building
+Configure Better Auth on the Convex development deployment:
 
 ```sh
-pnpm build        # production build
-pnpm preview      # serve the production build locally
+pnpm exec convex env set BETTER_AUTH_SECRET "$(openssl rand -base64 32)"
+pnpm exec convex env set SITE_URL http://localhost:5173
+pnpm exec convex env set AUTH_TRUSTED_ORIGINS http://localhost:5173,http://localhost:4173
 ```
 
-## Deploying (Vercel)
+Google OAuth is optional. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in
+Convex together to enable it. Email/password works without them. Magic links
+also require the existing `RESEND_API_KEY` configuration.
 
-The site deploys to the Vercel project `octometa` (linked via `.vercel/`, gitignored). `@sveltejs/adapter-auto` picks the Vercel adapter at build time.
+Run Convex and the app in separate terminals:
 
 ```sh
-vercel deploy --prod --archive=tgz
+pnpm exec convex dev
+pnpm dev
 ```
 
-`PUBLIC_CONVEX_URL` and `PUBLIC_CONVEX_SITE_URL` are set as Vercel env vars (currently pointing at the dev Convex deployment; repoint them after running `npx convex deploy` to provision production).
+Open [http://localhost:5173/signin](http://localhost:5173/signin), create an
+account, then use **Load demo** on the document list to open the complete
+`Steel beam check` workbench.
 
-## Email (Resend)
+## Verification
 
-All email goes through the Convex Resend component: `src/convex/emails.ts` holds the shared client, `waitlist.join` queues the confirmation email, `http.ts` mounts the delivery webhook, and `crons.ts` cleans up old component data.
+```sh
+pnpm check
+pnpm test
+pnpm build
+pnpm test:e2e
+pnpm audit --prod --audit-level=high
+pnpm secret:scan
+```
 
-`octometa.app` is verified in Resend (auto-verified via the Resend↔Vercel integration) and `testMode` is off, so real addresses can be enqueued. `RESEND_API_KEY` is set on both the dev and prod Convex deployments. A webhook (`email.bounced`, `.complained`, `.delivered`, `.delivery_delayed`, `.failed`, `.sent`) points at `https://amiable-leopard-466.convex.site/resend-webhook` (the dev deployment, since that's what the live site currently runs on) with `RESEND_WEBHOOK_SECRET` set to match on the dev deployment only.
+The Playwright suite creates an isolated owner, exercises the desktop demo
+through reload/trash/restore, verifies route gating and safe TeX handling, and
+runs the narrow layout at `390×844` with axe.
 
-When production is provisioned (`npx convex deploy`, then repoint `PUBLIC_CONVEX_URL`/`PUBLIC_CONVEX_SITE_URL` in Vercel), create a second Resend webhook pointing at the prod `*.convex.site/resend-webhook` URL and set its own `RESEND_WEBHOOK_SECRET` on the prod deployment with `npx convex env set RESEND_WEBHOOK_SECRET <value> --prod`.
+## Development reset
+
+The reset deletes only product tables and product-owned storage. It excludes
+Better Auth, component, and waitlist data. It refuses production, requires a
+deployment-specific token plus the exact backup acknowledgement, supports a
+dry run, acquires a product-write lock, deletes in bounded batches, and unlocks
+only after zero-row verification.
+
+Configure only a development/test deployment:
+
+```sh
+pnpm exec convex env set RESET_ENVIRONMENT development
+pnpm exec convex env set DEV_RESET_TOKEN "<random deployment-specific token>"
+```
+
+Preview counts:
+
+```sh
+pnpm exec convex run maintenance:developmentReset \
+  '{"token":"<token>","dryRun":true,"acknowledgeBackup":"IRREVERSIBLE BACKUP CONFIRMED"}'
+```
+
+Run the reset only after reviewing the dry-run counts and taking the intended
+backup:
+
+```sh
+pnpm exec convex run maintenance:developmentReset \
+  '{"token":"<token>","dryRun":false,"acknowledgeBackup":"IRREVERSIBLE BACKUP CONFIRMED"}'
+```
+
+If a reset fails, maintenance mode deliberately remains locked for inspection.
+Do not edit the lock row manually until the failed stage and storage state have
+been reconciled.
+
+## Production release
+
+`.github/workflows/production.yml` is manual and targets the protected GitHub
+`production` environment. Configure:
+
+- variables: `CONVEX_PRODUCTION_URL`, `CONVEX_PRODUCTION_SITE_URL`
+- secrets: `CONVEX_DEPLOY_KEY`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`,
+  `VERCEL_TOKEN`
+- production Convex environment: `BETTER_AUTH_SECRET`, `SITE_URL`,
+  `AUTH_TRUSTED_ORIGINS`, Resend settings, and optional Google OAuth settings
+
+The workflow reruns install, types, tests, production build, audit, secret scan,
+and Playwright before deploying Convex and the prebuilt Vercel artifact.
+Production reset must remain unconfigured/disabled.
+
+Rollback means redeploying the previous Vercel deployment while keeping Convex
+schema changes forward-compatible. Never restore a development snapshot into
+production.
 
 ## Project documents
 
-| File | What it is |
+| File | Purpose |
 |---|---|
-| [PRD.md](PRD.md) | Product requirements, milestones, task graph |
-| [SCHEMA.md](SCHEMA.md) | Typed dependency-graph data model |
-| [DESIGN.md](DESIGN.md) | Brand, logo, and design tokens |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | What's built, how it's laid out, decisions taken |
-| `docs/references/` | Static HTML mockups the landing page was built from |
+| [PRD.md](PRD.md) | Product requirements and version arc |
+| [docs/v1-6-workbench-plan.md](docs/v1-6-workbench-plan.md) | R1.6 execution contract and completion evidence |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Current ownership boundaries and code map |
+| [SCHEMA.md](SCHEMA.md) | Typed graph and persisted bundle schema |
+| [DESIGN.md](DESIGN.md) | Brand, tokens, and UI direction |
+| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Historical milestones and current release addendum |

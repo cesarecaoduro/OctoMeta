@@ -19,15 +19,14 @@
 import { Editor, Extension } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import type { Block, DocumentGraph, FunctionRegistry, NodeId } from '../engine';
-import { ulid } from '../engine';
+import { resolvePublishedTarget, ulid } from '../engine';
 import type { PMJson } from './blocks';
 import { pmDocFromBlocks } from './blocks';
 import type { BlockSync, SyncHost } from './sync';
 import { createBlockSync } from './sync';
 import type { ImageBlockOptions } from './image-node';
 import { ImageBlock } from './image-node';
-import type { SheetBlockOptions } from './sheet-node';
-import { SheetBlock } from './sheet-node';
+import { EquationBlock } from './equation-node';
 import {
 	CHIP_NODE_NAME,
 	chipDerivation,
@@ -38,6 +37,7 @@ import {
 import { ChipNode } from './chip-node';
 import { ChipPicker } from './chip-picker';
 import { InsertSlots, type InsertableBlockType } from './insert-slots';
+import { BlockChrome } from './block-chrome';
 
 /** Transaction meta flag marking editor writes made by the sync itself. */
 const SYNC_META = 'octo-sync';
@@ -51,7 +51,7 @@ const BLOCK_ID_TYPES = [
 	'blockquote',
 	'codeBlock',
 	'imageBlock',
-	'sheetBlock'
+	'equationBlock'
 ];
 
 export interface DocEditorOptions {
@@ -66,8 +66,6 @@ export interface DocEditorOptions {
 	registry: FunctionRegistry;
 	/** Resolve an image storageId to a serving URL (persistence `fileUrl`). */
 	resolveImageUrl: ImageBlockOptions['resolveUrl'];
-	/** Mount a live sheet grid for a sheet block (page wraps the Univer adapter). */
-	attachSheet: SheetBlockOptions['attach'];
 	/** Commit one mutation through the engine write path; returns ok. */
 	commitMutation: SyncHost['commit'];
 	/** Called after reconciliation committed anything — schedule a save. */
@@ -85,6 +83,13 @@ export interface DocEditorOptions {
 	 * on a chip routes here. Omit to disable the affordance entirely.
 	 */
 	onInspect?: (nodeId: NodeId) => void;
+	/** Open an exact workbook cell when an error originates outside report blocks. */
+	onNavigateCell?: (cellRef: { sheetId: string; a1: string }) => boolean;
+	/** Validate and commit an editable published input from a chip native input. */
+	editParameter?: (
+		publishedNodeId: NodeId,
+		text: string
+	) => { ok: true } | { ok: false; message: string };
 	/**
 	 * Notebook-style insertion slots: called with the block type and top-level
 	 * position when a slot button is clicked. Omit to hide the slots entirely.
@@ -92,6 +97,8 @@ export interface DocEditorOptions {
 	onInsertBlockAt?: (type: InsertableBlockType, index: number) => void;
 	/** Debounce override for tests. */
 	syncDelayMs?: number;
+	/** Announce structural report changes to assistive technology. */
+	onAnnounce?: (message: string) => void;
 }
 
 export interface DocEditor {
@@ -102,10 +109,18 @@ export interface DocEditor {
 	flushProse(): void;
 	/** Move the block containing the selection one slot up/down via blockOp. */
 	moveSelectedBlock(dir: -1 | 1): boolean;
+	/** Move a known block one slot up/down via blockOp. */
+	moveBlock(blockId: string, dir: -1 | 1): boolean;
+	/** Remove one block via the engine and restore focus deterministically. */
+	removeBlock(blockId: string): boolean;
 	/** Put the caret (or node selection) into the block and scroll it into view. */
 	focusBlock(blockId: string): boolean;
 	/** The block id under the selection, if the node has been assigned one. */
 	selectedBlockId(): string | null;
+	/** Insert a fresh chip binding at a valid report text caret. */
+	insertChip(nodeId: NodeId): boolean;
+	/** Focus the native TeX editor owned by an equation block. */
+	focusEquationEditor(blockId: string): boolean;
 	destroy(): void;
 }
 
@@ -114,6 +129,21 @@ function orderedBlocks(graph: DocumentGraph): Block[] {
 	return graph.blocksOrder
 		.map((id) => graph.blocks.get(id))
 		.filter((block): block is Block => block !== undefined);
+}
+
+/** Resolve a rendered top-level block element by its stable graph id. */
+function editorElForBlock(editor: Editor, blockId: string): HTMLElement | null {
+	const doc = editor.state.doc;
+	let pos = 0;
+	for (let index = 0; index < doc.childCount; index++) {
+		const child = doc.child(index);
+		if (child.attrs.blockId === blockId) {
+			const node = editor.view.nodeDOM(pos);
+			return node instanceof HTMLElement ? node : null;
+		}
+		pos += child.nodeSize;
+	}
+	return null;
 }
 
 /** Build the document editor. Call from onMount — TipTap needs the DOM. */
@@ -158,20 +188,41 @@ export function createDocEditor(opts: DocEditorOptions): DocEditor {
 
 	const editor = new Editor({
 		element: opts.element,
+		editorProps: {
+			attributes: {
+				'aria-label': 'Report editor'
+			}
+		},
 		extensions: [
 			// Engine history is THE undo/redo; links are out of V1-5-1 scope.
 			StarterKit.configure({ undoRedo: false, link: false }),
 			BlockIdAttribute,
 			ImageBlock.configure({ resolveUrl: opts.resolveImageUrl }),
-			SheetBlock.configure({
-				attach: opts.attachSheet,
-				onUndo: opts.onUndo,
-				onRedo: opts.onRedo
+			EquationBlock.configure({
+				graph: opts.graph,
+				subscribe: opts.onSettle,
+				commit: (blockId, equation) => {
+					const ok = opts.commitMutation({
+						op: 'blockOp',
+						action: 'update',
+						blockId,
+						block: { equation }
+					});
+					if (ok) opts.onChanged();
+					return ok;
+				}
 			}),
 			ChipNode.configure({
 				resolve: (chipId) => {
 					const binding = opts.graph.chips.get(chipId);
-					const node = binding ? opts.graph.nodes.get(binding.nodeId) : undefined;
+					const published = binding
+						? resolvePublishedTarget(opts.graph, binding.nodeId)
+						: undefined;
+					const node = published
+						? { ...published.targetNode, name: published.publishedNode.name }
+						: binding
+							? opts.graph.nodes.get(binding.nodeId)
+							: undefined;
 					return { binding, node };
 				},
 				subscribe: opts.onSettle,
@@ -180,7 +231,14 @@ export function createDocEditor(opts: DocEditorOptions): DocEditor {
 				// graph state; the alias hop for published names lives in chips.ts.
 				derive: (nodeId) => chipDerivation(nodeId, opts.graph, opts.registry),
 				// Provenance inspector (V1-5-5): Alt+click / Alt+Enter on a chip.
-				...(opts.onInspect !== undefined ? { inspect: opts.onInspect } : {})
+				...(opts.onInspect !== undefined ? { inspect: opts.onInspect } : {}),
+				...(opts.editParameter !== undefined
+					? {
+							editable: (nodeId: NodeId) =>
+								resolvePublishedTarget(opts.graph, nodeId)?.targetNode.kind === 'input',
+							edit: opts.editParameter
+						}
+					: {})
 			}),
 			ChipPicker.configure({
 				items: chipItems,
@@ -189,6 +247,14 @@ export function createDocEditor(opts: DocEditorOptions): DocEditor {
 			...(opts.onInsertBlockAt !== undefined
 				? [InsertSlots.configure({ insert: opts.onInsertBlockAt })]
 				: []),
+			BlockChrome.configure({
+				move: (blockId, direction) => {
+					api.moveBlock(blockId, direction);
+				},
+				remove: (blockId) => {
+					api.removeBlock(blockId);
+				}
+			}),
 			OctoKeymap
 		],
 		content: pmDocFromBlocks(orderedBlocks(opts.graph)) as object,
@@ -388,6 +454,7 @@ export function createDocEditor(opts: DocEditorOptions): DocEditor {
 	 */
 	function navigateToNode(origin: NodeId): boolean {
 		const node = opts.graph.nodes.get(origin);
+		if (node?.cellRef) return opts.onNavigateCell?.(node.cellRef) ?? false;
 		const hostId = node?.blockId;
 		if (hostId === undefined) return false;
 		const doc = editor.state.doc;
@@ -431,22 +498,71 @@ export function createDocEditor(opts: DocEditorOptions): DocEditor {
 			return typeof id === 'string' && id !== '' ? id : null;
 		},
 
+		insertChip(nodeId: NodeId): boolean {
+			const selection = editor.state.selection;
+			if (!selection.empty || !selection.$from.parent.inlineContent) return false;
+			const node = opts.graph.nodes.get(nodeId);
+			if (!node?.name) return false;
+			return pickChip(
+				{ name: node.name, nodeId },
+				{ from: selection.from, to: selection.to }
+			);
+		},
+
+		focusEquationEditor(blockId: string): boolean {
+			const block = editorElForBlock(editor, blockId);
+			const source = block?.querySelector<HTMLTextAreaElement>('.equation-source');
+			if (!source) return false;
+			source.focus();
+			source.select();
+			return true;
+		},
+
 		moveSelectedBlock(dir: -1 | 1): boolean {
 			// Make sure the block exists in the graph (an untouched fresh node may
 			// not have reconciled yet), and flush prose so undo order stays linear.
 			sync.reconcile(editor.getJSON() as PMJson);
 			sync.flush();
 			const id = api.selectedBlockId();
-			if (id === null) return false;
-			const from = opts.graph.blocksOrder.indexOf(id);
+			return id !== null && api.moveBlock(id, dir);
+		},
+
+		moveBlock(blockId: string, dir: -1 | 1): boolean {
+			sync.reconcile(editor.getJSON() as PMJson);
+			sync.flush();
+			const from = opts.graph.blocksOrder.indexOf(blockId);
 			const to = from + dir;
 			if (from < 0 || to < 0 || to >= opts.graph.blocksOrder.length) return false;
-			const ok = opts.commitMutation({ op: 'blockOp', action: 'move', blockId: id, position: to });
+			const ok = opts.commitMutation({
+				op: 'blockOp',
+				action: 'move',
+				blockId,
+				position: to
+			});
 			if (!ok) return false;
 			api.renderFromGraph();
-			// Put the caret back into the moved block so repeated moves chain.
-			api.focusBlock(id);
+			api.focusBlock(blockId);
 			opts.onChanged();
+			opts.onAnnounce?.(`Moved block ${dir < 0 ? 'up' : 'down'}.`);
+			return true;
+		},
+
+		removeBlock(blockId: string): boolean {
+			sync.reconcile(editor.getJSON() as PMJson);
+			sync.flush();
+			const index = opts.graph.blocksOrder.indexOf(blockId);
+			if (index < 0) return false;
+			const ok = opts.commitMutation({ op: 'blockOp', action: 'remove', blockId });
+			if (!ok) return false;
+			api.renderFromGraph();
+			const focusId =
+				opts.graph.blocksOrder[index] ??
+				opts.graph.blocksOrder[index - 1] ??
+				null;
+			if (focusId) api.focusBlock(focusId);
+			else editor.commands.focus('end');
+			opts.onChanged();
+			opts.onAnnounce?.('Removed block. Undo is available.');
 			return true;
 		},
 
