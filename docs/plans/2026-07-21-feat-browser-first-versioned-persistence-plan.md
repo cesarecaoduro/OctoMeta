@@ -1032,9 +1032,9 @@ This is a separate hotfix release and must deploy before any browser-first work.
 - [x] In `src/convex/files.ts`, stop rescheduling reachable full pages and prevent pagination starvation. Persist `lastReachabilityCheckedAt` (or an equivalent durable cursor), index candidates by state/check time, and advance that check marker even when a reachable asset is retained so every candidate is eventually examined at normal cron cadence.
 - [x] Add a reachable prefix followed by an unreachable tail regression across multiple cron runs, proving zero immediate recurrence and eventual tail cleanup.
 - [ ] Check the Convex schedules/logs dashboard after deploy and verify invocation/DB I/O return to the expected cron cadence.
-- [ ] Configure Convex usage alerts/limits for function calls, database bandwidth, file bandwidth, and outstanding scheduled functions.
+- [x] Configure Convex usage alerts/limits for function calls, database bandwidth, file bandwidth, and outstanding scheduled functions.
 - [x] Take a full Convex backup/export before schema or migration work.
-- [ ] Rotate every development credential that appeared in prior diagnostic output (Better Auth, Resend, webhook/reset secrets); never place values in docs, commits, logs, or the plan.
+- [x] Rotate every development credential that appeared in prior diagnostic output (Better Auth, Resend, webhook/reset secrets); never place values in docs, commits, logs, or the plan.
 - [x] Run `pnpm secret:scan` and verify deployment variables by name only.
 
 **Gate:** 24 hours with no non-progress cleanup recurrence; live documents and reachable assets remain intact; backup location/restore procedure recorded.

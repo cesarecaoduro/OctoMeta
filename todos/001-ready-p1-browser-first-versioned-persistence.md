@@ -189,6 +189,29 @@ Execute Option 1 on `feat/browser-first-versioned-persistence`. Treat the source
 - Development and production currently reference the same Resend API token, and that token cannot manage API keys through the provider API; safe rotation requires the authenticated provider dashboard and revocation of the shared value.
 - Production Convex currently has only `RESEND_API_KEY`; the remaining production auth/site/webhook variable names must be configured before deployment.
 
+### 2026-07-22 - Phase 0 credential and production readiness
+
+**By:** Codex
+
+**Actions:**
+
+- Created separate sending-only Resend API keys for Convex development and production, verified the stored values were valid and distinct without printing them, and revoked the shared legacy provider key.
+- Rotated the development Resend webhook signing secret, created a production webhook with the same six-event coverage, and verified distinct development/production signing secrets.
+- Created a dedicated `MyOrg`-scoped Vercel CI token with a one-year expiration and stored it in the GitHub `Production` environment.
+- Configured production-specific Better Auth, site URL, trusted origin, Resend API, and Resend webhook values in Convex. Left optional Google OAuth disabled because no production OAuth client is provisioned.
+- Verified `octometa.app` is assigned to the OctoMeta Vercel project and used it as the production authentication origin.
+- Removed the single development JWKS row encrypted under the retired Better Auth secret, allowed Better Auth to regenerate it under the replacement secret, and passed all five Playwright release tests.
+- Passed `pnpm check`, 536 unit tests, `pnpm build`, the high-severity production audit gate, `pnpm secret:scan`, and `git diff --check` immediately before deployment.
+
+**Remaining Phase 0 gate:**
+
+- Deploy the hotfix, verify Convex schedule/log cadence and production behavior, and observe the gate for 24 hours.
+
+**Learnings:**
+
+- Browser clipboard state is not a safe shell handoff boundary; one-time provider values were instead transferred through owner-only temporary files that were deleted immediately after the target accepted them.
+- Provider-side webhook secret rotation is immediate, so the matching Convex environment update must follow directly and be verified before proceeding.
+
 ## Notes
 
 - The source plan is a living document; mark each completed implementation checkbox there.

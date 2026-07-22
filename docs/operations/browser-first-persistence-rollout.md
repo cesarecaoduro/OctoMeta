@@ -63,11 +63,13 @@ The production GitHub workflow expects these GitHub environment values:
 - Variables: `CONVEX_PRODUCTION_URL`, `CONVEX_PRODUCTION_SITE_URL`.
 - Secrets: `CONVEX_DEPLOY_KEY`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `VERCEL_TOKEN`.
 
-As of 2026-07-21, the two Convex URL variables and the `CONVEX_DEPLOY_KEY`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` secrets are configured directly on the GitHub `Production` environment. `VERCEL_TOKEN` remains intentionally unconfigured; create a dedicated CI token rather than copying the personal CLI token.
+The two Convex URL variables and all four workflow secrets are configured directly on the GitHub `Production` environment. On 2026-07-22, `VERCEL_TOKEN` was created as a dedicated `MyOrg`-scoped CI token named `OctoMeta GitHub Production`, with a one-year expiration on 2027-07-22. It is not the personal CLI token.
 
 Convex deployment variables required by the current application are documented in `.env.example`. Verify names only before deployment.
 
-The production Convex deployment currently has only `RESEND_API_KEY` configured. Before deployment, configure `BETTER_AUTH_SECRET`, `SITE_URL`, `AUTH_TRUSTED_ORIGINS`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `RESEND_WEBHOOK_SECRET` with production-specific values. Keep `RESET_ENVIRONMENT` and `DEV_RESET_TOKEN` absent from production.
+The production Convex deployment has production-specific `BETTER_AUTH_SECRET`, `SITE_URL`, `AUTH_TRUSTED_ORIGINS`, `RESEND_API_KEY`, and `RESEND_WEBHOOK_SECRET` values. `SITE_URL` and the trusted origin use the Vercel-assigned `https://octometa.app` domain. Google OAuth remains intentionally disabled because no production OAuth client is configured; `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are optional in the application and must be added together when that provider is provisioned. Keep `RESET_ENVIRONMENT` and `DEV_RESET_TOKEN` absent from production.
+
+Resend has separate sending-only API keys for the Convex development and production deployments. The production webhook targets `https://cheerful-hummingbird-383.convex.site/resend-webhook`, listens for the same six events as development, and has a distinct signing secret.
 
 ## Credential Rotation
 
@@ -76,8 +78,8 @@ Rotate the development credentials exposed in prior diagnostic output before dep
 | Variable | Status |
 |---|---|
 | `BETTER_AUTH_SECRET` | Rotated directly in the development Convex deployment on 2026-07-21 |
-| `RESEND_API_KEY` | Pending coordinated provider rotation; development and production currently reference the same provider token |
-| `RESEND_WEBHOOK_SECRET` | Pending coordinated provider rotation |
+| `RESEND_API_KEY` | Rotated on 2026-07-22; development and production use distinct sending-only provider keys and the shared legacy key was revoked |
+| `RESEND_WEBHOOK_SECRET` | Rotated on 2026-07-22; development and production use distinct signing secrets and production has its own webhook endpoint |
 | `DEV_RESET_TOKEN` | Not configured in the development Convex deployment; no active value to rotate |
 
 Invalidate the prior value at its provider, set the replacement directly in the relevant Convex deployment, restart or redeploy consumers when required, and verify the old value no longer authenticates. Do not record either value. Re-run `pnpm secret:scan` after rotation.
@@ -128,3 +130,9 @@ Observe these invariants for 24 hours. Record timestamps, baseline/observed coun
 | 2026-07-21 | Production Convex | Required application variable names present | Fail — only `RESEND_API_KEY` is configured |
 | 2026-07-21 | Production Convex | Function-call, database-I/O, and data-egress monthly warning/disable thresholds | Pass |
 | 2026-07-21 | Production Convex | Outstanding scheduled functions before hotfix deployment | Pass — zero outstanding runs; post-deploy observation pending |
+| 2026-07-22 | Resend/Convex | Development and production API keys separated; shared legacy key revoked | Pass — distinct sending-only keys verified by prefix, length, and inequality without printing values |
+| 2026-07-22 | Resend/Convex | Development webhook secret rotated and production webhook provisioned | Pass — distinct signing secrets verified without printing values |
+| 2026-07-22 | GitHub Production environment | Dedicated Vercel CI token configured | Pass — `MyOrg` scope, one-year expiration, secret name verified |
+| 2026-07-22 | Production Convex | Core application variable names present | Pass — Better Auth, site/trusted origin, Resend API, and webhook variables present; optional Google OAuth disabled |
+| 2026-07-22 | Development Convex | Better Auth JWKS after secret rotation | Pass — one key encrypted under the retired secret was removed and regenerated under the replacement secret |
+| 2026-07-22 | Local release gate | Types, 536 unit tests, production build, 5 Playwright tests, audit, secret scan, and diff check | Pass — audit reports one low-severity advisory and no high-severity blocker |
