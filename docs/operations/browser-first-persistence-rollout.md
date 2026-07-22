@@ -136,3 +136,4 @@ Observe these invariants for 24 hours. Record timestamps, baseline/observed coun
 | 2026-07-22 | Production Convex | Core application variable names present | Pass — Better Auth, site/trusted origin, Resend API, and webhook variables present; optional Google OAuth disabled |
 | 2026-07-22 | Development Convex | Better Auth JWKS after secret rotation | Pass — one key encrypted under the retired secret was removed and regenerated under the replacement secret |
 | 2026-07-22 | Local release gate | Types, 536 unit tests, production build, 5 Playwright tests, audit, secret scan, and diff check | Pass — audit reports one low-severity advisory and no high-severity blocker |
+| 2026-07-22 | GitHub Actions | Initial Production workflow dispatch | Blocked safely — GitHub has no workflow registered on default branch `main`; no deployment started |

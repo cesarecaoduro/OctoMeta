@@ -206,6 +206,7 @@ Execute Option 1 on `feat/browser-first-versioned-persistence`. Treat the source
 **Remaining Phase 0 gate:**
 
 - Deploy the hotfix, verify Convex schedule/log cadence and production behavior, and observe the gate for 24 hours.
+- Register `.github/workflows/production.yml` on default branch `main` before dispatching this feature ref. GitHub rejected the initial dispatch because the workflow exists only on the feature lineage; do not bypass the protected workflow with a direct deployment.
 
 **Learnings:**
 
