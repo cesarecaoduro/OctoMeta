@@ -14,13 +14,13 @@
 		type NodeId
 	} from '$lib/engine';
 	import {
+		createPersistenceActivityLog,
 		hydrateGraph,
-		createDocumentSaver,
 		usePersistence,
 		type DocumentId,
-		type DocumentSaver,
 		type SaveState
 	} from '$lib/persistence';
+	import { createWorkspaceController, type WorkspaceController } from '$lib/workspace';
 	import { createDocEditor, type DocEditor, type InsertableBlockType } from '$lib/editor';
 	import {
 		createGraphSession,
@@ -38,9 +38,10 @@
 	// engine history is THE undo/redo, and the TipTap doc re-renders from graph
 	// state after undo/redo/load. Sheet blocks host live Univer grids through
 	// the V1-3-1 adapter, all bound to the ONE graph session; their snapshots
-	// persist to `sheetSnapshots` on the document saver's cadence.
+	// persist through the workspace controller on the existing cloud cadence.
 
-	const persistence = usePersistence();
+	const persistenceActivity = createPersistenceActivityLog();
+	const persistence = usePersistence(persistenceActivity.observe);
 	const docId = page.params.docId as DocumentId;
 	const HUMAN: Actor = { kind: 'human' };
 
@@ -130,7 +131,7 @@
 	let graph: DocumentGraph;
 	let registry: FunctionRegistry;
 	let session: GraphSession = $state()!;
-	let saver: DocumentSaver | null = null;
+	let workspace: WorkspaceController | null = null;
 	let docEditor: DocEditor | null = null;
 
 	let workbookAdapter: WorkbookAdapter | null = $state(null);
@@ -143,14 +144,14 @@
 		error: 'save failed'
 	};
 
-	/** The single write path: commit (applyMutation + recalc), then schedule a save. */
+	/** The single write path through the framework-neutral workspace controller. */
 	function commitMutation(m: GraphMutation): boolean {
-		const r = session.commit(m);
-		if (!r.ok) {
-			console.warn('mutation rejected:', r.error.message);
+		const result = workspace?.commit(m);
+		if (!result?.ok) {
+			const message = result && !result.ok ? result.error.message : 'workspace not ready';
+			console.warn('mutation rejected:', message);
 			return false;
 		}
-		saver?.scheduleSave();
 		return true;
 	}
 
@@ -161,28 +162,17 @@
 	 * too (Univer's internal undo is suppressed by the sheet NodeView).
 	 */
 	function handleUndo(): void {
-		if (!docEditor) return;
-		// Pending prose edits become the entry being undone otherwise.
-		docEditor.flushProse();
-		const r = session.undo();
-		if (!r.ok) return;
-		docEditor.renderFromGraph();
-		saver?.scheduleSave();
+		workspace?.undo();
 	}
 
 	function handleRedo(): void {
-		if (!docEditor) return;
-		docEditor.flushProse();
-		const r = session.redo();
-		if (!r.ok) return;
-		docEditor.renderFromGraph();
-		saver?.scheduleSave();
+		workspace?.redo();
 	}
 
 	/** Add a workbook tab; workbook tabs are not report blocks. */
 	function insertSheet(): void {
 		const result = workbookAdapter?.addSheet();
-		if (result?.ok) saver?.scheduleSave();
+		if (result?.ok) workspace?.markChanged();
 	}
 
 	/** Upload the picked file, then add an image block — at the pending slot
@@ -241,8 +231,7 @@
 	}
 
 	function flushAll(): void {
-		docEditor?.flushProse();
-		void saver?.flush().catch(() => {});
+		void workspace?.flush().catch(() => {});
 	}
 
 	/**
@@ -291,6 +280,8 @@
 					return ok;
 				},
 				mountMetrics: () => [],
+				persistenceActivity: () => workspace?.persistenceActivity() ?? [],
+				clearPersistenceActivity: () => workspace?.clearPersistenceActivity(),
 				heapBytes: () =>
 					(performance as unknown as { memory?: { usedJSHeapSize: number } }).memory
 						?.usedJSHeapSize ?? null
@@ -326,10 +317,18 @@
 				graph = hydrated;
 				session = createGraphSession({ doc: graph, registry, docId, actor: HUMAN });
 				restoredWorkbookSnapshot = loaded.workbookSnapshot.snapshot;
-				saver = createDocumentSaver(persistence, docId, graph, {
-					onState: (s) => (saveState = s),
+				workspace = createWorkspaceController({
+					docId,
+					graph: session,
+					cloud: persistence,
+					projection: {
+						flushPendingChanges: () => docEditor?.flushProse(),
+						renderSettledState: () => docEditor?.renderFromGraph()
+					},
 					workbookSnapshot: () =>
-						workbookAdapter?.saveSnapshot() ?? restoredWorkbookSnapshot
+						workbookAdapter?.saveSnapshot() ?? restoredWorkbookSnapshot,
+					activity: persistenceActivity,
+					onSaveState: (state) => (saveState = state)
 				});
 				docEditor = createDocEditor({
 					element: editorEl,
@@ -338,7 +337,7 @@
 					registry,
 					resolveImageUrl: (storageId) => persistence.fileUrl(storageId),
 					commitMutation,
-					onChanged: () => saver?.scheduleSave(),
+					onChanged: () => workspace?.markChanged(),
 					onUndo: handleUndo,
 					onRedo: handleRedo,
 					onAnnounce: (message) => {
@@ -367,13 +366,17 @@
 						}
 						const parsed = parseParameterInput(text, resolved.targetNode.value);
 						if (!parsed.ok) return parsed;
-						const result = session.commit({
+						const result = workspace?.commit({
 							op: 'setInput',
 							id: resolved.targetNode.id,
 							value: parsed.value
 						});
-						if (!result.ok) return { ok: false, message: result.error.message };
-						saver?.scheduleSave();
+						if (!result?.ok) {
+							return {
+								ok: false,
+								message: result && !result.ok ? result.error.message : 'Workspace not ready.'
+							};
+						}
 						return { ok: true };
 					},
 					// Notebook-style insertion slots between blocks and at the end.
@@ -418,8 +421,8 @@
 		flushAll();
 		docEditor?.destroy();
 		docEditor = null;
-		saver?.dispose();
-		saver = null;
+		workspace?.dispose();
+		workspace = null;
 	});
 </script>
 
@@ -561,14 +564,14 @@
 				parametersOpen = false;
 				queueMicrotask(() => parametersButton?.focus());
 			}}
-			onchanged={() => saver?.scheduleSave()}
+			onchanged={() => workspace?.markChanged()}
 			oninsert={(nodeId) => docEditor?.insertChip(nodeId) ?? false}
 		/>
 		<WorkbookDrawer
 			{session}
 			snapshot={restoredWorkbookSnapshot}
 			bind:expanded={workbookOpen}
-			ondirty={() => saver?.scheduleSave()}
+			ondirty={() => workspace?.markChanged()}
 			onready={(adapter) => {
 				workbookAdapter = adapter;
 				if (adapter) {

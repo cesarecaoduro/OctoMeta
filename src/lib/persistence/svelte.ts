@@ -9,6 +9,7 @@
 import { setupConvex, useConvexClient } from 'convex-svelte';
 import type { ConvexClient } from 'convex/browser';
 import { api } from '../../convex/_generated/api';
+import type { PersistenceActivityObserver } from './activity';
 import type { Persistence } from './client';
 import { createPersistence } from './client';
 
@@ -20,9 +21,12 @@ export function setupPersistence(url: string): ConvexClient {
 	return setupConvex(url);
 }
 
-/** Get the document persistence facade from context (root layout must have called `setupPersistence`). */
-export function usePersistence(): Persistence {
-	return createPersistence(useConvexClient());
+/**
+ * Get the document persistence facade from context. An optional metadata-only
+ * observer makes actual cloud reads and writes visible to the workspace seam.
+ */
+export function usePersistence(observe?: PersistenceActivityObserver): Persistence {
+	return createPersistence(useConvexClient(), { observe });
 }
 
 /** Waitlist signup fields (marketing site). */

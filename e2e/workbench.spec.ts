@@ -11,6 +11,13 @@ declare global {
 			setCell(sheetId: string, a1: string, input: number | string | boolean): void;
 			renameName(oldName: string, newName: string): boolean;
 			selection(): { sheetId: string; a1: string } | null;
+			persistenceActivity(): Array<{
+				target: 'local' | 'cloud';
+				access: 'read' | 'write';
+				operation: string;
+				phase: 'started' | 'succeeded' | 'failed';
+			}>;
+			clearPersistenceActivity(): void;
 		};
 	}
 }
@@ -58,9 +65,31 @@ test('the complete owned steel workbench survives edit, error, reload, trash, an
 	await page.getByRole('button', { name: 'Close parameters' }).click();
 
 	const [input, calculation] = await page.evaluate(() => window.__canvas.sheetIds());
+	await page.evaluate(() => window.__canvas.clearPersistenceActivity());
 	await page.evaluate(([sheet]) => window.__canvas.setCell(sheet, 'A2', '20 in'), [input]);
 	await expect(chip(page, 'chip-steel-d')).toHaveText('20 in');
 	await expect(chip(page, 'chip-steel-area')).toHaveText('38.00 in²');
+	await waitSaved(page);
+	const saveActivity = await page.evaluate(() =>
+		window.__canvas
+			.persistenceActivity()
+			.filter((activity) => activity.operation === 'documents.save')
+			.map(({ target, access, operation, phase }) => ({ target, access, operation, phase }))
+	);
+	expect(saveActivity).toEqual([
+		{
+			target: 'cloud',
+			access: 'write',
+			operation: 'documents.save',
+			phase: 'started'
+		},
+		{
+			target: 'cloud',
+			access: 'write',
+			operation: 'documents.save',
+			phase: 'succeeded'
+		}
+	]);
 
 	await page.evaluate(([sheet]) => window.__canvas.setCell(sheet, 'A1', '=missing.value'), [
 		calculation

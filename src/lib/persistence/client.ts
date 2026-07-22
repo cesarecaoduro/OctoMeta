@@ -12,6 +12,12 @@ import type { DocumentGraph } from '../engine';
 import type { LoadedRows } from './serialize';
 import { serializeGraph } from './serialize';
 import { documentBundleHash, workbookSnapshotHash } from './canonical';
+import {
+	observePersistence,
+	type PersistenceAccess,
+	type PersistenceActivityObserver,
+	type PersistenceOperation
+} from './activity';
 
 /** A persisted document's id. Opaque string outside this layer. */
 export type DocumentId = Id<'documents'>;
@@ -81,80 +87,116 @@ export interface Persistence {
 	fileUrl(storageId: string): Promise<string | null>;
 }
 
+/** Optional operational observer for the connected cloud facade. */
+export interface PersistenceOptions {
+	observe?: PersistenceActivityObserver;
+}
+
 /** Build the persistence facade over a connected ConvexClient. */
-export function createPersistence(client: ConvexClient): Persistence {
+export function createPersistence(client: ConvexClient, options: PersistenceOptions = {}): Persistence {
 	const revisions = new Map<DocumentId, number>();
+	const tracked = <T>(
+		operation: PersistenceOperation,
+		access: PersistenceAccess,
+		run: () => Promise<T>
+	): Promise<T> =>
+		observePersistence(
+			options.observe,
+			{ target: 'cloud', operation, access },
+			run
+		);
 	return {
-		createDocument: (title) => client.mutation(api.documents.create, { title }),
-		listDocuments: async () =>
-			(await client.query(api.documents.list, {})) as DocumentSummary[],
-		listTrash: async () =>
-			(await client.query(api.documents.listTrash, {})) as DocumentSummary[],
-		renameDocument: async (docId, title) => {
-			await client.mutation(api.documents.rename, { docId, title });
-		},
-		deleteDocument: async (docId) => {
-			await client.mutation(api.documents.trash, { docId });
-		},
-		restoreDocument: async (docId) => {
-			await client.mutation(api.documents.restore, { docId });
-		},
-		deleteForever: async (docId) => {
-			await client.mutation(api.documents.remove, { docId });
-		},
-		emptyTrash: async () => {
-			let total = 0;
-			for (;;) {
-				const result = await client.mutation(api.documents.emptyTrash, {});
-				total += result.deleted;
-				if (!result.hasMore) return total;
-			}
-		},
-		saveDocument: async (docId, graph, providedSnapshot) => {
-			const { workbookManifest, ...graphPayload } = serializeGraph(graph);
-			const workbookSnapshot =
-				providedSnapshot ?? freshWorkbookSnapshot(String(docId), workbookManifest);
-			const snapshotHash = workbookSnapshotHash(workbookSnapshot);
-			const bundleHash = documentBundleHash(graphPayload, workbookManifest, snapshotHash);
-			const result = await client.mutation(api.documents.save, {
-				docId,
-				expectedRevision: revisions.get(docId) ?? 0,
-				graph: graphPayload,
-				workbookManifest,
-				workbookSnapshot,
-				snapshotHash,
-				bundleHash
-			});
-			revisions.set(docId, result.revision);
-			return result.revision;
-		},
-		loadDocument: async (docId) => {
-			const result = (await client.query(api.documents.load, {
-				docId
-			})) as DocumentLoadState;
-			if (result.state === 'live') revisions.set(docId, result.document.revision);
-			return result;
-		},
-		uploadFile: async (docId, file) => {
-			// Standard Convex upload flow: short-lived URL, POST the bytes, read
-			// back the storageId. The URL protocol is a Convex detail — it stays
-			// inside this layer.
-			const uploadUrl = await client.mutation(api.files.generateUploadUrl, {});
-			const response = await fetch(uploadUrl, {
-				method: 'POST',
-				headers: { 'Content-Type': file.type || 'application/octet-stream' },
-				body: file
-			});
-			if (!response.ok) throw new Error(`upload failed: HTTP ${response.status}`);
-			const { storageId } = (await response.json()) as { storageId: string };
-			await client.action(api.files.claimUpload, {
-				docId,
-				storageId: storageId as Id<'_storage'>
-			});
-			return storageId;
-		},
-		fileUrl: async (storageId) =>
-			await client.query(api.files.getUrl, { storageId: storageId as Id<'_storage'> })
+		createDocument: (title) =>
+			tracked('documents.create', 'write', () =>
+				client.mutation(api.documents.create, { title })
+			),
+		listDocuments: () =>
+			tracked(
+				'documents.list',
+				'read',
+				async () => (await client.query(api.documents.list, {})) as DocumentSummary[]
+			),
+		listTrash: () =>
+			tracked(
+				'documents.listTrash',
+				'read',
+				async () => (await client.query(api.documents.listTrash, {})) as DocumentSummary[]
+			),
+		renameDocument: (docId, title) =>
+			tracked('documents.rename', 'write', async () => {
+				await client.mutation(api.documents.rename, { docId, title });
+			}),
+		deleteDocument: (docId) =>
+			tracked('documents.trash', 'write', async () => {
+				await client.mutation(api.documents.trash, { docId });
+			}),
+		restoreDocument: (docId) =>
+			tracked('documents.restore', 'write', async () => {
+				await client.mutation(api.documents.restore, { docId });
+			}),
+		deleteForever: (docId) =>
+			tracked('documents.remove', 'write', async () => {
+				await client.mutation(api.documents.remove, { docId });
+			}),
+		emptyTrash: () =>
+			tracked('documents.emptyTrash', 'write', async () => {
+				let total = 0;
+				for (;;) {
+					const result = await client.mutation(api.documents.emptyTrash, {});
+					total += result.deleted;
+					if (!result.hasMore) return total;
+				}
+			}),
+		saveDocument: (docId, graph, providedSnapshot) =>
+			tracked('documents.save', 'write', async () => {
+				const { workbookManifest, ...graphPayload } = serializeGraph(graph);
+				const workbookSnapshot =
+					providedSnapshot ?? freshWorkbookSnapshot(String(docId), workbookManifest);
+				const snapshotHash = workbookSnapshotHash(workbookSnapshot);
+				const bundleHash = documentBundleHash(graphPayload, workbookManifest, snapshotHash);
+				const result = await client.mutation(api.documents.save, {
+					docId,
+					expectedRevision: revisions.get(docId) ?? 0,
+					graph: graphPayload,
+					workbookManifest,
+					workbookSnapshot,
+					snapshotHash,
+					bundleHash
+				});
+				revisions.set(docId, result.revision);
+				return result.revision;
+			}),
+		loadDocument: (docId) =>
+			tracked('documents.load', 'read', async () => {
+				const result = (await client.query(api.documents.load, {
+					docId
+				})) as DocumentLoadState;
+				if (result.state === 'live') revisions.set(docId, result.document.revision);
+				return result;
+			}),
+		uploadFile: (docId, file) =>
+			tracked('files.upload', 'write', async () => {
+				// Standard Convex upload flow: short-lived URL, POST the bytes, read
+				// back the storageId. The URL protocol is a Convex detail — it stays
+				// inside this layer.
+				const uploadUrl = await client.mutation(api.files.generateUploadUrl, {});
+				const response = await fetch(uploadUrl, {
+					method: 'POST',
+					headers: { 'Content-Type': file.type || 'application/octet-stream' },
+					body: file
+				});
+				if (!response.ok) throw new Error(`upload failed: HTTP ${response.status}`);
+				const { storageId } = (await response.json()) as { storageId: string };
+				await client.action(api.files.claimUpload, {
+					docId,
+					storageId: storageId as Id<'_storage'>
+				});
+				return storageId;
+			}),
+		fileUrl: (storageId) =>
+			tracked('files.resolveUrl', 'read', () =>
+				client.query(api.files.getUrl, { storageId: storageId as Id<'_storage'> })
+			)
 	};
 }
 

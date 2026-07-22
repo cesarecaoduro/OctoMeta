@@ -41,6 +41,15 @@ export default defineConfig({
 	test: {
 		projects: [
 			{
+				// Workspace orchestration is pure TypeScript over injected graph,
+				// projection, and persistence ports; browser wiring stays in Playwright.
+				test: {
+					name: 'workspace',
+					include: ['src/lib/workspace/**/*.test.ts'],
+					environment: 'node'
+				}
+			},
+			{
 				// Engine tests are pure TypeScript with no DOM; adapters get their own path in V1-3.
 				test: {
 					name: 'engine',
