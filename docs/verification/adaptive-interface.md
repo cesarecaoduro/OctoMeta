@@ -15,6 +15,10 @@ pnpm test:e2e
 pnpm build
 ```
 
+The hosted CI and production workflows currently stop after typecheck, unit tests,
+build, production audit, and secret scan. Run `pnpm test:e2e` locally before merging
+until hosted browser timing is stable enough to restore that gate.
+
 `e2e/adaptive-interface.spec.ts` verifies light and dark appearances, both sides of
 the 680 px and 1080 px content transitions, 320 px reflow, page-level horizontal
 overflow, the non-overlaying desktop Workbook drawer, the compact bottom dock, and axe
