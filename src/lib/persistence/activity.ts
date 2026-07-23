@@ -25,11 +25,14 @@ export type PersistenceOperation =
 	| 'documents.emptyTrash'
 	| 'documents.save'
 	| 'documents.load'
+	| 'versions.save'
 	| 'files.upload'
 	| 'files.resolveUrl'
 	| 'workspace.load'
 	| 'workspace.list'
 	| 'workspace.commit'
+	| 'workspace.stageCloudVersion'
+	| 'workspace.acknowledgeCloudVersion'
 	| 'workspace.duplicate'
 	| 'workspace.discard';
 

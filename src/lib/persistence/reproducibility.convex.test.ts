@@ -217,9 +217,11 @@ describe('development reset safety', () => {
 			graphNodes: 0,
 			blocks: 0,
 			undoLog: 0,
-			chipBindings: 0,
-			workbookSnapshots: 0,
-			assets: 0,
+				chipBindings: 0,
+				workbookSnapshots: 0,
+				documentVersions: 0,
+				snapshotChunks: 0,
+				assets: 0,
 			rootStorage: 0,
 			truncated: false
 		});
@@ -570,7 +572,9 @@ describe('atomic reproducibility bundle', () => {
 				'blocks',
 				'undoLog',
 				'chipBindings',
-				'workbookSnapshots'
+				'workbookSnapshots',
+				'documentVersions',
+				'snapshotChunks'
 			] as const) {
 				expect(await ctx.db.query(table).collect(), table).toEqual([]);
 			}

@@ -45,6 +45,7 @@ flowchart TB
 | Account identity and cloud ownership | Better Auth + Convex | route gate and cloud operations |
 | Product document/workspace identity | Application-generated IDs | graph, IndexedDB, route |
 | Save revision, hashes, limits | Convex | persistence facade |
+| Immutable Main versions and snapshot chunks | Convex | explicit Save new version flow |
 | Files and reachability state | Convex assets/storage | image blocks |
 
 ## Runtime flow
@@ -75,6 +76,10 @@ flowchart TB
 9. A service worker serves shipped assets and previously visited owner routes
    during offline reload. A remembered device owner resolves the same
    account-scoped IndexedDB namespace; reconnect performs no publication.
+10. **Save new version** flushes one durable generation, stages its exact
+    operation ID/input hash locally, then creates version 1 or the next
+    expected-head-fenced Main version. Acknowledgement advances only that
+    captured generation's cloud base, so newer local edits remain dirty.
 
 All sheet callbacks capture the immutable event-time `SheetId`. Active-tab
 state is presentation state only and is never used to infer cell ownership.
@@ -85,7 +90,8 @@ state is presentation state only and is never used to infer cell ownership.
 src/
   convex/
     auth.ts, auth.config.ts       Better Auth component and providers
-    documents.ts                  owner-scoped lifecycle + atomic bundle save
+    documents.ts                  owner-scoped lifecycle + legacy bundle compatibility
+    documentVersions.ts           immutable Main versions + verified snapshot chunks
     files.ts, assetClaims.ts      validated upload claims and durable cleanup
     maintenance.ts                guarded development/test reset
     schema.ts                     product, asset, maintenance, waitlist tables
@@ -105,6 +111,7 @@ src/
       client.ts                   only UI-facing Convex facade
       serialize.ts, canonical.ts  bundle codec, hashes, integrity validation
       local/repository.ts         IndexedDB generations + per-workspace summaries
+      cloud-version.ts            review model + retry-safe explicit-save controller
       local/autosave.ts           500 ms trailing / 2 s maximum local save queue
       local/serialization.ts      distinct local authored + history envelope
       workbook-snapshot.ts        shared empty-workbook snapshot factory

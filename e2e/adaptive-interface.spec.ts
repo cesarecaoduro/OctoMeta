@@ -116,3 +116,23 @@ test('authentication and document library inherit the same accessible appearance
 	await expect(page.getByRole('button', { name: 'Appearance: Dark' })).toBeVisible();
 	expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
+
+test('Save new version presents the responsive first-version review', async ({ page }) => {
+	await page.goto('/app');
+	await page.getByTestId('new-doc').click();
+	await expect(page.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	await expect(page.getByTestId('cloud-version-state')).toHaveText('No cloud version');
+
+	await page.getByRole('button', { name: 'Save new version' }).click();
+	const review = page.getByRole('dialog', { name: 'Save version 1' });
+	await expect(review).toBeVisible();
+	await expect(review.getByText('Working copy', { exact: true })).toBeVisible();
+	await expect(review.getByLabel('Version message Optional')).toBeVisible();
+	expect((await new AxeBuilder({ page }).include('[data-testid="save-version-dialog"]').analyze()).violations).toEqual([]);
+
+	await review.getByLabel('Version message Optional').fill('First settled design');
+	await expect(review.getByRole('button', { name: 'Save version 1' })).toBeEnabled();
+	await review.getByRole('button', { name: 'Close version review and continue editing' }).click();
+	await expect(review).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Save new version' })).toBeFocused();
+});

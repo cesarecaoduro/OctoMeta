@@ -316,12 +316,10 @@
 		}
 	}
 
-	function showDeferredEntryPoint(action: 'save' | 'export'): void {
+	function showDeferredExport(): void {
 		showToast(
 			'err',
-			action === 'save'
-				? 'Cloud version saving is not available yet. No cloud write was made.'
-				: 'Portable export is not available yet. Your document remains stored on this device.'
+			'Portable export is not available yet. Your document remains stored on this device.'
 		);
 	}
 
@@ -670,8 +668,8 @@
 							{#if view === 'live'}
 								<button data-testid="rename" onclick={() => startRename(document)}>Rename</button>
 								{#if document.hasLocalWorkingCopy}
-									<button data-testid="export-entry" onclick={() => showDeferredEntryPoint('export')}>Export</button>
-									<button data-testid="save-entry" onclick={() => showDeferredEntryPoint('save')}>Save new version</button>
+									<button data-testid="export-entry" onclick={showDeferredExport}>Export</button>
+									<button data-testid="save-entry" onclick={() => void goto(`/app/${document._id}?save-version=1`)}>Save new version</button>
 									<button data-testid="duplicate" disabled={acting} onclick={() => void duplicateDocument(document)}>Duplicate</button>
 									{#if confirmingDiscardId === document._id}
 										<button class="danger-action" data-testid="confirm-discard" disabled={acting} onclick={() => void discardLocalDocument(document)}>Confirm discard</button>

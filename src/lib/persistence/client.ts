@@ -19,6 +19,11 @@ import {
 	type PersistenceActivityObserver,
 	type PersistenceOperation
 } from './activity';
+import type {
+	SaveCloudVersionInput,
+	SaveCloudVersionResult,
+	CloudVersionBundle
+} from './cloud-version';
 
 declare const documentIdBrand: unique symbol;
 
@@ -85,6 +90,8 @@ export interface Persistence {
 		graph: DocumentGraph,
 		workbookSnapshot?: unknown
 	): Promise<number>;
+	/** Create version 1 or the next immutable Main version from exact staged authored bytes. */
+	saveCloudVersion(input: SaveCloudVersionInput): Promise<SaveCloudVersionResult>;
 	/** Load one typed document state. Live payloads can be fed to `hydrateGraph`. */
 	loadDocument(docId: DocumentId): Promise<DocumentLoadState>;
 	/** Upload, validate, and claim an image for one live owned document. */
@@ -135,19 +142,19 @@ export function createPersistence(client: ConvexClient, options: PersistenceOpti
 			),
 		renameDocument: (docId, title) =>
 			tracked('documents.rename', 'write', async () => {
-				await client.mutation(api.documents.rename, { docId: convexDocumentId(docId), title });
+				await client.mutation(api.documents.rename, { docId: String(docId), title });
 			}),
 		deleteDocument: (docId) =>
 			tracked('documents.trash', 'write', async () => {
-				await client.mutation(api.documents.trash, { docId: convexDocumentId(docId) });
+				await client.mutation(api.documents.trash, { docId: String(docId) });
 			}),
 		restoreDocument: (docId) =>
 			tracked('documents.restore', 'write', async () => {
-				await client.mutation(api.documents.restore, { docId: convexDocumentId(docId) });
+				await client.mutation(api.documents.restore, { docId: String(docId) });
 			}),
 		deleteForever: (docId) =>
 			tracked('documents.remove', 'write', async () => {
-				await client.mutation(api.documents.remove, { docId: convexDocumentId(docId) });
+				await client.mutation(api.documents.remove, { docId: String(docId) });
 			}),
 		emptyTrash: () =>
 			tracked('documents.emptyTrash', 'write', async () => {
@@ -178,10 +185,74 @@ export function createPersistence(client: ConvexClient, options: PersistenceOpti
 				revisions.set(docId, result.revision);
 				return result.revision;
 			}),
+		saveCloudVersion: (input) =>
+			tracked('versions.save', 'write', async () => {
+				const bundle = JSON.parse(input.bundleJson) as CloudVersionBundle;
+				return await client.mutation(api.documentVersions.save, {
+					publicDocumentId: input.publicDocumentId,
+					expectedHeadNumber: input.expectedHeadNumber,
+					expectedHeadHash: input.expectedHeadHash,
+					operationId: input.operationId,
+					operationInputHash: input.operationInputHash,
+					message: input.message,
+					bundleHash: input.bundleHash,
+					bundle
+				});
+			}),
 		loadDocument: (docId) =>
 			tracked('documents.load', 'read', async () => {
+				const versioned = await client.query(api.documentVersions.loadHead, {
+					publicDocumentId: String(docId)
+				});
+				if (versioned.state === 'live') {
+					const bundle = versioned.bundle;
+					revisions.set(docId, versioned.version.versionNumber);
+					return {
+						state: 'live' as const,
+						document: {
+							_id: docId,
+							title: versioned.document.title,
+							blocksOrder: bundle.graph.blocksOrder,
+							undoCursor: 0,
+							revision: versioned.version.versionNumber,
+							bundleHash: versioned.version.bundleHash,
+							stats: versioned.document.stats,
+							createdAt: versioned.document.createdAt,
+							updatedAt: versioned.document.updatedAt
+						},
+						nodes: bundle.graph.nodes,
+						blocks: bundle.graph.blocks,
+						undoLog: [],
+						chips: bundle.graph.chips,
+						workbookSnapshot: {
+							revision: versioned.version.versionNumber,
+							snapshotHash: versioned.version.bundleHash,
+							snapshot: bundle.workbookSnapshot,
+							updatedAt: versioned.version.createdAt
+						}
+					} satisfies DocumentLoadState;
+				}
+				if (versioned.state === 'integrity-error') return versioned;
+				if (versioned.state === 'trashed') {
+					return {
+						state: 'trashed' as const,
+						document: {
+							_id: docId,
+							title: versioned.document.title,
+							blocksOrder: [],
+							undoCursor: 0,
+							revision: versioned.document.mainVersionNumber,
+							bundleHash: versioned.document.mainHash,
+							deletedAt: versioned.document.deletedAt,
+							stats: versioned.document.stats,
+							createdAt: versioned.document.createdAt,
+							updatedAt: versioned.document.updatedAt
+						}
+					} satisfies DocumentLoadState;
+				}
+				if (versioned.state === 'missing') return { state: 'missing' as const };
 				const result = (await client.query(api.documents.load, {
-					docId: convexDocumentId(docId)
+					docId: String(docId)
 				})) as DocumentLoadState;
 				if (result.state === 'live') revisions.set(docId, result.document.revision);
 				return result;

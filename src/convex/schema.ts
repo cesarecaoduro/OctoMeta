@@ -84,6 +84,8 @@ export const chipBindingFields = {
 export default defineSchema({
 	// ---- product tables (SCHEMA.md §10; `versions` is V2) --------------------
 	documents: defineTable({
+		/** Stable product identity used by local-only documents before a Convex row exists. */
+		documentId: v.optional(v.string()),
 		/** Optional only while pre-R1 development rows are migrated; all writes require it. */
 		ownerId: v.optional(v.string()),
 		title: v.string(),
@@ -93,6 +95,11 @@ export default defineSchema({
 		undoCursor: v.number(),
 		revision: v.optional(v.number()),
 		bundleHash: v.optional(v.string()),
+		mainVersionId: v.optional(v.id('documentVersions')),
+		mainVersionNumber: v.optional(v.number()),
+		mainHash: v.optional(v.string()),
+		versionCount: v.optional(v.number()),
+		versionBytes: v.optional(v.number()),
 		workbookManifest: v.optional(
 			v.object({
 				sheets: v.array(
@@ -112,8 +119,40 @@ export default defineSchema({
 		createdAt: v.number(),
 		updatedAt: v.number()
 	})
+		.index('by_document_id', ['documentId'])
 		.index('by_owner_deleted_updated', ['ownerId', 'deletedAt', 'updatedAt'])
 		.index('by_deleted_at', ['deletedAt']),
+	documentVersions: defineTable({
+		versionId: v.string(),
+		documentRowId: v.id('documents'),
+		versionNumber: v.number(),
+		parentVersionId: v.optional(v.id('documentVersions')),
+		operationId: v.string(),
+		operationInputHash: v.string(),
+		createdBy: v.string(),
+		message: v.optional(v.string()),
+		schemaVersion: v.number(),
+		bundleHash: v.string(),
+		byteLength: v.number(),
+		chunkCount: v.number(),
+		stats: v.object({
+			blocks: v.number(),
+			tabs: v.number(),
+			nodes: v.number(),
+			bytes: v.number()
+		}),
+		createdAt: v.number()
+	})
+		.index('by_version_id', ['versionId'])
+		.index('by_document_number', ['documentRowId', 'versionNumber'])
+		.index('by_document_operation', ['documentRowId', 'operationId']),
+	snapshotChunks: defineTable({
+		versionId: v.id('documentVersions'),
+		index: v.number(),
+		bytes: v.bytes(),
+		byteLength: v.number(),
+		chunkHash: v.string()
+	}).index('by_version_index', ['versionId', 'index']),
 	graphNodes: defineTable(graphNodeFields)
 		.index('by_doc', ['docId'])
 		.index('by_doc_node', ['docId', 'nodeId']),

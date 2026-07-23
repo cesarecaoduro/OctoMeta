@@ -24,6 +24,19 @@ export interface LocalWorkingCopyContent {
 	workbookSnapshot: unknown;
 }
 
+/** Exact immutable cloud-save input retained until its acknowledgement commits locally. */
+export interface PendingCloudVersionOperation {
+	operationId: string;
+	operationInputHash: string;
+	capturedGeneration: number;
+	expectedHeadNumber: number;
+	expectedHeadHash: string | null;
+	bundleJson: string;
+	bundleHash: string;
+	message?: string;
+	createdAt: number;
+}
+
 /** One account-scoped browser working copy. */
 export interface LocalWorkingCopyRecord {
 	accountId: string;
@@ -32,6 +45,7 @@ export interface LocalWorkingCopyRecord {
 	workspace: LocalWorkspaceDescriptor;
 	generation: number;
 	cloudBase?: LocalCloudBase;
+	pendingCloudOperation?: PendingCloudVersionOperation;
 	content: LocalWorkingCopyContent;
 	createdAt: number;
 	updatedAt: number;
@@ -63,6 +77,25 @@ export interface CommitLocalWorkingCopyInput {
 	expectedGeneration: number;
 	cloudBase?: Omit<LocalCloudBase, 'generation'>;
 	content: LocalWorkingCopyContent;
+}
+
+/** Input for durably staging an immutable explicit cloud-version attempt. */
+export interface StageCloudVersionInput {
+	accountId: string;
+	documentId: string;
+	workspaceId: string;
+	expectedGeneration: number;
+	operation: PendingCloudVersionOperation;
+}
+
+/** Input for applying a confirmed cloud head without replacing newer authored content. */
+export interface AcknowledgeCloudVersionInput {
+	accountId: string;
+	documentId: string;
+	workspaceId: string;
+	operationId: string;
+	version: number;
+	bundleHash: string;
 }
 
 /** Input for copying one main working copy into a new local-only document. */
@@ -107,6 +140,10 @@ interface LocalWorkspaceDatabase extends DBSchema {
 export interface LocalWorkspaceRepository {
 	/** Atomically replace authored content and undo state when the durable generation matches. */
 	commit(input: CommitLocalWorkingCopyInput): Promise<LocalWorkingCopyRecord>;
+	/** Persist the exact retry input before the first cloud request. */
+	stageCloudVersion(input: StageCloudVersionInput): Promise<LocalWorkingCopyRecord>;
+	/** Mark only the operation's captured generation as the new cloud base. */
+	acknowledgeCloudVersion(input: AcknowledgeCloudVersionInput): Promise<LocalWorkingCopyRecord>;
 	/** Load one account-owned working copy, or `null` when it has not been created locally. */
 	load(
 		accountId: string,
@@ -310,9 +347,12 @@ export function createLocalWorkspaceRepository(
 									generation: actualGeneration + 1
 								}
 							}
-							: current?.cloudBase
-								? { cloudBase: current.cloudBase }
-								: {}),
+								: current?.cloudBase
+									? { cloudBase: current.cloudBase }
+									: {}),
+						...(current?.pendingCloudOperation
+							? { pendingCloudOperation: current.pendingCloudOperation }
+							: {}),
 						content: input.content,
 						createdAt: current?.createdAt ?? timestamp,
 						updatedAt: timestamp
@@ -331,6 +371,83 @@ export function createLocalWorkspaceRepository(
 						await transaction.done.catch(() => {});
 						throw error;
 					}
+					return record;
+				}
+			),
+		stageCloudVersion: (input) =>
+			observePersistence(
+				options.observe,
+				{ target: 'local', access: 'write', operation: 'workspace.stageCloudVersion' },
+				async () => {
+					const db = await database();
+					const transaction = db.transaction('workspaces', 'readwrite');
+					const key: [string, string, string] = [
+						input.accountId,
+						input.documentId,
+						input.workspaceId
+					];
+					const row = await transaction.store.get(key);
+					if (!row) throw new Error('LOCAL_WORKING_COPY_NOT_FOUND');
+					const current = normalizeRecord(row);
+					if (current.generation !== input.expectedGeneration) {
+						transaction.abort();
+						await transaction.done.catch(() => {});
+						throw new GenerationConflictError(input.expectedGeneration, current.generation);
+					}
+					if (
+						current.pendingCloudOperation &&
+						current.pendingCloudOperation.operationId !== input.operation.operationId
+					) {
+						throw new Error('PENDING_CLOUD_OPERATION');
+					}
+					const record: LocalWorkingCopyRecord = {
+						...current,
+						pendingCloudOperation: structuredClone(input.operation)
+					};
+					await transaction.store.put(record, key);
+					await transaction.done;
+					return record;
+				}
+			),
+		acknowledgeCloudVersion: (input) =>
+			observePersistence(
+				options.observe,
+				{ target: 'local', access: 'write', operation: 'workspace.acknowledgeCloudVersion' },
+				async () => {
+					const db = await database();
+					const transaction = db.transaction(
+						['workspaces', 'workspaceSummaries'],
+						'readwrite'
+					);
+					const key: [string, string, string] = [
+						input.accountId,
+						input.documentId,
+						input.workspaceId
+					];
+					const row = await transaction.objectStore('workspaces').get(key);
+					if (!row) throw new Error('LOCAL_WORKING_COPY_NOT_FOUND');
+					const current = normalizeRecord(row);
+					const operation = current.pendingCloudOperation;
+					if (!operation || operation.operationId !== input.operationId) {
+						throw new Error('PENDING_CLOUD_OPERATION_MISMATCH');
+					}
+					if (operation.bundleHash !== input.bundleHash) {
+						throw new Error('CLOUD_ACKNOWLEDGEMENT_HASH_MISMATCH');
+					}
+					const { pendingCloudOperation: _pending, ...withoutPending } = current;
+					const record: LocalWorkingCopyRecord = {
+						...withoutPending,
+						cloudBase: {
+							version: input.version,
+							bundleHash: input.bundleHash,
+							generation: operation.capturedGeneration
+						}
+					};
+					await Promise.all([
+						transaction.objectStore('workspaces').put(record, key),
+						transaction.objectStore('workspaceSummaries').put(summaryFor(record), key)
+					]);
+					await transaction.done;
 					return record;
 				}
 			),

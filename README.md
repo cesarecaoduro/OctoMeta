@@ -27,10 +27,10 @@ The authenticated `/app` index distinguishes storage state explicitly:
 - Device-local branches are grouped beneath their parent document.
 
 Local working copies can be renamed, duplicated with fresh undo history, or
-discarded directly from the index. **Save new version** and **Export** are
-visible entry points but remain non-mutating until the immutable cloud-version
-and portable-export work lands; invoking either currently explains that no
-cloud write occurred. Listing the index and opening a new local document make
+discarded directly from the index. **Save new version** reviews one durable
+generation and explicitly creates immutable cloud version 1 or the next Main
+version; **Export** remains a non-mutating placeholder until portable recovery
+lands. Listing the index and opening a new local document make
 no Convex product write. Live cloud metadata is read once when the index opens;
 Trash is loaded only when opened, and local lifecycle actions reuse the loaded
 metadata without issuing additional Convex calls.

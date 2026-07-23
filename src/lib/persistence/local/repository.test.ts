@@ -209,6 +209,60 @@ describe('local workspace repository', () => {
 		repository.close();
 	});
 
+	it('persists one retryable cloud operation and acknowledges only its captured generation', async () => {
+		const repository = createLocalWorkspaceRepository({ databaseName: databaseName() });
+		await repository.commit({
+			accountId: 'account-a',
+			documentId: 'document-1',
+			workspaceId: 'main',
+			expectedGeneration: 0,
+			content: content('Captured generation')
+		});
+		await repository.stageCloudVersion({
+			accountId: 'account-a',
+			documentId: 'document-1',
+			workspaceId: 'main',
+			expectedGeneration: 1,
+			operation: {
+				operationId: 'operation-1',
+				operationInputHash: 'input-hash',
+				capturedGeneration: 1,
+				expectedHeadNumber: 0,
+				expectedHeadHash: null,
+				bundleJson: '{"schemaVersion":1}',
+				bundleHash: 'bundle-hash',
+				message: 'First cloud version',
+				createdAt: 100
+			}
+		});
+		await repository.commit({
+			accountId: 'account-a',
+			documentId: 'document-1',
+			workspaceId: 'main',
+			expectedGeneration: 1,
+			content: content('Edited during upload')
+		});
+
+		await repository.acknowledgeCloudVersion({
+			accountId: 'account-a',
+			documentId: 'document-1',
+			workspaceId: 'main',
+			operationId: 'operation-1',
+			version: 1,
+			bundleHash: 'bundle-hash'
+		});
+
+		expect(await repository.load('account-a', 'document-1', 'main')).toMatchObject({
+			generation: 2,
+			cloudBase: { version: 1, bundleHash: 'bundle-hash', generation: 1 },
+			content: { title: 'Edited during upload' }
+		});
+		expect(
+			(await repository.load('account-a', 'document-1', 'main'))?.pendingCloudOperation
+		).toBeUndefined();
+		repository.close();
+	});
+
 	it('lists device-local branches independently beneath their document', async () => {
 		const repository = createLocalWorkspaceRepository({ databaseName: databaseName() });
 		await repository.commit({

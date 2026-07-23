@@ -61,13 +61,24 @@ export async function requireProductWritable(ctx: ProductCtx): Promise<void> {
 }
 
 /** Require a live document belonging to the authenticated owner. */
-export async function requireLiveOwnedDocument(ctx: ProductCtx, docId: Id<'documents'>) {
+export async function requireLiveOwnedDocument(ctx: ProductCtx, documentId: string) {
 	const ownerId = await requireOwnerId(ctx);
-	const document = await ctx.db.get(docId);
+	const document = await resolveProductDocument(ctx, documentId);
 	if (!document) throw new Error('NOT_FOUND');
 	if (document.ownerId !== ownerId) throw new Error('UNAUTHORIZED');
 	if (document.deletedAt !== undefined) throw new Error('DOCUMENT_TRASHED');
 	return document;
+}
+
+/** Resolve a stable product document ID, with legacy Convex IDs accepted during transition. */
+export async function resolveProductDocument(ctx: Pick<ProductCtx, 'db'>, documentId: string) {
+	const publicRow = await ctx.db
+		.query('documents')
+		.withIndex('by_document_id', (index) => index.eq('documentId', documentId))
+		.unique();
+	if (publicRow) return publicRow;
+	const legacyId = ctx.db.normalizeId('documents', documentId);
+	return legacyId ? await ctx.db.get(legacyId) : null;
 }
 
 /** Create one owned document with an atomic default workbook at revision zero. */
@@ -116,6 +127,7 @@ export const create = mutation({
 		const bundleHash = documentBundleHash(graph, workbookManifest, snapshotHash);
 		const bytes = canonicalBytes(graph) + canonicalBytes(snapshot);
 		await ctx.db.patch(docId, {
+			documentId: String(docId),
 			bundleHash,
 			stats: { blocks: 0, tabs: 1, nodes: 0, bytes }
 		});
@@ -135,13 +147,19 @@ export const list = query({
 	args: {},
 	handler: async (ctx) => {
 		const ownerId = await requireOwnerId(ctx);
-		return await ctx.db
+		const documents = await ctx.db
 			.query('documents')
 			.withIndex('by_owner_deleted_updated', (q) =>
 				q.eq('ownerId', ownerId).eq('deletedAt', undefined)
 			)
 			.order('desc')
 			.take(DOCUMENT_CAP);
+		return documents.map((document) => ({
+			...document,
+			_id: document.documentId ?? document._id,
+			revision: document.mainVersionNumber ?? document.revision ?? 0,
+			bundleHash: document.mainHash ?? document.bundleHash ?? ''
+		}));
 	}
 });
 
@@ -156,56 +174,62 @@ export const listTrash = query({
 			.take(DOCUMENT_CAP);
 		return documents
 			.filter((document) => document.deletedAt !== undefined)
-			.sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0));
+			.sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0))
+			.map((document) => ({
+				...document,
+				_id: document.documentId ?? document._id,
+				revision: document.mainVersionNumber ?? document.revision ?? 0,
+				bundleHash: document.mainHash ?? document.bundleHash ?? ''
+			}));
 	}
 });
 
 /** Rename a live owned document. */
 export const rename = mutation({
-	args: { docId: v.id('documents'), title: v.string() },
+	args: { docId: v.string(), title: v.string() },
 	handler: async (ctx, { docId, title }) => {
 		await requireProductWritable(ctx);
-		await requireLiveOwnedDocument(ctx, docId);
-		await ctx.db.patch(docId, { title: validTitle(title), updatedAt: Date.now() });
+		const document = await requireLiveOwnedDocument(ctx, docId);
+		await ctx.db.patch(document._id, { title: validTitle(title), updatedAt: Date.now() });
 	}
 });
 
 /** Move a live document to recoverable trash. */
 export const trash = mutation({
-	args: { docId: v.id('documents') },
+	args: { docId: v.string() },
 	handler: async (ctx, { docId }) => {
 		await requireProductWritable(ctx);
-		await requireLiveOwnedDocument(ctx, docId);
+		const document = await requireLiveOwnedDocument(ctx, docId);
 		const now = Date.now();
-		await ctx.db.patch(docId, { deletedAt: now, updatedAt: now });
+		await ctx.db.patch(document._id, { deletedAt: now, updatedAt: now });
 	}
 });
 
 /** Restore an owned trashed document without touching its content bundle. */
 export const restore = mutation({
-	args: { docId: v.id('documents') },
+	args: { docId: v.string() },
 	handler: async (ctx, { docId }) => {
 		await requireProductWritable(ctx);
 		const ownerId = await requireOwnerId(ctx);
-		const document = await ctx.db.get(docId);
+		const document = await resolveProductDocument(ctx, docId);
 		if (!document) throw new Error('NOT_FOUND');
 		if (document.ownerId !== ownerId) throw new Error('UNAUTHORIZED');
 		if (document.deletedAt === undefined) return;
-		await ctx.db.patch(docId, { deletedAt: undefined, updatedAt: Date.now() });
+		await ctx.db.patch(document._id, { deletedAt: undefined, updatedAt: Date.now() });
 	}
 });
 
 /** Permanently remove an owned trashed document and all child rows. */
 export const remove = mutation({
-	args: { docId: v.id('documents') },
+	args: { docId: v.string() },
 	handler: async (ctx, { docId }) => {
 		await requireProductWritable(ctx);
 		const ownerId = await requireOwnerId(ctx);
-		const document = await ctx.db.get(docId);
+		const document = await resolveProductDocument(ctx, docId);
 		if (!document) return;
 		if (document.ownerId !== ownerId) throw new Error('UNAUTHORIZED');
 		if (document.deletedAt === undefined) throw new Error('TRASH_REQUIRED');
-		await purgeDocument(ctx, docId);
+		await purgeDocument(ctx, document._id);
 	}
 });
 
@@ -329,19 +353,19 @@ export const save = mutation({
 
 /** Load a typed state and fail closed when any persisted checksum disagrees. */
 export const load = query({
-	args: { docId: v.id('documents') },
+	args: { docId: v.string() },
 	handler: async (ctx, { docId }) => {
 		const ownerId = await requireOwnerId(ctx);
-		const document = await ctx.db.get(docId);
+		const document = await resolveProductDocument(ctx, docId);
 		if (!document) return { state: 'missing' as const };
 		if (document.ownerId !== ownerId) return { state: 'unauthorized' as const };
 		if (document.deletedAt !== undefined) {
 			return { state: 'trashed' as const, document };
 		}
-		const rows = await loadRows(ctx, docId);
+		const rows = await loadRows(ctx, document._id);
 		const snapshots = await ctx.db
 			.query('workbookSnapshots')
-			.withIndex('by_doc', (q) => q.eq('docId', docId))
+			.withIndex('by_doc', (q) => q.eq('docId', document._id))
 			.collect();
 		if (snapshots.length !== 1 || !document.workbookManifest || document.revision === undefined) {
 			return { state: 'integrity-error' as const, reason: 'missing workbook bundle' };
@@ -380,7 +404,8 @@ function validTitle(raw: string): string {
 	return title;
 }
 
-function validateBundle(
+/** Validate one complete authored graph/workbook bundle before any product rows change. */
+export function validateBundle(
 	graph: {
 		blocksOrder: string[];
 		undoCursor: number;
@@ -551,6 +576,18 @@ async function purgeDocument(ctx: MutationCtx, docId: Id<'documents'>): Promise<
 		});
 	}
 	await deleteDocRows(ctx, docId);
+	for (const version of await ctx.db
+		.query('documentVersions')
+		.withIndex('by_document_number', (q) => q.eq('documentRowId', docId))
+		.collect()) {
+		for (const chunk of await ctx.db
+			.query('snapshotChunks')
+			.withIndex('by_version_index', (q) => q.eq('versionId', version._id))
+			.collect()) {
+			await ctx.db.delete(chunk._id);
+		}
+		await ctx.db.delete(version._id);
+	}
 	for (const row of await ctx.db
 		.query('workbookSnapshots')
 		.withIndex('by_doc', (q) => q.eq('docId', docId))

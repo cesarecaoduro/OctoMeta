@@ -29,6 +29,7 @@
 		type NodeId
 	} from '$lib/engine';
 	import {
+		createCloudVersionController,
 		createLocalWorkspaceRepository,
 		createPersistenceActivityLog,
 		createWorkspaceLease,
@@ -38,6 +39,10 @@
 		serializeLocalGraph,
 		usePersistence,
 		type DocumentId,
+		type CloudVersionController,
+		type CloudVersionOutcome,
+		type CloudVersionProgress,
+		type CloudVersionReview,
 		type LocalWorkingCopyContent,
 		type LocalStorageFailure,
 		type SaveState,
@@ -70,6 +75,7 @@
 	import Inspector from './Inspector.svelte';
 	import WorkbookDrawer from './WorkbookDrawer.svelte';
 	import ParametersRail from './ParametersRail.svelte';
+	import SaveVersionDialog from './SaveVersionDialog.svelte';
 
 	// V1-5-1/V1-5-2 · /app/[docId] — the document canvas. Block structure lives
 	// in the graph: every add/move/remove/update is a `commit(blockOp …)`,
@@ -109,15 +115,20 @@
 	let workspaceFocus = $state<'document' | 'workbook'>('document');
 	let moreOpen = $state(false);
 	let moreRoot = $state<HTMLDivElement>();
-	let moreButton = $state<HTMLButtonElement>();
-	let versionNotice = $state('');
-	let traceActive = $state(false);
+		let moreButton = $state<HTMLButtonElement>();
+		let versionNotice = $state('');
+		let cloudVersionNumber = $state(0);
+		let versionReview = $state<CloudVersionReview | null>(null);
+		let versionProgress = $state<CloudVersionProgress | null>(null);
+		let versionOutcome = $state<CloudVersionOutcome | null>(null);
+		let traceActive = $state(false);
 	let traceTimer: ReturnType<typeof setTimeout> | null = null;
 	let currentLayoutMode = $state<'compact' | 'regular' | 'expanded'>('compact');
 	let layoutInitialized = false;
 	let pendingWorkbookCell: { sheetId: string; a1: string } | null = null;
-	let parametersButton: HTMLButtonElement;
-	let blockAnnouncement = $state('');
+		let parametersButton: HTMLButtonElement;
+		let saveVersionButton: HTMLButtonElement;
+		let blockAnnouncement = $state('');
 
 	// V1-5-5 · provenance inspector (read-only). Opens on chip Alt+click /
 	// Alt+Enter (focus moves to the panel) and on selecting a graph-bound
@@ -180,10 +191,44 @@
 		}
 	});
 
-	/** Preview the issue #10 entry point without creating a cloud version. */
-	function previewSaveNewVersion(): void {
-		versionNotice = 'Version review is not available yet. Your working copy remains on this device.';
-	}
+		/** Flush and open the review for one settled local generation. */
+		async function openSaveNewVersion(): Promise<void> {
+			versionNotice = '';
+			versionProgress = null;
+			versionOutcome = null;
+			if (!online) {
+				versionNotice =
+					'Cloud version creation needs a connection. Your working copy remains stored on this device.';
+				return;
+			}
+			if (!cloudVersionController || !canEdit) return;
+			try {
+				versionReview = await cloudVersionController.prepare();
+			} catch (error) {
+				versionNotice = `Could not prepare version review: ${
+					error instanceof Error ? error.message : String(error)
+				}`;
+			}
+		}
+
+		/** Submit the exact reviewed generation; retries reuse its persisted operation. */
+		async function saveReviewedVersion(message: string): Promise<void> {
+			if (!versionReview || !cloudVersionController) return;
+			try {
+				versionOutcome = await cloudVersionController.save(versionReview, message);
+				cloudVersionNumber = versionOutcome.version;
+			} catch {
+				// The dialog keeps its persistent retry state and actionable error.
+			}
+		}
+
+		/** Close the review and return focus to the visible shell action. */
+		function closeVersionReview(): void {
+			versionReview = null;
+			versionProgress = null;
+			versionOutcome = null;
+			queueMicrotask(() => saveVersionButton?.focus());
+		}
 
 	function startTitleEdit(): void {
 		if (leaseState !== 'owner') return;
@@ -215,8 +260,14 @@
 
 	/** Escape closes the panel — except inside a grid, where Escape leaves the
 	 * grid (the sheet NodeView stops propagation for that case anyway). */
-	function onWindowKeydown(e: KeyboardEvent): void {
-		if (e.key !== 'Escape') return;
+		function onWindowKeydown(e: KeyboardEvent): void {
+			if ((e.metaKey || e.ctrlKey) && e.key.toLocaleLowerCase() === 's') {
+				e.preventDefault();
+				if (phase === 'ready' && canEdit) void openSaveNewVersion();
+				return;
+			}
+			if (e.key !== 'Escape') return;
+			if (versionReview) return;
 		if (moreOpen) {
 			moreOpen = false;
 			queueMicrotask(() => moreButton?.focus());
@@ -243,7 +294,8 @@
 	let graph: DocumentGraph;
 	let registry: FunctionRegistry;
 	let session: GraphSession = $state()!;
-	let workspace: WorkspaceController | null = null;
+		let workspace: WorkspaceController | null = null;
+		let cloudVersionController: CloudVersionController | null = null;
 	let lease: WorkspaceLease | null = null;
 	let docEditor: DocEditor | null = null;
 	let ownerAccountId = '';
@@ -347,7 +399,7 @@
 		saveState = 'idle';
 		storageFailure = null;
 
-		workspace = createWorkspaceController({
+			workspace = createWorkspaceController({
 			graph: session,
 			title: () => title,
 			local: {
@@ -375,9 +427,22 @@
 			onSaveState: (state) => (saveState = state),
 			onLocalSaveError: (error) => {
 				storageFailure = error === null ? null : describeLocalStorageFailure(error);
-			}
-		});
-		docEditor = createDocEditor({
+				}
+			});
+			cloudVersionController = createCloudVersionController({
+				accountId,
+				documentId: String(docId),
+				workspaceId: 'main',
+				repository: localRepository,
+				flushLocal: async () => {
+					await workspace?.flush();
+				},
+				cloud: persistence,
+				onProgress: (progress) => {
+					versionProgress = progress;
+				}
+			});
+			docEditor = createDocEditor({
 			element: editorEl,
 			editable: canEdit,
 			graph,
@@ -642,10 +707,11 @@
 				let local = await localRepository.load(accountId, String(docId), 'main');
 				let content: LocalWorkingCopyContent;
 				let initialGeneration: number;
-				if (local) {
-					content = local.content;
-					initialGeneration = local.generation;
-				} else {
+					if (local) {
+						content = local.content;
+						initialGeneration = local.generation;
+						cloudVersionNumber = local.cloudBase?.version ?? 0;
+					} else {
 					const loaded = await persistence.loadDocument(docId);
 					if (cancelled) return;
 					if (loaded.state !== 'live') {
@@ -664,7 +730,7 @@
 						graph: serializeLocalGraph(hydratedCloud.graph),
 						workbookSnapshot: loaded.workbookSnapshot.snapshot
 					};
-					local = await localRepository.commit({
+						local = await localRepository.commit({
 						accountId,
 						documentId: String(docId),
 						workspaceId: 'main',
@@ -674,13 +740,17 @@
 							bundleHash: loaded.document.bundleHash
 						},
 						content
-					});
-					initialGeneration = local.generation;
-				}
+						});
+						initialGeneration = local.generation;
+						cloudVersionNumber = local.cloudBase?.version ?? loaded.document.revision;
+					}
 				if (cancelled) return;
-				installWorkingCopy(accountId, content, initialGeneration);
-				phase = 'ready';
-				void refreshReadonlyIfStale();
+					installWorkingCopy(accountId, content, initialGeneration);
+					phase = 'ready';
+					if (page.url.searchParams.get('save-version') === '1') {
+						queueMicrotask(() => void openSaveNewVersion());
+					}
+					void refreshReadonlyIfStale();
 			} catch (e) {
 				console.error('failed to load document', e);
 				if (!cancelled) phase = 'failed';
@@ -784,10 +854,12 @@
 						onclick={startTitleEdit}>{title}</button
 					>
 				{/if}
-				<span class="working-copy mono">Working copy</span>
+					<span class="working-copy mono">
+						Working copy · {cloudVersionNumber > 0 ? `Cloud v${cloudVersionNumber}` : 'No cloud version'}
+					</span>
 			</div>
 			<span class="grow"></span>
-			<Status
+				<Status
 				kind={saveState === 'error' || phase === 'failed' ? 'error' : 'neutral'}
 				live="polite"
 				testId="save-state"
@@ -804,13 +876,17 @@
 						: layoutMode === 'compact'
 							? 'Opening…'
 							: 'Opening local copy…'}
-			</Status>
-			<button
-				class="save-version"
-				type="button"
-				disabled={phase !== 'ready'}
-				onclick={previewSaveNewVersion}
-			>
+				</Status>
+				<span class="cloud-state" data-testid="cloud-version-state">
+					{cloudVersionNumber > 0 ? `Cloud v${cloudVersionNumber}` : 'No cloud version'}
+				</span>
+				<button
+					class="save-version"
+					type="button"
+					bind:this={saveVersionButton}
+					disabled={phase !== 'ready' || !canEdit}
+					onclick={() => void openSaveNewVersion()}
+				>
 				<Icon glyph={Save} size={18} />
 				<span>Save new version</span>
 			</button>
@@ -934,12 +1010,23 @@
 			/>
 		</div>
 	</header>
-	{#if versionNotice}
+		{#if versionNotice}
 		<p class="version-notice" role="status">
 			{versionNotice}
 			<button type="button" onclick={() => (versionNotice = '')}>Dismiss</button>
 		</p>
-	{/if}
+		{/if}
+		{#if versionReview}
+			<SaveVersionDialog
+				review={versionReview}
+				mode={layoutMode}
+				{online}
+				progress={versionProgress}
+				outcome={versionOutcome}
+				onsave={(message) => void saveReviewedVersion(message)}
+				onclose={closeVersionReview}
+			/>
+		{/if}
 	{#if leaseState === 'unsupported'}
 		<p class="lease-state err" data-testid="lease-status" role="alert">
 			<strong>Read-only.</strong> {leaseMessage}
@@ -1129,6 +1216,11 @@
 		color: var(--text-tertiary);
 		font-size: .68rem;
 		line-height: 1.1;
+	}
+	.cloud-state {
+		color: var(--text-secondary);
+		font: 500 var(--fs-caption) var(--font-mono);
+		white-space: nowrap;
 	}
 	.title {
 		font-family: var(--font-display);
@@ -1388,6 +1480,9 @@
 		grid-column: 3;
 		grid-row: 1;
 		white-space: nowrap;
+	}
+	main[data-layout-mode='compact'] .cloud-state {
+		display: none;
 	}
 	main[data-layout-mode='compact'] .more {
 		grid-column: 4;

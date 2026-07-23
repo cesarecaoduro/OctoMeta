@@ -13,3 +13,5 @@ export * from './saver';
 export * from './svelte';
 export * from './local';
 export * from './workbook-snapshot';
+export * from './cloud-integrity';
+export * from './cloud-version';

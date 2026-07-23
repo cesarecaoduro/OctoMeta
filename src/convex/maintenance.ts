@@ -19,6 +19,8 @@ const RESET_STAGES = [
 	'undoLog',
 	'chipBindings',
 	'workbookSnapshots',
+	'snapshotChunks',
+	'documentVersions',
 	'documents'
 ] as const;
 type ResetStage = (typeof RESET_STAGES)[number];
@@ -31,6 +33,8 @@ export interface ResetCounts {
 	undoLog: number;
 	chipBindings: number;
 	workbookSnapshots: number;
+	documentVersions: number;
+	snapshotChunks: number;
 	assets: number;
 	rootStorage: number;
 	truncated: boolean;
@@ -167,6 +171,8 @@ export const deleteResetBatch = internalMutation({
 			v.literal('undoLog'),
 			v.literal('chipBindings'),
 			v.literal('workbookSnapshots'),
+			v.literal('snapshotChunks'),
+			v.literal('documentVersions'),
 			v.literal('documents')
 		)
 	},
@@ -181,9 +187,13 @@ export const deleteResetBatch = internalMutation({
 						? await ctx.db.query('undoLog').take(RESET_BATCH)
 						: stage === 'chipBindings'
 							? await ctx.db.query('chipBindings').take(RESET_BATCH)
-							: stage === 'workbookSnapshots'
-								? await ctx.db.query('workbookSnapshots').take(RESET_BATCH)
-								: await ctx.db.query('documents').take(RESET_BATCH);
+						: stage === 'workbookSnapshots'
+							? await ctx.db.query('workbookSnapshots').take(RESET_BATCH)
+							: stage === 'snapshotChunks'
+								? await ctx.db.query('snapshotChunks').take(RESET_BATCH)
+								: stage === 'documentVersions'
+									? await ctx.db.query('documentVersions').take(RESET_BATCH)
+									: await ctx.db.query('documents').take(RESET_BATCH);
 		for (const row of rows) await ctx.db.delete(row._id);
 		return rows.length;
 	}
@@ -214,12 +224,24 @@ async function readResetCounts(
 			| 'undoLog'
 			| 'chipBindings'
 			| 'workbookSnapshots'
+			| 'documentVersions'
+			| 'snapshotChunks'
 			| 'assets'
 	): Promise<{ count: number; truncated: boolean }> => {
 		const rows = await ctx.db.query(table).take(COUNT_CAP + 1);
 		return { count: Math.min(rows.length, COUNT_CAP), truncated: rows.length > COUNT_CAP };
 	};
-	const [documents, graphNodes, blocks, undoLog, chipBindings, workbookSnapshots, assets] =
+	const [
+		documents,
+		graphNodes,
+		blocks,
+		undoLog,
+		chipBindings,
+		workbookSnapshots,
+		documentVersions,
+		snapshotChunks,
+		assets
+	] =
 		await Promise.all([
 			count('documents'),
 			count('graphNodes'),
@@ -227,6 +249,8 @@ async function readResetCounts(
 			count('undoLog'),
 			count('chipBindings'),
 			count('workbookSnapshots'),
+			count('documentVersions'),
+			count('snapshotChunks'),
 			count('assets')
 		]);
 	const rootStorageRows = await ctx.db.system.query('_storage').take(COUNT_CAP + 1);
@@ -241,6 +265,8 @@ async function readResetCounts(
 		undoLog: undoLog.count,
 		chipBindings: chipBindings.count,
 		workbookSnapshots: workbookSnapshots.count,
+		documentVersions: documentVersions.count,
+		snapshotChunks: snapshotChunks.count,
 		assets: assets.count,
 		rootStorage: rootStorage.count,
 		truncated: [
@@ -250,6 +276,8 @@ async function readResetCounts(
 			undoLog,
 			chipBindings,
 			workbookSnapshots,
+			documentVersions,
+			snapshotChunks,
 			assets,
 			rootStorage
 		].some((result) => result.truncated)
