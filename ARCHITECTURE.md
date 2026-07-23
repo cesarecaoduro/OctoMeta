@@ -3,8 +3,8 @@
 *What is built and which layer owns each decision. Forward-looking work lives
 in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).*
 
-**Last updated:** 20 July 2026
-**Current release:** R1.6 workbench implemented and locally release-verified
+**Last updated:** 23 July 2026
+**Current release:** R1.6 workbench with browser-local durability implemented and locally verified
 
 ## Product shape
 
@@ -24,9 +24,9 @@ second calculation engine.
 flowchart TB
   UI["Report canvas · Parameters · Workbook drawer"] -->|"GraphMutation"| G["DocumentGraph"]
   G -->|"settled projections"| UI
-  G -->|"atomic bundle + manifest"| P["Convex document transaction"]
-  U["Univer snapshot"] -->|"same revision + hashes"| P
-  P -->|"owner checked · integrity checked"| G
+  G -->|"authored state + undo"| L["IndexedDB working-copy generation"]
+  U["Univer snapshot"] -->|"same local transaction"| L
+  P["Convex legacy/cloud documents"] -->|"owner checked · integrity checked fallback"| G
 ```
 
 ## Ownership boundaries
@@ -40,24 +40,32 @@ flowchart TB
 | Cell identity | `CellRef { sheetId, a1 }` | graph and adapter |
 | Workbook visual/cell snapshot | Univer adapter | atomic persistence bundle |
 | Undo/redo | engine history | report, cells, names, tabs |
-| Identity and document ownership | Better Auth + Convex | route gate and every product operation |
+| Working copy generation and local durability | IndexedDB | document index and workbench |
+| Account identity and cloud ownership | Better Auth + Convex | route gate and cloud operations |
+| Product document/workspace identity | Application-generated IDs | graph, IndexedDB, route |
 | Save revision, hashes, limits | Convex | persistence facade |
 | Files and reachability state | Convex assets/storage | image blocks |
 
 ## Runtime flow
 
-1. `/app/[docId]` loads the owned document through the persistence facade.
-2. Convex distinguishes live, trashed, missing, unauthorized, and
-   integrity-failed states before an editable surface mounts.
-3. `hydrateGraph` validates bundle and workbook hashes, reconstructs the graph,
-   and re-evaluates it.
+1. `/app/[docId]` first loads the authenticated account's IndexedDB `main`
+   working copy. A cloud-backed document without a local copy is read once and
+   committed locally before the editable surface mounts.
+2. New documents are application-ID local records; creation sends no Convex
+   product mutation. Convex still distinguishes live, trashed, missing,
+   unauthorized, and integrity-failed states for cloud fallback reads.
+3. `hydrateGraph` reconstructs the graph from the local generation and
+   re-evaluates it.
 4. TipTap becomes editable. `WorkbookDrawer` mounts exactly one Univer
    instance and reconciles the typed tab manifest.
 5. A cell/pill/report/tab edit commits one `GraphMutation`; recalc settles the
    affected dependency subgraph.
-6. All projections repaint from settled graph values. The saver writes graph
-   rows, manifest, snapshot, stats, revision, and hashes in one CAS mutation.
-7. A stale revision or integrity mismatch fails closed and never blind-retries.
+6. All projections repaint from settled graph values. Local autosave coalesces
+   for 500 ms, enforces a 2-second maximum dirty interval, and commits authored
+   state, workbook snapshot, and unified undo state in one IndexedDB transaction.
+7. Expected-generation compare-and-swap fences stale writers. A failed
+   transaction preserves the prior generation and keeps the device-save error
+   visible until a later transaction succeeds.
 
 All sheet callbacks capture the immutable event-time `SheetId`. Active-tab
 state is presentation state only and is never used to infer cell ownership.
@@ -87,7 +95,11 @@ src/
     persistence/
       client.ts                   only UI-facing Convex facade
       serialize.ts, canonical.ts  bundle codec, hashes, integrity validation
-      saver.ts                    debounced, non-overlapping CAS saves
+      local/repository.ts         account-scoped IndexedDB generations + summaries
+      local/autosave.ts           500 ms trailing / 2 s maximum local save queue
+      local/serialization.ts      distinct local authored + history envelope
+      workbook-snapshot.ts        shared empty-workbook snapshot factory
+      saver.ts                    retained legacy cloud saver utility
       fixtures.ts                 real-commit demo/reproducibility fixtures
     components/UserBadge.svelte   authenticated account control
   routes/

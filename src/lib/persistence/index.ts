@@ -11,3 +11,5 @@ export * from './activity';
 export * from './client';
 export * from './saver';
 export * from './svelte';
+export * from './local';
+export * from './workbook-snapshot';

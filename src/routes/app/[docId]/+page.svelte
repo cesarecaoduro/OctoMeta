@@ -14,12 +14,17 @@
 		type NodeId
 	} from '$lib/engine';
 	import {
+		createLocalWorkspaceRepository,
 		createPersistenceActivityLog,
 		hydrateGraph,
+		localGraphRows,
+		serializeLocalGraph,
 		usePersistence,
 		type DocumentId,
+		type LocalWorkingCopyContent,
 		type SaveState
 	} from '$lib/persistence';
+	import { authClient } from '$lib/auth-client';
 	import { createWorkspaceController, type WorkspaceController } from '$lib/workspace';
 	import { createDocEditor, type DocEditor, type InsertableBlockType } from '$lib/editor';
 	import {
@@ -38,10 +43,14 @@
 	// engine history is THE undo/redo, and the TipTap doc re-renders from graph
 	// state after undo/redo/load. Sheet blocks host live Univer grids through
 	// the V1-3-1 adapter, all bound to the ONE graph session; their snapshots
-	// persist through the workspace controller on the existing cloud cadence.
+	// persist through the workspace controller as fenced local generations.
 
 	const persistenceActivity = createPersistenceActivityLog();
 	const persistence = usePersistence(persistenceActivity.observe);
+	const localRepository = createLocalWorkspaceRepository({
+		observe: persistenceActivity.observe
+	});
+	const authSession = authClient.useSession();
 	const docId = page.params.docId as DocumentId;
 	const HUMAN: Actor = { kind: 'human' };
 
@@ -98,7 +107,7 @@
 		titleEditing = true;
 	}
 
-	async function commitTitle(): Promise<void> {
+	function commitTitle(): void {
 		if (!titleEditing) return;
 		const next = titleDraft.trim();
 		if (!next) {
@@ -111,13 +120,8 @@
 		}
 		titleEditing = false;
 		if (next === title) return;
-		try {
-			await persistence.renameDocument(docId, next);
-			title = next;
-		} catch (cause) {
-			titleError = cause instanceof Error ? cause.message : String(cause);
-			titleEditing = true;
-		}
+		title = next;
+		workspace?.markChanged();
 	}
 
 	/** Escape closes the panel — except inside a grid, where Escape leaves the
@@ -138,10 +142,10 @@
 	let restoredWorkbookSnapshot: unknown = $state(null);
 
 	const SAVE_LABEL: Record<SaveState, string> = {
-		idle: 'saved',
-		pending: 'unsaved',
-		saving: 'saving…',
-		error: 'save failed'
+		idle: 'Stored on this device',
+		pending: 'Saving locally…',
+		saving: 'Saving locally…',
+		error: 'Device save failed'
 	};
 
 	/** The single write path through the framework-neutral workspace controller. */
@@ -150,6 +154,17 @@
 		if (!result?.ok) {
 			const message = result && !result.ok ? result.error.message : 'workspace not ready';
 			console.warn('mutation rejected:', message);
+			return false;
+		}
+		return true;
+	}
+
+	/** Editor projection writes are scheduled by the editor's `onChanged` signal. */
+	function commitProjectionMutation(m: GraphMutation): boolean {
+		const result = workspace?.commitProjection(m);
+		if (!result?.ok) {
+			const message = result && !result.ok ? result.error.message : 'workspace not ready';
+			console.warn('projection mutation rejected:', message);
 			return false;
 		}
 		return true;
@@ -262,6 +277,7 @@
 					workbookAdapter?.renameName(oldName, newName) ?? false,
 				selection: () => workbookAdapter?.selection() ?? null,
 				chipIds: () => [...graph.chips.keys()],
+				undoCursor: () => graph.undoCursor,
 				chipBinding: (chipId: string) => graph.chips.get(chipId) ?? null,
 				graphDisplay: (sheetId: string, a1: string) => {
 					const node = nodeForCell(session, sheetId, a1);
@@ -299,28 +315,68 @@
 		window.addEventListener('offline', setOnline);
 		void (async () => {
 			try {
-				const loaded = await persistence.loadDocument(docId);
-				if (cancelled) return;
-				if (loaded.state !== 'live') {
-					phase =
-						loaded.state === 'integrity-error'
-							? 'integrity'
-							: loaded.state;
-					return;
-				}
-				title = loaded.document.title;
+				const accountId = $authSession.data?.user.id;
+				if (!accountId) throw new Error('Authenticated account is unavailable.');
 				registry = createBuiltinRegistry();
-				const { graph: hydrated, mismatches } = hydrateGraph(loaded, { registry });
+				let local = await localRepository.load(accountId, String(docId), 'main');
+				let content: LocalWorkingCopyContent;
+				let initialGeneration: number;
+				if (local) {
+					content = local.content;
+					initialGeneration = local.generation;
+				} else {
+					const loaded = await persistence.loadDocument(docId);
+					if (cancelled) return;
+					if (loaded.state !== 'live') {
+						phase =
+							loaded.state === 'integrity-error'
+								? 'integrity'
+								: loaded.state;
+						return;
+					}
+					const hydratedCloud = hydrateGraph(loaded, { registry });
+					if (hydratedCloud.mismatches.length > 0) {
+						console.warn('reproducibility mismatches on load:', hydratedCloud.mismatches);
+					}
+					content = {
+						title: loaded.document.title,
+						graph: serializeLocalGraph(hydratedCloud.graph),
+						workbookSnapshot: loaded.workbookSnapshot.snapshot
+					};
+					local = await localRepository.commit({
+						accountId,
+						documentId: String(docId),
+						workspaceId: 'main',
+						expectedGeneration: 0,
+						content
+					});
+					initialGeneration = local.generation;
+				}
+				if (cancelled) return;
+				title = content.title;
+				const { graph: hydrated, mismatches } = hydrateGraph(localGraphRows(content.graph), { registry });
 				if (mismatches.length > 0) {
 					console.warn('reproducibility mismatches on load:', mismatches);
 				}
 				graph = hydrated;
 				session = createGraphSession({ doc: graph, registry, docId, actor: HUMAN });
-				restoredWorkbookSnapshot = loaded.workbookSnapshot.snapshot;
+				restoredWorkbookSnapshot = content.workbookSnapshot;
 				workspace = createWorkspaceController({
-					docId,
 					graph: session,
-					cloud: persistence,
+					title: () => title,
+					local: {
+						initialGeneration,
+						commit: async (expectedGeneration, captured) =>
+							(
+								await localRepository.commit({
+									accountId,
+									documentId: String(docId),
+									workspaceId: 'main',
+									expectedGeneration,
+									content: captured
+								})
+							).generation
+					},
 					projection: {
 						flushPendingChanges: () => docEditor?.flushProse(),
 						renderSettledState: () => docEditor?.renderFromGraph()
@@ -336,7 +392,7 @@
 					docId,
 					registry,
 					resolveImageUrl: (storageId) => persistence.fileUrl(storageId),
-					commitMutation,
+					commitMutation: commitProjectionMutation,
 					onChanged: () => workspace?.markChanged(),
 					onUndo: handleUndo,
 					onRedo: handleRedo,
@@ -418,11 +474,15 @@
 	});
 
 	onDestroy(() => {
-		flushAll();
+		const finalController = workspace;
+		const finalFlush = finalController?.flush() ?? Promise.resolve();
 		docEditor?.destroy();
 		docEditor = null;
-		workspace?.dispose();
 		workspace = null;
+		void finalFlush.catch(() => {}).finally(() => {
+			finalController?.dispose();
+			localRepository.close();
+		});
 	});
 </script>
 
@@ -515,13 +575,18 @@
 		<span
 			class="save mono"
 			data-testid="save-state"
-			data-save-state={saveState}
-			class:error={saveState === 'error'}>{SAVE_LABEL[saveState]}</span
+			data-save-state={phase === 'ready' ? saveState : 'loading'}
+			class:storage-failure={saveState === 'error' || phase === 'failed'}
+			>{phase === 'ready'
+				? SAVE_LABEL[saveState]
+				: phase === 'failed'
+					? 'Device storage unavailable'
+					: 'Opening local copy…'}</span
 		>
 	</div>
 	{#if !online}
 		<p class="offline" role="status">
-			Offline. {saveState === 'idle' ? 'Changes will save after reconnecting.' : 'Unsaved changes are waiting to sync.'}
+			Offline. Changes continue to save on this device.
 		</p>
 	{/if}
 
@@ -670,8 +735,10 @@
 		min-width: 72px;
 		text-align: right;
 	}
-	.save.error {
-		color: var(--error);
+	.save.storage-failure {
+		color: var(--ink);
+		font-weight: 700;
+		text-decoration: underline;
 	}
 	.notice {
 		color: var(--grey-1);

@@ -35,7 +35,7 @@ import { MANAGED_BLOCK_TYPES, blockIdOf, jsonEqual, specFromPmNode } from './blo
 
 /** What the sync needs from its host page — a thin seam over `commit`. */
 export interface SyncHost {
-	/** The Convex document id, stamped into new blocks' `docId`. */
+	/** Stable product document id, stamped into new blocks' `docId`. */
 	docId: string;
 	/** Canonical block order right now (graph.blocksOrder). */
 	order(): readonly string[];

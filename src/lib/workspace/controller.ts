@@ -12,8 +12,13 @@ import type {
 	Result
 } from '../engine';
 import type { PersistenceActivity, PersistenceActivityLog } from '../persistence/activity';
-import type { DocumentId, Persistence } from '../persistence/client';
-import { createDocumentSaver, type DocumentSaver, type SaveState } from '../persistence/saver';
+import {
+	createLocalAutosave,
+	type CommitLocalGeneration,
+	type LocalAutosave
+} from '../persistence/local/autosave';
+import { serializeLocalGraph } from '../persistence/local/serialization';
+import type { SaveState } from '../persistence/saver';
 
 /** Minimal graph session required by the workspace controller. */
 export interface WorkspaceGraphPort {
@@ -31,19 +36,25 @@ export interface WorkspaceProjectionPort {
 
 /** Options for one behavior-preserving workspace controller. */
 export interface WorkspaceControllerOptions {
-	docId: DocumentId;
 	graph: WorkspaceGraphPort;
-	cloud: Pick<Persistence, 'saveDocument'>;
+	title(): string;
+	local: {
+		initialGeneration: number;
+		commit: CommitLocalGeneration;
+	};
 	projection: WorkspaceProjectionPort;
 	workbookSnapshot(): unknown;
 	activity: PersistenceActivityLog;
 	onSaveState?(state: SaveState): void;
 	saveDelayMs?: number;
+	maxSaveDelayMs?: number;
 }
 
 /** The single orchestration seam consumed by the workbench route. */
 export interface WorkspaceController {
 	commit(mutation: GraphMutation): Result<CommitResult, MutationError>;
+	/** Commit an editor projection mutation already covered by `markChanged()`. */
+	commitProjection(mutation: GraphMutation): Result<CommitResult, MutationError>;
 	markChanged(): void;
 	undo(): boolean;
 	redo(): boolean;
@@ -54,31 +65,35 @@ export interface WorkspaceController {
 }
 
 /**
- * Create a workspace controller over existing graph, projection, and cloud
- * ports. This ticket intentionally preserves the current cloud-save cadence;
- * later local-first slices can replace the save port without changing UI
- * mutation choreography.
+ * Create a workspace controller over graph, projection, and local persistence
+ * ports. Every successful authored/history mutation schedules one atomically
+ * captured IndexedDB generation; cloud publication is intentionally absent.
  */
 export function createWorkspaceController(
 	options: WorkspaceControllerOptions
 ): WorkspaceController {
-	const saver: DocumentSaver = createDocumentSaver(
-		options.cloud,
-		options.docId,
-		options.graph.doc,
-		{
-			...(options.saveDelayMs !== undefined && { delayMs: options.saveDelayMs }),
-			onState: options.onSaveState,
-			workbookSnapshot: options.workbookSnapshot
-		}
-	);
+	const saver: LocalAutosave = createLocalAutosave({
+		initialGeneration: options.local.initialGeneration,
+		commit: options.local.commit,
+		capture: () => {
+			options.projection.flushPendingChanges();
+			return {
+				title: options.title(),
+				graph: serializeLocalGraph(options.graph.doc),
+				workbookSnapshot: options.workbookSnapshot()
+			};
+		},
+		...(options.saveDelayMs !== undefined && { delayMs: options.saveDelayMs }),
+		...(options.maxSaveDelayMs !== undefined && { maxDelayMs: options.maxSaveDelayMs }),
+		onState: options.onSaveState
+	});
 
 	const applyHistory = (direction: 'undo' | 'redo'): boolean => {
 		options.projection.flushPendingChanges();
 		const result = direction === 'undo' ? options.graph.undo() : options.graph.redo();
 		if (!result.ok) return false;
 		options.projection.renderSettledState();
-		saver.scheduleSave();
+		saver.schedule();
 		return true;
 	};
 
@@ -86,11 +101,14 @@ export function createWorkspaceController(
 		commit(mutation): Result<CommitResult, MutationError> {
 			const result = options.graph.commit(mutation);
 			if (!result.ok) return result;
-			saver.scheduleSave();
+			saver.schedule();
 			return result;
 		},
+		commitProjection(mutation): Result<CommitResult, MutationError> {
+			return options.graph.commit(mutation);
+		},
 		markChanged(): void {
-			saver.scheduleSave();
+			saver.schedule();
 		},
 		undo(): boolean {
 			return applyHistory('undo');

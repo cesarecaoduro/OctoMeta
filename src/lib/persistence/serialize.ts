@@ -78,16 +78,23 @@ export interface PersistedChip {
 	format?: { digits?: number; unit?: string };
 }
 
-/** The full-save payload — exactly the `documents.save` args minus `docId`. */
-export interface SavePayload {
+/** Authored graph state shared by durable formats; intentionally excludes undo. */
+export interface PersistedAuthoredGraph {
 	blocksOrder: string[];
-	undoCursor: number;
 	workbookManifest: WorkbookManifest;
 	nodes: PersistedNode[];
 	blocks: PersistedBlock[];
-	undoLog: PersistedUndoEntry[];
 	chips: PersistedChip[];
 }
+
+/** Browser editing history kept adjacent to, but separate from, authored state. */
+export interface PersistedGraphHistory {
+	undoCursor: number;
+	undoLog: PersistedUndoEntry[];
+}
+
+/** Legacy full-save payload — exactly the current `documents.save` args minus `docId`. */
+export interface SavePayload extends PersistedAuthoredGraph, PersistedGraphHistory {}
 
 /** What `hydrateGraph` needs from a `documents.load` result. Extra row fields (`_id`, …) are ignored. */
 export interface LoadedRows {
@@ -117,8 +124,8 @@ export interface HydrateResult {
 // Serialize
 // ---------------------------------------------------------------------------
 
-/** Snapshot a live graph into the `documents.save` wire payload (codec-encoded). */
-export function serializeGraph(graph: DocumentGraph): SavePayload {
+/** Snapshot authored graph state without local editing history. */
+export function serializeAuthoredGraph(graph: DocumentGraph): PersistedAuthoredGraph {
 	const nodes: PersistedNode[] = [...graph.nodes.values()]
 		.sort((a, b) => a.id.localeCompare(b.id))
 		.map((node) =>
@@ -148,17 +155,6 @@ export function serializeGraph(graph: DocumentGraph): SavePayload {
 			equation: block.equation
 			})
 		);
-	const undoLog: PersistedUndoEntry[] = [...graph.undoLog]
-		.sort((a, b) => a.seq - b.seq)
-		.map((entry) =>
-		toConvexJson<PersistedUndoEntry>({
-			seq: entry.seq,
-			mutation: entry.mutation,
-			inverse: entry.inverse,
-			actor: entry.actor,
-			at: entry.at
-		})
-		);
 	const chips: PersistedChip[] = [...graph.chips.values()]
 		.sort((a, b) => a.id.localeCompare(b.id))
 		.map((chip) =>
@@ -171,13 +167,34 @@ export function serializeGraph(graph: DocumentGraph): SavePayload {
 		);
 	return {
 		blocksOrder: [...graph.blocksOrder],
-		undoCursor: graph.undoCursor,
 		workbookManifest: structuredClone(graph.workbook),
 		nodes,
 		blocks,
-		undoLog,
 		chips
 	};
+}
+
+/** Snapshot the local unified undo cursor and log independently from authored state. */
+export function serializeGraphHistory(graph: DocumentGraph): PersistedGraphHistory {
+	return {
+		undoCursor: graph.undoCursor,
+		undoLog: [...graph.undoLog]
+			.sort((a, b) => a.seq - b.seq)
+			.map((entry) =>
+				toConvexJson<PersistedUndoEntry>({
+					seq: entry.seq,
+					mutation: entry.mutation,
+					inverse: entry.inverse,
+					actor: entry.actor,
+					at: entry.at
+				})
+			)
+	};
+}
+
+/** Snapshot a live graph into the legacy `documents.save` wire payload. */
+export function serializeGraph(graph: DocumentGraph): SavePayload {
+	return { ...serializeAuthoredGraph(graph), ...serializeGraphHistory(graph) };
 }
 
 // ---------------------------------------------------------------------------

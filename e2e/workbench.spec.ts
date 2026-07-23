@@ -3,11 +3,21 @@ import { expect, test, type Page } from '@playwright/test';
 
 declare global {
 	interface Window {
+		__documentIndex: {
+			persistenceActivity(): Array<{
+				target: 'local' | 'cloud';
+				access: 'read' | 'write';
+				operation: string;
+				phase: 'started' | 'succeeded' | 'failed';
+			}>;
+			clearPersistenceActivity(): void;
+		};
 		__canvas: {
 			sheetIds(): string[];
 			sheetsMounted(): boolean;
 			getCell(sheetId: string, a1: string): unknown;
 			getRawCell(sheetId: string, a1: string): { f?: unknown } | null;
+			graphDisplay(sheetId: string, a1: string): unknown;
 			setCell(sheetId: string, a1: string, input: number | string | boolean): void;
 			renameName(oldName: string, newName: string): boolean;
 			selection(): { sheetId: string; a1: string } | null;
@@ -18,6 +28,7 @@ declare global {
 				phase: 'started' | 'succeeded' | 'failed';
 			}>;
 			clearPersistenceActivity(): void;
+			undoCursor(): number;
 		};
 	}
 }
@@ -29,6 +40,86 @@ async function waitSaved(page: Page): Promise<void> {
 		timeout: 30_000
 	});
 }
+
+async function durableWorkingCopy(page: Page): Promise<{
+	generation: number;
+	content: { title: string; graph: { history: { undoCursor: number } } };
+}> {
+	return page.evaluate(async () => {
+		const request = indexedDB.open('octometa-browser-workspace');
+		const database = await new Promise<IDBDatabase>((resolve, reject) => {
+			request.onsuccess = () => resolve(request.result);
+			request.onerror = () => reject(request.error);
+		});
+		const read = database.transaction('workspaces', 'readonly').objectStore('workspaces').getAll();
+		const rows = await new Promise<
+			Array<{ documentId: string; generation: number; content: { title: string; graph: { history: { undoCursor: number } } } }>
+		>((resolve, reject) => {
+			read.onsuccess = () => resolve(read.result);
+			read.onerror = () => reject(read.error);
+		});
+		database.close();
+		const documentId = location.pathname.split('/').at(-1);
+		const record = rows.find((row) => row.documentId === documentId);
+		if (!record) throw new Error('durable working copy not found');
+		return record;
+	});
+}
+
+test('local create, document and workbook edits, history, and reload make zero Convex product writes', async ({
+	page
+}) => {
+	await page.goto('/app');
+	await expect(page.getByTestId('new-doc')).toBeEnabled();
+	await page.evaluate(() => window.__documentIndex.clearPersistenceActivity());
+	await page.getByTestId('new-doc').click();
+	await page.waitForURL(/\/app\/[^/]+$/);
+	await expect(page.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	await expect(page.getByTestId('save-state')).toHaveText('Stored on this device');
+
+	await page.getByTestId('slot-insert-text').last().click();
+	await page.keyboard.type('Local narrative survives reload');
+	await expect(page.locator('.tiptap')).toContainText('Local narrative survives reload');
+	await expect(page.getByTestId('save-state')).toHaveText('Saving locally…');
+
+	await page.waitForFunction(() => window.__canvas.sheetsMounted(), null, { timeout: 30_000 });
+	const [sheetId] = await page.evaluate(() => window.__canvas.sheetIds());
+	await page.evaluate(([sheet]) => window.__canvas.setCell(sheet, 'A1', 42), [sheetId]);
+	await expect.poll(() => page.evaluate(([sheet]) => window.__canvas.graphDisplay(sheet, 'A1'), [sheetId])).toBe(42);
+	await page.getByTestId('undo').click();
+	await expect.poll(() => page.evaluate(([sheet]) => window.__canvas.graphDisplay(sheet, 'A1'), [sheetId])).toBe('#VALUE!');
+	await page.getByTestId('redo').click();
+	await expect.poll(() => page.evaluate(([sheet]) => window.__canvas.graphDisplay(sheet, 'A1'), [sheetId])).toBe(42);
+	await waitSaved(page);
+
+	const durable = await durableWorkingCopy(page);
+	expect(durable.generation).toBeGreaterThan(1);
+	expect(durable.content.title).toBe('Untitled');
+	expect(durable.content.graph.history.undoCursor).toBeGreaterThan(0);
+	const durableUndoCursor = durable.content.graph.history.undoCursor;
+
+	const cloudWrites = await page.evaluate(() =>
+		[
+			...window.__documentIndex.persistenceActivity(),
+			...window.__canvas.persistenceActivity()
+		].filter((activity) => activity.target === 'cloud' && activity.access === 'write')
+	);
+	expect(cloudWrites).toEqual([]);
+
+	await page.reload();
+	await expect(page.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	await expect(page.locator('.tiptap')).toContainText('Local narrative survives reload');
+	await expect.poll(() => page.evaluate(([sheet]) => window.__canvas.graphDisplay(sheet, 'A1'), [sheetId])).toBe(42);
+	expect(await page.evaluate(() => window.__canvas.undoCursor())).toBe(durableUndoCursor);
+	await expect(page.getByTestId('save-state')).toHaveText('Stored on this device');
+	expect(
+		await page.evaluate(() =>
+			window.__canvas
+				.persistenceActivity()
+				.filter((activity) => activity.target === 'cloud' && activity.access === 'write')
+		)
+	).toEqual([]);
+});
 
 test('the complete owned steel workbench survives edit, error, reload, trash, and restore', async ({
 	page
@@ -73,20 +164,20 @@ test('the complete owned steel workbench survives edit, error, reload, trash, an
 	const saveActivity = await page.evaluate(() =>
 		window.__canvas
 			.persistenceActivity()
-			.filter((activity) => activity.operation === 'documents.save')
+			.filter((activity) => activity.operation === 'workspace.commit')
 			.map(({ target, access, operation, phase }) => ({ target, access, operation, phase }))
 	);
 	expect(saveActivity).toEqual([
 		{
-			target: 'cloud',
+			target: 'local',
 			access: 'write',
-			operation: 'documents.save',
+			operation: 'workspace.commit',
 			phase: 'started'
 		},
 		{
-			target: 'cloud',
+			target: 'local',
 			access: 'write',
-			operation: 'documents.save',
+			operation: 'workspace.commit',
 			phase: 'succeeded'
 		}
 	]);

@@ -57,7 +57,7 @@ const BLOCK_ID_TYPES = [
 export interface DocEditorOptions {
 	element: HTMLElement;
 	graph: DocumentGraph;
-	/** The Convex document id (block `docId`). */
+	/** Stable product document id (block `docId`). */
 	docId: string;
 	/**
 	 * The session's function registry — chip expansion (V1-5-4) reduces call
