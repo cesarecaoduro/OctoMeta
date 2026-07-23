@@ -44,6 +44,7 @@
 		document.kind === 'cloud';
 
 	let view = $state<'live' | 'trash'>('live');
+	let cloudDocs = $state<DocumentSummary[] | null>(null);
 	let liveDocs = $state<IndexDocument[] | null>(null);
 	let trashDocs = $state<CloudIndexDocument[] | null>(null);
 	let error = $state<string | null>(null);
@@ -111,40 +112,96 @@
 		toastTimer = setTimeout(() => (toast = null), 4000);
 	}
 
-	async function refresh(): Promise<void> {
+	function buildLiveDocuments(
+		cloudDocuments: DocumentSummary[],
+		localWorkspaces: Awaited<ReturnType<typeof localRepository.listWorkspaces>>
+	): IndexDocument[] {
+		return buildDocumentIndex(cloudDocuments, localWorkspaces).map((document) => ({
+			_id: document.documentId,
+			title: document.title,
+			stats: document.stats,
+			createdAt: document.createdAt,
+			updatedAt: document.updatedAt,
+			kind: document.availability === 'local-only' ? 'local-only' : 'cloud',
+			hasLocalWorkingCopy: document.local !== null,
+			availability: document.availability,
+			cloud: document.cloud,
+			local: document.local,
+			branches: document.branches
+		}));
+	}
+
+	function buildTrashDocuments(documents: DocumentSummary[]): CloudIndexDocument[] {
+		return documents.map((document) => ({
+			...document,
+			kind: 'cloud',
+			hasLocalWorkingCopy: false,
+			availability: 'cloud-only',
+			cloud: { version: document.revision },
+			local: null,
+			branches: []
+		}));
+	}
+
+	function retainSelected(rows: IndexDocument[]): void {
+		selected = new Set([...selected].filter((id) => rows.some((document) => document._id === id)));
+	}
+
+	function applyLiveDocuments(
+		cloudDocuments: DocumentSummary[],
+		localWorkspaces: Awaited<ReturnType<typeof localRepository.listWorkspaces>>
+	): void {
+		cloudDocs = cloudDocuments;
+		const rows = buildLiveDocuments(cloudDocuments, localWorkspaces);
+		liveDocs = rows;
+		error = null;
+		if (view === 'live') retainSelected(rows);
+	}
+
+	function reportRefreshError(cause: unknown): void {
+		error = cause instanceof Error ? cause.message : String(cause);
+	}
+
+	async function refreshLive(): Promise<void> {
 		try {
-			const [cloudDocuments, trash, localWorkspaces] = await Promise.all([
+			const [cloudDocuments, localWorkspaces] = await Promise.all([
 				persistence.listDocuments(),
-				persistence.listTrash(),
 				localRepository.listWorkspaces(accountId())
 			]);
-			liveDocs = buildDocumentIndex(cloudDocuments, localWorkspaces).map((document) => ({
-				_id: document.documentId,
-				title: document.title,
-				stats: document.stats,
-				createdAt: document.createdAt,
-				updatedAt: document.updatedAt,
-				kind: document.availability === 'local-only' ? 'local-only' : 'cloud',
-				hasLocalWorkingCopy: document.local !== null,
-				availability: document.availability,
-				cloud: document.cloud,
-				local: document.local,
-				branches: document.branches
-			}));
-			trashDocs = trash.map((document) => ({
-				...document,
-				kind: 'cloud',
-				hasLocalWorkingCopy: false,
-				availability: 'cloud-only',
-				cloud: { version: document.revision },
-				local: null,
-				branches: []
-			}));
-			error = null;
-			selected = new Set([...selected].filter((id) => (source ?? []).some((doc) => doc._id === id)));
+			applyLiveDocuments(cloudDocuments, localWorkspaces);
 		} catch (cause) {
-			error = cause instanceof Error ? cause.message : String(cause);
+			reportRefreshError(cause);
 		}
+	}
+
+	async function refreshLocalIndex(): Promise<void> {
+		const cachedCloudDocs = cloudDocs;
+		if (cachedCloudDocs === null) {
+			await refreshLive();
+			return;
+		}
+		try {
+			const localWorkspaces = await localRepository.listWorkspaces(accountId());
+			applyLiveDocuments(cachedCloudDocs, localWorkspaces);
+		} catch (cause) {
+			reportRefreshError(cause);
+		}
+	}
+
+	async function refreshTrash(): Promise<void> {
+		try {
+			const rows = buildTrashDocuments(await persistence.listTrash());
+			trashDocs = rows;
+			error = null;
+			if (view === 'trash') retainSelected(rows);
+		} catch (cause) {
+			reportRefreshError(cause);
+		}
+	}
+
+	async function refreshView(target: 'live' | 'trash' = view): Promise<void> {
+		if (target === 'live') await refreshLive();
+		else await refreshTrash();
 	}
 
 	function changeView(next: 'live' | 'trash'): void {
@@ -154,6 +211,7 @@
 		confirmingTrashId = null;
 		confirmingDiscardId = null;
 		search = '';
+		if (next === 'live' ? liveDocs === null : trashDocs === null) void refreshView(next);
 	}
 
 	async function createDoc(): Promise<void> {
@@ -231,7 +289,7 @@
 				documentId: String(duplicateId),
 				title: `${document.title} copy`
 			});
-			await refresh();
+			await refreshLocalIndex();
 			showToast('ok', `Duplicated “${document.title}” on this device.`);
 		} catch (cause) {
 			showToast('err', `Could not duplicate: ${cause instanceof Error ? cause.message : String(cause)}`);
@@ -246,7 +304,7 @@
 		try {
 			await localRepository.discardDocument(accountId(), String(document._id));
 			confirmingDiscardId = null;
-			await refresh();
+			await refreshLocalIndex();
 			showToast('ok', `Discarded the device copy of “${document.title}”.`);
 		} catch (cause) {
 			showToast('err', `Could not discard: ${cause instanceof Error ? cause.message : String(cause)}`);
@@ -278,7 +336,8 @@
 		renamingId = null;
 		if (title === document.title) return;
 		try {
-			if (document.kind === 'local-only' || document.hasLocalWorkingCopy) {
+			const hasLocalCopy = document.kind === 'local-only' || document.hasLocalWorkingCopy;
+			if (hasLocalCopy) {
 				const current = await localRepository.load(accountId(), String(document._id), 'main');
 				if (!current) throw new Error('Local working copy is missing.');
 				await localRepository.commit({
@@ -292,7 +351,8 @@
 				await persistence.renameDocument(document._id, title);
 			}
 			showToast('ok', `Renamed to “${title}”.`);
-			await refresh();
+			if (hasLocalCopy) await refreshLocalIndex();
+			else await refreshLive();
 		} catch (cause) {
 			showToast('err', `Could not rename: ${cause instanceof Error ? cause.message : String(cause)}`);
 		}
@@ -304,7 +364,8 @@
 			await Promise.all(documents.map((document) => persistence.deleteDocument(document._id)));
 			selected = new Set();
 			confirmingTrashId = null;
-			await refresh();
+			trashDocs = null;
+			await refreshLive();
 			showToast('ok', `${documents.length} document${documents.length === 1 ? '' : 's'} moved to trash.`);
 		} catch (cause) {
 			showToast('err', `Could not move to trash: ${cause instanceof Error ? cause.message : String(cause)}`);
@@ -322,7 +383,9 @@
 				cloudDocuments.map((document) => persistence.restoreDocument(document._id))
 			);
 			selected = new Set();
-			await refresh();
+			cloudDocs = null;
+			liveDocs = null;
+			await refreshTrash();
 			showToast(
 				'ok',
 				`${cloudDocuments.length} document${cloudDocuments.length === 1 ? '' : 's'} restored.`
@@ -356,7 +419,7 @@
 			permanentTarget = null;
 			confirmationText = '';
 			selected = new Set();
-			await refresh();
+			await refreshTrash();
 			showToast('ok', `${count} document${count === 1 ? '' : 's'} permanently deleted.`);
 		} catch (cause) {
 			showToast('err', `Could not delete: ${cause instanceof Error ? cause.message : String(cause)}`);
@@ -402,7 +465,7 @@
 				clearPersistenceActivity: () => persistenceActivity.clear()
 			}
 		});
-		void refresh();
+		void refreshLive();
 	});
 	onDestroy(() => {
 		if (toastTimer !== null) clearTimeout(toastTimer);
@@ -450,10 +513,20 @@
 	</div>
 
 	<div class="view-tabs" role="tablist" aria-label="Document state">
-		<button role="tab" aria-selected={view === 'live'} onclick={() => changeView('live')}>
+		<button
+			role="tab"
+			aria-selected={view === 'live'}
+			disabled={acting}
+			onclick={() => changeView('live')}
+		>
 			Live <span>{liveDocs?.length ?? '—'}</span>
 		</button>
-		<button role="tab" aria-selected={view === 'trash'} onclick={() => changeView('trash')}>
+		<button
+			role="tab"
+			aria-selected={view === 'trash'}
+			disabled={acting}
+			onclick={() => changeView('trash')}
+		>
 			Trash <span>{trashDocs?.length ?? '—'}</span>
 		</button>
 	</div>
@@ -497,7 +570,7 @@
 	{#if error}
 		<div class="notice error" role="alert">
 			<p>{error}</p>
-			<button onclick={() => void refresh()}>Retry</button>
+			<button onclick={() => void refreshView()}>Retry</button>
 		</div>
 	{:else if source === null}
 		<p class="mono muted">Loading…</p>

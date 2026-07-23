@@ -121,7 +121,7 @@ test('local create, document and workbook edits, history, and reload make zero C
 	).toEqual([]);
 });
 
-test('the unified index manages a local document without cloud writes', async ({ page }) => {
+test('the unified index manages a local document without cloud calls', async ({ page }) => {
 	await page.goto('/app');
 	await page.getByTestId('new-doc').click();
 	await expect(page.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
@@ -166,9 +166,82 @@ test('the unified index manages a local document without cloud writes', async ({
 		await page.evaluate(() =>
 			window.__documentIndex
 				.persistenceActivity()
-				.filter((activity) => activity.target === 'cloud' && activity.access === 'write')
+				.filter((activity) => activity.target === 'cloud')
 		)
 	).toEqual([]);
+});
+
+test('the document index reads cloud collections only when their view needs them', async ({
+	page
+}) => {
+	const authRequests: string[] = [];
+	page.on('request', (request) => {
+		const url = new URL(request.url());
+		if (url.pathname.startsWith('/api/auth/')) authRequests.push(url.pathname);
+	});
+	await page.goto('/app');
+	await expect(page.getByTestId('new-doc')).toBeEnabled();
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.__documentIndex
+					.persistenceActivity()
+					.filter(
+						(activity) =>
+							activity.target === 'cloud' &&
+							activity.access === 'read' &&
+							activity.phase === 'succeeded'
+					)
+					.map((activity) => activity.operation)
+			)
+		)
+		.toEqual(['documents.list']);
+
+	await page.waitForTimeout(1_000);
+	expect(
+		await page.evaluate(() =>
+			window.__documentIndex
+				.persistenceActivity()
+				.filter(
+					(activity) =>
+						activity.operation === 'documents.list' && activity.phase === 'succeeded'
+				)
+		)
+	).toHaveLength(1);
+	expect(authRequests).toEqual(['/api/auth/get-session', '/api/auth/convex/token']);
+	const settledAuthRequests = [...authRequests];
+	await page.waitForTimeout(1_000);
+	expect(authRequests).toEqual(settledAuthRequests);
+
+	await page.getByRole('tab', { name: /Trash/ }).click();
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.__documentIndex
+					.persistenceActivity()
+					.filter(
+						(activity) =>
+							activity.operation === 'documents.listTrash' &&
+							activity.phase === 'succeeded'
+					)
+					.length
+			)
+		)
+		.toBe(1);
+
+	await page.getByRole('tab', { name: /Live/ }).click();
+	await page.getByRole('tab', { name: /Trash/ }).click();
+	await page.waitForTimeout(500);
+	expect(
+		await page.evaluate(() =>
+			window.__documentIndex
+				.persistenceActivity()
+				.filter(
+					(activity) =>
+						activity.operation === 'documents.listTrash' && activity.phase === 'succeeded'
+				)
+		)
+	).toHaveLength(1);
 });
 
 test('the complete owned steel workbench survives edit, error, reload, trash, and restore', async ({

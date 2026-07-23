@@ -7,6 +7,7 @@ symptoms:
   - "The document list could not distinguish local-only, downloaded cloud-backed, and cloud-only documents"
   - "One summary per document could not represent device-local branches independently"
   - "Downloaded working copies did not retain the cloud base needed to report local changes"
+  - "The index eagerly queried both live documents and Trash, then repeated both reads after local-only actions"
 root_cause: logic_error
 resolution_type: code_fix
 severity: high
@@ -109,6 +110,12 @@ undo history and cloud lineage; discard deletes every local workspace for the
 document. Save and export remain explicit, non-mutating entry points until
 their dedicated workflows land.
 
+Keep cloud collection reads scoped to the view that needs them. Load live cloud
+metadata once when the index opens, defer `documents.listTrash` until Trash is
+opened, and cache both results for tab changes within the mounted index. After
+local-only rename, duplicate, or discard, rebuild the index from the cached
+cloud metadata and fresh IndexedDB summaries instead of querying Convex again.
+
 ## Why This Works
 
 The storage model now represents the product concepts directly. A document is
@@ -133,8 +140,11 @@ produce no cloud product write.
   through component conditionals.
 - Keep deferred save/export entry points visibly non-mutating; never route them
   through a legacy persistence path for convenience.
+- Fetch cloud collections lazily by view and refresh local-only state from
+  IndexedDB plus already-loaded cloud metadata.
 - Test repository lifecycle behavior, index state derivation, and browser-level
-  cloud-write activity independently.
+  cloud-call activity independently, including an idle window that detects
+  accidental auth polling.
 
 ## Related Issues
 
