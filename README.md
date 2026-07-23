@@ -6,11 +6,31 @@ OctoMeta is an authenticated engineering workbench. A report canvas, attached
 multi-tab workbook, parameters, equations, derivations, and provenance are
 projections of one typed dependency graph.
 
-The R1.6 workbench is implemented on `feat/v1-6-workbench`: owned documents,
-atomic graph/workbook persistence, a single Univer workbook per document,
-imperial engineering units, safe KaTeX equations, trash/retention, durable
-asset cleanup, a guarded development reset, CI, and a protected production
-release workflow.
+The workbench now uses account-scoped IndexedDB working copies for ordinary
+authoring. New documents are created locally, edits and unified undo history
+autosave on the device, and the document index presents local-only,
+cloud-backed, and cloud-only documents together without publishing as a side
+effect. The existing R1.6 graph, TipTap report, Univer workbook, units,
+equations, trash, asset cleanup, guarded reset, CI, and protected production
+release workflow remain in place.
+
+## Local-first document index
+
+The authenticated `/app` index distinguishes storage state explicitly:
+
+- **On this device · No cloud version** identifies a local-only document.
+- A downloaded cloud document shows its base revision and whether newer local
+  generations exist.
+- **Cloud only · Not downloaded to this device** identifies authorized cloud
+  metadata whose working content is not available locally yet.
+- Device-local branches are grouped beneath their parent document.
+
+Local working copies can be renamed, duplicated with fresh undo history, or
+discarded directly from the index. **Save new version** and **Export** are
+visible entry points but remain non-mutating until the immutable cloud-version
+and portable-export work lands; invoking either currently explains that no
+cloud write occurred. Listing the index and opening a new local document make
+no Convex product write.
 
 ## Prerequisites
 
@@ -63,9 +83,10 @@ pnpm audit --prod --audit-level=high
 pnpm secret:scan
 ```
 
-The Playwright suite creates an isolated owner, exercises the desktop demo
-through reload/trash/restore, verifies route gating and safe TeX handling, and
-runs the narrow layout at `390×844` with axe.
+The Playwright suite creates an isolated owner, verifies local index lifecycle
+actions and zero-cloud-write authoring, exercises the desktop demo through
+reload/trash/restore, verifies route gating and safe TeX handling, and runs the
+narrow layout at `390×844` with axe.
 
 ## Development reset
 

@@ -16,6 +16,39 @@ function databaseName(): string {
 	return name;
 }
 
+async function seedVersionOneSummary(name: string): Promise<void> {
+	await new Promise<void>((resolve, reject) => {
+		const request = indexedDB.open(name, 1);
+		request.onupgradeneeded = () => {
+			request.result.createObjectStore('workspaces');
+			const summaries = request.result.createObjectStore('documentSummaries');
+			summaries.createIndex('byAccount', 'accountId');
+		};
+		request.onerror = () => reject(request.error);
+		request.onsuccess = () => {
+			const database = request.result;
+			const transaction = database.transaction('documentSummaries', 'readwrite');
+			transaction.objectStore('documentSummaries').put(
+				{
+					accountId: 'account-a',
+					documentId: 'legacy-document',
+					title: 'Legacy local document',
+					generation: 3,
+					stats: { blocks: 1, tabs: 1, nodes: 0, bytes: 100 },
+					createdAt: 10,
+					updatedAt: 20
+				},
+				['account-a', 'legacy-document']
+			);
+			transaction.onerror = () => reject(transaction.error);
+			transaction.oncomplete = () => {
+				database.close();
+				resolve();
+			};
+		};
+	});
+}
+
 function content(title: string) {
 	const graph = new DocumentGraph();
 	return {
@@ -34,6 +67,22 @@ afterEach(async () => {
 });
 
 describe('local workspace repository', () => {
+	it('migrates version-one document summaries into main workspace summaries', async () => {
+		const name = databaseName();
+		await seedVersionOneSummary(name);
+		const repository = createLocalWorkspaceRepository({ databaseName: name });
+
+		expect(await repository.listWorkspaces('account-a')).toMatchObject([
+			{
+				documentId: 'legacy-document',
+				workspaceId: 'main',
+				workspace: { kind: 'main' },
+				generation: 3
+			}
+		]);
+		repository.close();
+	});
+
 	it('commits and lists account-scoped working copies', async () => {
 		const repository = createLocalWorkspaceRepository({
 			databaseName: databaseName(),
@@ -128,6 +177,132 @@ describe('local workspace repository', () => {
 			{ generation: 1, title: 'Durable generation' }
 		]);
 		expect(activity.filter((event) => event.phase === 'failed')).toHaveLength(1);
+		repository.close();
+	});
+
+	it('preserves a cloud base while later local generations become dirty', async () => {
+		const repository = createLocalWorkspaceRepository({ databaseName: databaseName() });
+		await repository.commit({
+			accountId: 'account-a',
+			documentId: 'document-1',
+			workspaceId: 'main',
+			expectedGeneration: 0,
+			cloudBase: { version: 4, bundleHash: 'cloud-hash' },
+			content: content('Downloaded calculation')
+		});
+		await repository.commit({
+			accountId: 'account-a',
+			documentId: 'document-1',
+			workspaceId: 'main',
+			expectedGeneration: 1,
+			content: content('Locally edited calculation')
+		});
+
+		expect(await repository.listWorkspaces('account-a')).toMatchObject([
+			{
+				documentId: 'document-1',
+				workspaceId: 'main',
+				generation: 2,
+				cloudBase: { version: 4, bundleHash: 'cloud-hash', generation: 1 }
+			}
+		]);
+		repository.close();
+	});
+
+	it('lists device-local branches independently beneath their document', async () => {
+		const repository = createLocalWorkspaceRepository({ databaseName: databaseName() });
+		await repository.commit({
+			accountId: 'account-a',
+			documentId: 'document-1',
+			workspaceId: 'main',
+			expectedGeneration: 0,
+			content: content('Main calculation')
+		});
+		await repository.commit({
+			accountId: 'account-a',
+			documentId: 'document-1',
+			workspaceId: 'branch-option-b',
+			workspace: { kind: 'branch', name: 'Option B' },
+			expectedGeneration: 0,
+			content: content('Main calculation')
+		});
+
+		expect(await repository.listWorkspaces('account-a')).toMatchObject([
+			{ workspaceId: 'branch-option-b', workspace: { kind: 'branch', name: 'Option B' } },
+			{ workspaceId: 'main', workspace: { kind: 'main' } }
+		]);
+		repository.close();
+	});
+
+	it('duplicates a local document with independent identity and fresh history', async () => {
+		const repository = createLocalWorkspaceRepository({ databaseName: databaseName() });
+		const source = content('Source calculation');
+		source.graph.authored.blocks.push({
+			id: 'block-1',
+			docId: 'document-1',
+			type: 'text',
+			position: 0
+		});
+		source.graph.history.undoCursor = 1;
+		source.graph.history.undoLog.push({
+			seq: 1,
+			mutation: { op: 'blockOp', action: 'remove', blockId: 'block-1' },
+			inverse: [{ op: 'blockOp', action: 'remove', blockId: 'block-1' }],
+			actor: { kind: 'human' },
+			at: 1
+		});
+		await repository.commit({
+			accountId: 'account-a',
+			documentId: 'document-1',
+			workspaceId: 'main',
+			expectedGeneration: 0,
+			content: source
+		});
+
+		await repository.duplicateDocument({
+			accountId: 'account-a',
+			sourceDocumentId: 'document-1',
+			documentId: 'document-2',
+			title: 'Source calculation copy'
+		});
+
+		expect(await repository.load('account-a', 'document-2', 'main')).toMatchObject({
+			generation: 1,
+			content: {
+				title: 'Source calculation copy',
+				graph: {
+					authored: { blocks: [{ docId: 'document-2' }] },
+					history: { undoCursor: 0, undoLog: [] }
+				},
+				workbookSnapshot: { id: 'document-2', name: 'Source calculation copy' }
+			}
+		});
+		repository.close();
+	});
+
+	it('discards all local workspaces for one document without touching another document', async () => {
+		const repository = createLocalWorkspaceRepository({ databaseName: databaseName() });
+		for (const [documentId, workspaceId] of [
+			['document-1', 'main'],
+			['document-1', 'branch-a'],
+			['document-2', 'main']
+		] as const) {
+			await repository.commit({
+				accountId: 'account-a',
+				documentId,
+				workspaceId,
+				...(workspaceId === 'main'
+					? {}
+					: { workspace: { kind: 'branch' as const, name: 'Branch A' } }),
+				expectedGeneration: 0,
+				content: content(documentId)
+			});
+		}
+
+		await expect(repository.discardDocument('account-a', 'document-1')).resolves.toBe(2);
+		expect(await repository.listWorkspaces('account-a')).toMatchObject([
+			{ documentId: 'document-2', workspaceId: 'main' }
+		]);
 		repository.close();
 	});
 });

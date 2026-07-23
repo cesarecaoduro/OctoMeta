@@ -9,9 +9,15 @@
 		serializeLocalGraph,
 		usePersistence,
 		type DocumentId,
-		type DocumentSummary,
-		type LocalDocumentSummary
+		type DocumentSummary
 	} from '$lib/persistence';
+	import {
+		buildDocumentIndex,
+		type DocumentAvailability,
+		type IndexedCloudState,
+		type IndexedDocumentBranch,
+		type IndexedLocalState
+	} from '$lib/workspace';
 	import { buildSteelDemoFixture } from '$lib/persistence/fixtures';
 	import { authClient } from '$lib/auth-client';
 
@@ -22,15 +28,18 @@
 	});
 	const authSession = authClient.useSession();
 	const RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
-	type CloudIndexDocument = DocumentSummary & {
-		kind: 'cloud';
-		hasLocalWorkingCopy: boolean;
-	};
-	type LocalIndexDocument = Pick<
+	type IndexDocument = Pick<
 		DocumentSummary,
-		'_id' | 'title' | 'stats' | 'createdAt' | 'updatedAt'
-	> & { kind: 'local-only' };
-	type IndexDocument = CloudIndexDocument | LocalIndexDocument;
+		'_id' | 'title' | 'stats' | 'createdAt' | 'updatedAt' | 'deletedAt'
+	> & {
+		kind: 'cloud' | 'local-only';
+		hasLocalWorkingCopy: boolean;
+		availability: DocumentAvailability;
+		cloud: IndexedCloudState | null;
+		local: IndexedLocalState | null;
+		branches: IndexedDocumentBranch[];
+	};
+	type CloudIndexDocument = IndexDocument & { kind: 'cloud' };
 	const isCloudDocument = (document: IndexDocument): document is CloudIndexDocument =>
 		document.kind === 'cloud';
 
@@ -47,6 +56,7 @@
 	let renameValue = $state('');
 	let renameError = $state('');
 	let confirmingTrashId = $state<DocumentId | null>(null);
+	let confirmingDiscardId = $state<DocumentId | null>(null);
 	let permanentTarget = $state<
 		| { kind: 'one'; document: CloudIndexDocument }
 		| { kind: 'bulk'; documents: CloudIndexDocument[] }
@@ -64,22 +74,13 @@
 		return id;
 	}
 
-	function localDocumentSummary(local: LocalDocumentSummary): IndexDocument {
-		return {
-			_id: local.documentId as DocumentId,
-			title: local.title,
-			stats: local.stats,
-			createdAt: local.createdAt,
-			updatedAt: local.updatedAt,
-			kind: 'local-only'
-		};
-	}
-
 	const source = $derived(view === 'live' ? liveDocs : trashDocs);
 	const visible = $derived.by(() => {
 		const normalized = search.trim().toLocaleLowerCase();
-		const rows = [...(source ?? [])].filter((document) =>
-			document.title.toLocaleLowerCase().includes(normalized)
+		const rows = [...(source ?? [])].filter(
+			(document) =>
+				document.title.toLocaleLowerCase().includes(normalized) ||
+				document.branches.some((branch) => branch.name.toLocaleLowerCase().includes(normalized))
 		);
 		const byId = (left: IndexDocument, right: IndexDocument) =>
 			String(left._id).localeCompare(String(right._id));
@@ -112,37 +113,32 @@
 
 	async function refresh(): Promise<void> {
 		try {
-			const [cloudDocuments, trash, localDocuments] = await Promise.all([
+			const [cloudDocuments, trash, localWorkspaces] = await Promise.all([
 				persistence.listDocuments(),
 				persistence.listTrash(),
-				localRepository.listDocuments(accountId())
+				localRepository.listWorkspaces(accountId())
 			]);
-			const merged = new Map<string, IndexDocument>(
-				cloudDocuments.map((document) => [
-					String(document._id),
-					{ ...document, kind: 'cloud', hasLocalWorkingCopy: false }
-				])
-			);
-			for (const local of localDocuments) {
-				const cloud = merged.get(local.documentId);
-				merged.set(
-					local.documentId,
-					cloud && isCloudDocument(cloud)
-						? {
-								...cloud,
-								title: local.title,
-								stats: local.stats,
-								updatedAt: Math.max(cloud.updatedAt, local.updatedAt),
-								hasLocalWorkingCopy: true
-							}
-						: localDocumentSummary(local)
-				);
-			}
-			liveDocs = [...merged.values()];
+			liveDocs = buildDocumentIndex(cloudDocuments, localWorkspaces).map((document) => ({
+				_id: document.documentId,
+				title: document.title,
+				stats: document.stats,
+				createdAt: document.createdAt,
+				updatedAt: document.updatedAt,
+				kind: document.availability === 'local-only' ? 'local-only' : 'cloud',
+				hasLocalWorkingCopy: document.local !== null,
+				availability: document.availability,
+				cloud: document.cloud,
+				local: document.local,
+				branches: document.branches
+			}));
 			trashDocs = trash.map((document) => ({
 				...document,
 				kind: 'cloud',
-				hasLocalWorkingCopy: false
+				hasLocalWorkingCopy: false,
+				availability: 'cloud-only',
+				cloud: { version: document.revision },
+				local: null,
+				branches: []
 			}));
 			error = null;
 			selected = new Set([...selected].filter((id) => (source ?? []).some((doc) => doc._id === id)));
@@ -156,6 +152,7 @@
 		selected = new Set();
 		renamingId = null;
 		confirmingTrashId = null;
+		confirmingDiscardId = null;
 		search = '';
 	}
 
@@ -220,6 +217,51 @@
 		renameValue = document.title;
 		renameError = '';
 		confirmingTrashId = null;
+		confirmingDiscardId = null;
+	}
+
+	async function duplicateDocument(document: IndexDocument): Promise<void> {
+		if (!document.hasLocalWorkingCopy) return;
+		acting = true;
+		try {
+			const duplicateId = ulid() as DocumentId;
+			await localRepository.duplicateDocument({
+				accountId: accountId(),
+				sourceDocumentId: String(document._id),
+				documentId: String(duplicateId),
+				title: `${document.title} copy`
+			});
+			await refresh();
+			showToast('ok', `Duplicated “${document.title}” on this device.`);
+		} catch (cause) {
+			showToast('err', `Could not duplicate: ${cause instanceof Error ? cause.message : String(cause)}`);
+		} finally {
+			acting = false;
+		}
+	}
+
+	async function discardLocalDocument(document: IndexDocument): Promise<void> {
+		if (!document.hasLocalWorkingCopy) return;
+		acting = true;
+		try {
+			await localRepository.discardDocument(accountId(), String(document._id));
+			confirmingDiscardId = null;
+			await refresh();
+			showToast('ok', `Discarded the device copy of “${document.title}”.`);
+		} catch (cause) {
+			showToast('err', `Could not discard: ${cause instanceof Error ? cause.message : String(cause)}`);
+		} finally {
+			acting = false;
+		}
+	}
+
+	function showDeferredEntryPoint(action: 'save' | 'export'): void {
+		showToast(
+			'err',
+			action === 'save'
+				? 'Cloud version saving is not available yet. No cloud write was made.'
+				: 'Portable export is not available yet. Your document remains stored on this device.'
+		);
 	}
 
 	async function commitRename(document: IndexDocument): Promise<void> {
@@ -521,8 +563,28 @@
 							{/if}
 							<p class="stats mono">
 								{document.stats.blocks} blocks · {document.stats.tabs} tabs · {document.stats.nodes} nodes · {fmtBytes(document.stats.bytes)}
-								{#if document.kind === 'local-only'} · Local only{/if}
 							</p>
+							{#if view === 'live'}
+								<p class="storage-status mono" data-testid="storage-status">
+									{#if document.availability === 'local-only'}
+										<strong>On this device</strong> · No cloud version
+					{:else if document.availability === 'cloud-backed'}
+						<strong>On this device</strong> · {document.local?.baseVersion === undefined ? 'Base unavailable' : `Base v${document.local.baseVersion}`} · {document.local?.hasChanges === null ? 'Change state unavailable' : document.local?.hasChanges ? 'Local changes' : 'No local changes'}
+									{:else}
+										<strong>Cloud only</strong> · Not downloaded to this device
+									{/if}
+								</p>
+								{#if document.branches.length > 0}
+									<ul class="branches" aria-label={`Local branches for ${document.title}`}>
+										{#each document.branches as branch (branch.workspaceId)}
+											<li>
+												<span class="branch-line" aria-hidden="true"></span>
+								<span><strong>{branch.name}</strong> · On this device{branch.baseVersion !== undefined ? ` · Base v${branch.baseVersion}` : ' · Base unavailable'} · {branch.hasChanges === null ? 'Change state unavailable' : branch.hasChanges ? 'Local changes' : 'No local changes'}</span>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+							{/if}
 						</div>
 						<div class="dates mono">
 							<span>Updated {fmtDate(document.updatedAt)}</span>
@@ -531,11 +593,19 @@
 						<div class="actions">
 							{#if view === 'live'}
 								<button data-testid="rename" onclick={() => startRename(document)}>Rename</button>
-								{#if document.kind === 'local-only'}
-									<span class="local-badge">On this device</span>
-								{:else if confirmingTrashId === document._id}
+								{#if document.hasLocalWorkingCopy}
+									<button data-testid="export-entry" onclick={() => showDeferredEntryPoint('export')}>Export</button>
+									<button data-testid="save-entry" onclick={() => showDeferredEntryPoint('save')}>Save new version</button>
+									<button data-testid="duplicate" disabled={acting} onclick={() => void duplicateDocument(document)}>Duplicate</button>
+									{#if confirmingDiscardId === document._id}
+										<button class="danger-action" data-testid="confirm-discard" disabled={acting} onclick={() => void discardLocalDocument(document)}>Confirm discard</button>
+									{:else}
+										<button data-testid="discard" onclick={() => (confirmingDiscardId = document._id)}>Discard</button>
+									{/if}
+								{/if}
+								{#if isCloudDocument(document) && confirmingTrashId === document._id}
 									<button class="danger-action" onclick={() => void moveToTrash([document])}>Confirm trash</button>
-								{:else}
+								{:else if isCloudDocument(document)}
 									<button data-testid="delete" onclick={() => (confirmingTrashId = document._id)}>Trash</button>
 								{/if}
 							{:else}
@@ -610,9 +680,13 @@
 	a.title:hover { color: var(--accent); }
 	.stats { margin: 5px 0 0; color: var(--grey-2); font-size: var(--fs-caption); }
 	.dates { display: grid; gap: 4px; color: var(--grey-2); font-size: var(--fs-caption); text-align: right; }
-	.actions { display: flex; gap: 5px; justify-content: flex-end; }
+	.actions { display: flex; flex-wrap: wrap; gap: 5px; justify-content: flex-end; max-width: 390px; }
 	.actions button { min-height: 34px; font-size: .78rem; }
-	.local-badge { align-self: center; color: var(--grey-1); font: var(--fs-caption) var(--font-mono); }
+	.storage-status { margin: var(--s1) 0 0; color: var(--grey-1); font-size: var(--fs-caption); }
+	.storage-status strong { color: var(--ink); font-weight: 600; }
+	.branches { display: grid; gap: var(--s1); margin: var(--s1) 0 0; padding: 0; list-style: none; color: var(--grey-1); font: var(--fs-caption) var(--font-mono); }
+	.branches li { display: flex; align-items: center; gap: var(--s1); }
+	.branch-line { width: 18px; height: 10px; border-bottom: 1px solid var(--grey-3); border-left: 1px solid var(--grey-3); }
 	.rename { width: 100%; box-sizing: border-box; padding: 0 10px; font-weight: 600; }
 	.field-error { margin: 4px 0 0; color: var(--error); font-size: .78rem; }
 	.empty, .notice { margin-top: var(--s3); padding: var(--s5) var(--s3); border: 1px dashed var(--grey-3); border-radius: var(--radius-card); text-align: center; }

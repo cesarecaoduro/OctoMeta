@@ -348,6 +348,10 @@
 						documentId: String(docId),
 						workspaceId: 'main',
 						expectedGeneration: 0,
+						cloudBase: {
+							version: loaded.document.revision,
+							bundleHash: loaded.document.bundleHash
+						},
 						content
 					});
 					initialGeneration = local.generation;

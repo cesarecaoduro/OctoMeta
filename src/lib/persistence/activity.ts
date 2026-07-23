@@ -29,7 +29,9 @@ export type PersistenceOperation =
 	| 'files.resolveUrl'
 	| 'workspace.load'
 	| 'workspace.list'
-	| 'workspace.commit';
+	| 'workspace.commit'
+	| 'workspace.duplicate'
+	| 'workspace.discard';
 
 /** One metadata-only activity notification. */
 export interface PersistenceActivityEvent {
