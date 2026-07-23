@@ -53,6 +53,28 @@ export interface CreateUniverSheetOptions {
 }
 
 /**
+ * Normalize accessibility attributes emitted by Univer's pre-1.0 runtime.
+ *
+ * Univer may add canvases and notification regions for several frames after
+ * its lifecycle reports `Steady`, so callers keep this normalization behind a
+ * mutation observer and a short post-mount frame sweep.
+ */
+export function normalizeUniverAccessibility(root: ParentNode = document): void {
+	for (const element of root.querySelectorAll<HTMLElement>('[data-u-comp][tabindex]')) {
+		const value = Number(element.getAttribute('tabindex'));
+		if (Number.isFinite(value) && value > 0) element.tabIndex = 0;
+	}
+
+	const notificationRegions = root.querySelectorAll<HTMLElement>(
+		'section[aria-label*="Notifications"]'
+	);
+	notificationRegions.forEach((element, index) => {
+		const label = `Workbook notifications ${index + 1}`;
+		if (element.getAttribute('aria-label') !== label) element.setAttribute('aria-label', label);
+	});
+}
+
+/**
  * Create one Univer instance with the sheets-core preset, initial formula
  * computing OFF (`NO_CALCULATION`, set before workbook creation), and resolve
  * once the lifecycle reaches `Steady` so the formula facade is safe to use.
@@ -65,10 +87,12 @@ export async function createUniverSheet(opts: CreateUniverSheetOptions): Promise
 		import('@univerjs/preset-sheets-core/lib/index.css')
 	]);
 	const { UniverSheetsCorePreset, CalculationMode } = presetModule;
+	const appearanceRoot = document.documentElement;
 
 	const { univer, univerAPI } = createUniver({
 		locale: LocaleType.EN_US,
 		locales: { [LocaleType.EN_US]: mergeLocales(locale.default) },
+		darkMode: appearanceRoot.dataset.appearance === 'dark',
 		presets: [
 			UniverSheetsCorePreset({
 				container: opts.container,
@@ -112,32 +136,37 @@ export async function createUniverSheet(opts: CreateUniverSheetOptions): Promise
 		});
 	});
 
-	const normalizeThirdPartyAccessibility = (): void => {
-		for (const element of document.querySelectorAll<HTMLElement>('[data-u-comp][tabindex]')) {
-			const value = Number(element.getAttribute('tabindex'));
-			if (Number.isFinite(value) && value > 0) element.tabIndex = 0;
-		}
-
-		const notificationRegions = document.querySelectorAll<HTMLElement>(
-			'section[aria-label*="Notifications"]'
-		);
-		notificationRegions.forEach((element, index) => {
-			const label = `Workbook notifications ${index + 1}`;
-			if (element.getAttribute('aria-label') !== label) element.setAttribute('aria-label', label);
-		});
-	};
-	const observer = new MutationObserver(normalizeThirdPartyAccessibility);
+	const observer = new MutationObserver(() => normalizeUniverAccessibility());
 	observer.observe(document.body, {
 		childList: true,
 		subtree: true,
 		attributes: true,
 		attributeFilter: ['tabindex', 'aria-label']
 	});
-	normalizeThirdPartyAccessibility();
+	normalizeUniverAccessibility();
+	let settleFrames = 0;
+	let settleFrame = 0;
+	const normalizeAfterMount = (): void => {
+		normalizeUniverAccessibility();
+		settleFrames += 1;
+		if (settleFrames < 12) settleFrame = requestAnimationFrame(normalizeAfterMount);
+	};
+	settleFrame = requestAnimationFrame(normalizeAfterMount);
+	const syncAppearance = (): void => {
+		univerAPI.toggleDarkMode(appearanceRoot.dataset.appearance === 'dark');
+	};
+	const appearanceObserver = new MutationObserver(syncAppearance);
+	appearanceObserver.observe(appearanceRoot, {
+		attributes: true,
+		attributeFilter: ['data-appearance']
+	});
+	syncAppearance();
 
 	return {
 		api: univerAPI,
 		dispose: () => {
+			cancelAnimationFrame(settleFrame);
+			appearanceObserver.disconnect();
 			observer.disconnect();
 			univer.dispose();
 		}

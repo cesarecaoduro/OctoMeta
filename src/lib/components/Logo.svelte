@@ -25,9 +25,9 @@
 <svg viewBox="0 0 1000 1000" width={size} height={size} aria-hidden="true">
 	<defs>
 		<linearGradient id="octoGrad-{uid}" x1="0%" y1="0%" x2="100%" y2="100%">
-			<stop offset="0%" stop-color="var(--ink)" />
-			<stop offset="55%" stop-color="var(--accent-2)" />
-			<stop offset="100%" stop-color="var(--accent)" />
+			<stop offset="0%" stop-color="#0b1020" />
+			<stop offset="55%" stop-color="#2b2e83" />
+			<stop offset="100%" stop-color="#6c5ce7" />
 		</linearGradient>
 	</defs>
 	<path d={BODY} fill="url(#octoGrad-{uid})" />
@@ -41,15 +41,15 @@
 	<circle cx="490" cy="885" r="58" fill="var(--paper)" />
 	<circle cx="770" cy="715" r="58" fill="var(--paper)" />
 	{#if size >= 48}
-		<path d={ARC} fill="none" stroke="var(--accent)" stroke-width="18" stroke-linecap="round" />
-		<circle class="node" cx="390" cy="650" r="20" fill="var(--paper)" stroke="var(--accent)" stroke-width="12" />
-		<circle class="node" cx="500" cy="760" r="22" fill="var(--paper)" stroke="var(--accent)" stroke-width="12" />
-		<circle class="node" cx="610" cy="650" r="20" fill="var(--paper)" stroke="var(--accent)" stroke-width="12" />
+		<path d={ARC} fill="none" stroke="#6c5ce7" stroke-width="18" stroke-linecap="round" />
+		<circle class="node" cx="390" cy="650" r="20" fill="var(--paper)" stroke="#6c5ce7" stroke-width="12" />
+		<circle class="node" cx="500" cy="760" r="22" fill="var(--paper)" stroke="#6c5ce7" stroke-width="12" />
+		<circle class="node" cx="610" cy="650" r="20" fill="var(--paper)" stroke="#6c5ce7" stroke-width="12" />
 	{:else}
 		<path d={ARC} fill="none" stroke="var(--paper)" stroke-width="15" stroke-linecap="round" opacity="0.92" />
-		<circle class="node" cx="390" cy="650" r="18" fill="var(--accent)" stroke="var(--paper)" stroke-width="9" />
-		<circle class="node" cx="500" cy="760" r="20" fill="var(--accent)" stroke="var(--paper)" stroke-width="9" />
-		<circle class="node" cx="610" cy="650" r="18" fill="var(--accent)" stroke="var(--paper)" stroke-width="9" />
+		<circle class="node" cx="390" cy="650" r="18" fill="#6c5ce7" stroke="var(--paper)" stroke-width="9" />
+		<circle class="node" cx="500" cy="760" r="20" fill="#6c5ce7" stroke="var(--paper)" stroke-width="9" />
+		<circle class="node" cx="610" cy="650" r="18" fill="#6c5ce7" stroke="var(--paper)" stroke-width="9" />
 	{/if}
 </svg>
 

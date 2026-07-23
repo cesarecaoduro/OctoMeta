@@ -42,8 +42,8 @@ The redesign must preserve these accepted decisions:
 | Adaptive capability | ADR 0017 | Essential authoring capability remains available in compact, regular, and expanded layouts. |
 
 Historical R1.6 plans describe the completed bottom-Workbook/Parameters prototype.
-Current issues #12 and #13 deliberately replace those UI choices with a right-side
-Workbook and Workbook-owned Published-value management.
+Current issues #12 and #13 deliberately refine that into a non-overlaying Workbook
+drawer and Workbook-owned Published-value management.
 
 ## Experience contract
 
@@ -84,9 +84,10 @@ Workbook and Workbook-owned Published-value management.
 
 - Layout is content-driven, never device-detected.
 - Compact focuses one primary workspace at a time.
-- Regular composes the Document and one companion only when both retain viable widths.
-- Expanded places the independently scrolling Workbook to the right of the Document in
-  a resizable horizontal split.
+- Regular composes the Document and one companion only when both retain viable content
+  areas.
+- Expanded places the independently scrolling Workbook in a non-overlaying bottom
+  drawer that resizes the Document viewport.
 - iPad multitasking, orientation, safe areas, browser chrome, virtual keyboards,
   Dynamic Type/text zoom, pointer, touch, hardware keyboard, and Apple Pencil are
   independent variables.
@@ -103,8 +104,8 @@ Workbook and Workbook-owned Published-value management.
   palette, and keyboard shortcuts.
 - Compact mode keeps a labelled Document/Workbook switch and a safe-area-aware
   contextual dock.
-- Workbook resizing is bounded, accessible, persisted by Document and layout mode, and
-  resettable through a labelled command.
+- Future Workbook height adjustment is bounded, accessible, persisted by Document and
+  layout mode, and resettable through a labelled command.
 
 ### Document authoring
 
@@ -165,7 +166,7 @@ Workbook and Workbook-owned Published-value management.
 |---:|---|---|
 | 0 | #26 Adaptive interface foundation | Shared themes, icons, materials, motion, adaptive primitives, accessibility, performance, and verification baselines. |
 | 1 | #10 Save immutable cloud versions | Review-first responsive version sheet; visible local/cloud distinction. |
-| 1 | #12 Resizable workbench | Single shell; independently scrolling right-side Workbook; adaptive focus modes. |
+| 1 | #12 Resizable workbench | Single shell; independently scrolling bottom-panel Workbook; adaptive focus modes. |
 | 2 | #11 Images | Content-first local Image Blocks with adaptive accessible controls. |
 | 2 | #13 Published values | Workbook-owned manager; no Parameters rail; shared searchable pickers. |
 | 2 | #15 Sections/slash menu | Shared slash/Add insertion; quiet one-level notebook Sections. |

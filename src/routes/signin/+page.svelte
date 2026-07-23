@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { authClient } from '$lib/auth-client';
+	import { AppearanceControl } from '$lib/ui';
 
 	let mode = $state<'signin' | 'signup'>('signin');
 	let email = $state('');
@@ -48,6 +49,7 @@
 <svelte:head><title>Sign in — OctoMeta</title></svelte:head>
 
 <main class="auth-shell">
+	<div class="appearance"><AppearanceControl /></div>
 	<section class="auth-card" aria-labelledby="auth-title">
 		<p class="eyebrow">Secure workspace</p>
 		<h1 id="auth-title">{mode === 'signin' ? 'Sign in' : 'Create account'}<span>.</span></h1>
@@ -99,18 +101,22 @@
 
 <style>
 	.auth-shell {
+		position: relative;
 		min-height: 100dvh;
 		display: grid;
 		place-items: center;
 		padding: var(--s3);
 		background: var(--paper);
 	}
+	.appearance { position: absolute; top: max(var(--s2), env(safe-area-inset-top)); right: max(var(--s2), env(safe-area-inset-right)); }
 	.auth-card {
 		width: min(100%, 430px);
 		padding: var(--s4);
 		border: 1px solid var(--grey-3);
 		border-radius: var(--radius-card);
-		background: var(--surface);
+		background: var(--material);
+		box-shadow: var(--shadow-floating);
+		backdrop-filter: blur(var(--material-blur));
 	}
 	.eyebrow {
 		margin: 0 0 var(--s1);
@@ -140,6 +146,6 @@
 	.mode { width: 100%; margin-top: var(--s1); border: 0; color: var(--accent); }
 	@media (max-width: 520px) {
 		.auth-shell { padding: 0; }
-		.auth-card { min-height: 100dvh; border: 0; border-radius: 0; padding: var(--s3); }
+		.auth-card { min-height: 100dvh; border: 0; border-radius: 0; padding: calc(var(--s6) + env(safe-area-inset-top)) var(--s3) calc(var(--s3) + env(safe-area-inset-bottom)); box-shadow: none; backdrop-filter: none; }
 	}
 </style>

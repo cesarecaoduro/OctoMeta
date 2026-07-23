@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import { PanelBottomClose, Plus, Table2, Trash2 } from '@lucide/svelte';
 	import {
 		attachWorkbookAdapter,
 		type GraphSession,
@@ -7,9 +8,11 @@
 		type WorkbookSelection
 	} from '$lib/adapters/univer';
 	import type { SheetId, SheetMeta } from '$lib/engine';
+	import { Icon, type AdaptiveMode } from '$lib/ui';
 
 	let {
 		session,
+		mode = 'compact',
 		snapshot = null,
 		readonly = false,
 		expanded = $bindable(false),
@@ -17,12 +20,14 @@
 		onready
 	}: {
 		session: GraphSession;
+		mode?: AdaptiveMode;
 		snapshot?: unknown;
 		readonly?: boolean;
 		expanded?: boolean;
 		ondirty: () => void;
 		onready?: (adapter: WorkbookAdapter | null) => void;
 	} = $props();
+	const displayed = $derived(expanded);
 
 	let gridEl: HTMLDivElement;
 	let adapter = $state<WorkbookAdapter | null>(null);
@@ -158,23 +163,25 @@
 	}
 </script>
 
-<aside class:expanded aria-label="Attached workbook">
+<aside class:expanded={displayed} data-mode={mode} aria-label="Attached workbook">
 	<header>
 		<button
 			class="toggle"
 			type="button"
-			aria-expanded={expanded}
+			aria-expanded={displayed}
 			aria-controls="workbook-panel"
 			onclick={() => (expanded = !expanded)}
 		>
-			<span class="node" aria-hidden="true"></span>
+			<Icon glyph={Table2} size={18} />
 			Workbook
 			<span class="summary">{sheets.length} {sheets.length === 1 ? 'tab' : 'tabs'}</span>
-			<span class="chevron" aria-hidden="true">{expanded ? '⌄' : '⌃'}</span>
+			<span class="panel-action" aria-hidden="true">
+				<Icon glyph={PanelBottomClose} size={18} />
+			</span>
 		</button>
 	</header>
 
-	<section id="workbook-panel" aria-hidden={!expanded}>
+	<section id="workbook-panel" aria-hidden={!displayed}>
 		<div class="formula-line">
 			<span class="cell mono">{selected ? `${session.doc.sheet(selected.sheetId)?.name} · ${selected.a1}` : 'Select a cell'}</span>
 			<input
@@ -210,7 +217,7 @@
 					type="button"
 					disabled={readonly}
 					onclick={addWorkbookTab}
-					aria-label="Add workbook tab">+</button
+					aria-label="Add workbook tab"><Icon glyph={Plus} size={18} /></button
 				>
 			</div>
 			<form
@@ -231,7 +238,7 @@
 					class="danger"
 					type="button"
 					disabled={readonly || sheets.length === 1}
-					onclick={deleteActiveTab}>Delete</button
+					onclick={deleteActiveTab}><Icon glyph={Trash2} size={16} /> <span>Delete</span></button
 				>
 			</form>
 		</div>
@@ -258,6 +265,11 @@
 		bottom: 0;
 		border-top: 1px solid var(--grey-3);
 		background: var(--surface);
+		box-shadow: var(--shadow-floating);
+		transition: transform var(--motion-continuity) var(--ease-out);
+	}
+	aside:not(.expanded) {
+		display: none;
 	}
 	header { height: 44px; }
 	.toggle {
@@ -273,35 +285,33 @@
 		font: 600 .86rem var(--font-display);
 		cursor: pointer;
 	}
-	.node {
-		width: 8px;
-		height: 8px;
-		border: 2px solid var(--accent);
-		border-radius: 50%;
-	}
 	.summary { color: var(--grey-1); font: 400 var(--fs-caption) var(--font-mono); }
-	.chevron { margin-left: auto; color: var(--grey-1); }
+	.panel-action {
+		display: inline-flex;
+		margin-left: auto;
+		color: var(--grey-1);
+	}
 	section {
 		height: 0;
 		overflow: hidden;
 		visibility: hidden;
 	}
 	.expanded section {
-		height: min(45dvh, 470px);
+		height: var(--workbook-panel-height, clamp(280px, 42dvh, 440px));
 		visibility: visible;
 	}
 	.formula-line, .tab-tools {
 		display: flex;
 		align-items: center;
 		gap: var(--s1);
-		padding: 6px var(--s2);
+		padding: var(--s1) var(--s2);
 		border-top: 1px solid var(--grey-3);
 		background: var(--grey-4);
 	}
 	.formula-line .cell { min-width: 150px; color: var(--grey-1); font-size: .75rem; }
 	.formula-line input { flex: 1; }
 	input, button {
-		min-height: 32px;
+		min-height: 44px;
 		border: 1px solid var(--grey-3);
 		border-radius: var(--radius-chip);
 		background: var(--surface);
@@ -312,31 +322,56 @@
 	button { cursor: pointer; }
 	button:disabled { cursor: default; opacity: .45; }
 	.tab-tools { justify-content: space-between; background: var(--surface); }
-	.tab-row, .tabs, .rename { display: flex; align-items: center; gap: 4px; }
-	.tabs button.active { border-color: var(--accent); color: var(--accent-2); background: var(--accent-dim); }
+	.tab-row, .tabs, .rename { display: flex; align-items: center; gap: var(--s1); }
+	.tabs button.active { border-color: var(--tint); color: var(--tint-text); background: var(--tint-muted); }
 	.tab-row .add { font-size: 1.1rem; }
+	.add,
+	.danger {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--s1);
+	}
 	.rename input { width: 150px; }
 	.danger { color: var(--error); }
 	.grid {
-		height: calc(min(45dvh, 470px) - 110px);
-		min-height: 230px;
+		height: calc(var(--workbook-panel-height, clamp(280px, 42dvh, 440px)) - 110px);
+		min-height: 170px;
 		background: var(--surface);
 	}
 	.grid.readonly { pointer-events: none; }
 	.loading, .error { position: absolute; z-index: 1; margin: var(--s2); }
 	.error { color: var(--error); }
-	@media (max-width: 800px) {
-		.expanded {
-			z-index: 80;
-			top: 0;
-			height: 100dvh;
-		}
-		.expanded section { height: calc(100dvh - 44px); }
-		.formula-line { flex-wrap: wrap; }
-		.formula-line .cell { width: 100%; }
-		.tab-tools { align-items: stretch; flex-direction: column; overflow-x: auto; }
-		.rename input { flex: 1; width: auto; }
-		.grid { height: calc(100dvh - 196px); }
-		.toggle, input, button { min-height: 44px; }
+	aside[data-mode='compact'].expanded {
+		z-index: 80;
+		top: 0;
+		height: 100dvh;
+		padding-bottom: env(safe-area-inset-bottom);
+	}
+	aside[data-mode='compact'].expanded section {
+		height: calc(100dvh - 44px - env(safe-area-inset-bottom));
+	}
+	aside[data-mode='compact'] .formula-line {
+		flex-wrap: wrap;
+	}
+	aside[data-mode='compact'] .formula-line .cell {
+		width: 100%;
+	}
+	aside[data-mode='compact'] .tab-tools {
+		align-items: stretch;
+		flex-direction: column;
+		overflow-x: auto;
+	}
+	aside[data-mode='compact'] .rename input {
+		flex: 1;
+		width: auto;
+	}
+	aside[data-mode='compact'] .grid {
+		height: calc(100dvh - 196px);
+	}
+	aside[data-mode='compact'] .toggle,
+	aside[data-mode='compact'] input,
+	aside[data-mode='compact'] button {
+		min-height: 44px;
 	}
 </style>

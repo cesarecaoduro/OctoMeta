@@ -1,5 +1,20 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import {
+		ArrowDown,
+		ArrowLeft,
+		ArrowUp,
+		Ellipsis,
+		FileText,
+		ImagePlus,
+		PanelBottomClose,
+		PanelBottomOpen,
+		Redo2,
+		Save,
+		Sigma,
+		Table2,
+		Undo2
+	} from '@lucide/svelte';
 	import { page } from '$app/state';
 	import { beforeNavigate } from '$app/navigation';
 	import {
@@ -36,6 +51,15 @@
 		type WorkspaceController
 	} from '$lib/workspace';
 	import { createDocEditor, type DocEditor, type InsertableBlockType } from '$lib/editor';
+	import {
+		AdaptiveContainer,
+		AppearanceControl,
+		ComputationTrace,
+		Icon,
+		IconButton,
+		SegmentedControl,
+		Status
+	} from '$lib/ui';
 	import {
 		createGraphSession,
 		formatCellDisplay,
@@ -82,6 +106,15 @@
 	let pendingImageAt: number | null = null;
 	let parametersOpen = $state(false);
 	let workbookOpen = $state(false);
+	let workspaceFocus = $state<'document' | 'workbook'>('document');
+	let moreOpen = $state(false);
+	let moreRoot = $state<HTMLDivElement>();
+	let moreButton = $state<HTMLButtonElement>();
+	let versionNotice = $state('');
+	let traceActive = $state(false);
+	let traceTimer: ReturnType<typeof setTimeout> | null = null;
+	let currentLayoutMode = $state<'compact' | 'regular' | 'expanded'>('compact');
+	let layoutInitialized = false;
 	let pendingWorkbookCell: { sheetId: string; a1: string } | null = null;
 	let parametersButton: HTMLButtonElement;
 	let blockAnnouncement = $state('');
@@ -112,6 +145,44 @@
 	function closeInspector(): void {
 		inspectorTarget = null;
 		inspectorFocusTick = 0;
+	}
+
+	/** Focus one workspace in compact mode while preserving the same surfaces. */
+	function focusWorkspace(value: string): void {
+		workspaceFocus = value === 'workbook' ? 'workbook' : 'document';
+		workbookOpen = workspaceFocus === 'workbook';
+	}
+
+	/** Set the initial desktop composition without overriding later user choices. */
+	function handleLayoutMode(next: 'compact' | 'regular' | 'expanded'): void {
+		if (layoutInitialized && next === currentLayoutMode) return;
+		currentLayoutMode = next;
+		if (!layoutInitialized) {
+			layoutInitialized = true;
+			workbookOpen = next === 'expanded';
+			workspaceFocus = 'document';
+		} else if (!workbookOpen) {
+			workspaceFocus = 'document';
+		}
+	}
+
+	/** Explicitly reveal or dismiss the Workbook without changing its state. */
+	function toggleWorkbook(): void {
+		workbookOpen = !workbookOpen;
+		if (currentLayoutMode === 'compact') {
+			workspaceFocus = workbookOpen ? 'workbook' : 'document';
+		}
+	}
+
+	$effect(() => {
+		if (currentLayoutMode === 'compact') {
+			workspaceFocus = workbookOpen ? 'workbook' : 'document';
+		}
+	});
+
+	/** Preview the issue #10 entry point without creating a cloud version. */
+	function previewSaveNewVersion(): void {
+		versionNotice = 'Version review is not available yet. Your working copy remains on this device.';
 	}
 
 	function startTitleEdit(): void {
@@ -145,9 +216,28 @@
 	/** Escape closes the panel — except inside a grid, where Escape leaves the
 	 * grid (the sheet NodeView stops propagation for that case anyway). */
 	function onWindowKeydown(e: KeyboardEvent): void {
-		if (e.key !== 'Escape' || inspectorTarget === null) return;
+		if (e.key !== 'Escape') return;
+		if (moreOpen) {
+			moreOpen = false;
+			queueMicrotask(() => moreButton?.focus());
+			return;
+		}
+		if (inspectorTarget === null) return;
 		if (e.target instanceof Element && e.target.closest('[data-sheet-block]')) return;
 		closeInspector();
+	}
+
+	/** Toggle the labelled workbench popover and move focus into its content. */
+	function toggleMore(): void {
+		moreOpen = !moreOpen;
+		if (!moreOpen) return;
+		queueMicrotask(() =>
+			moreRoot?.querySelector<HTMLElement>('.more-menu button, .more-menu a')?.focus()
+		);
+	}
+
+	function dismissMoreFromPointer(event: PointerEvent): void {
+		if (moreOpen && !moreRoot?.contains(event.target as Node)) moreOpen = false;
 	}
 
 	let graph: DocumentGraph;
@@ -171,6 +261,12 @@
 		pending: 'Saving locally…',
 		saving: 'Saving locally…',
 		error: 'Device save failed'
+	};
+	const COMPACT_SAVE_LABEL: Record<SaveState, string> = {
+		idle: 'Stored',
+		pending: 'Saving…',
+		saving: 'Saving…',
+		error: 'Save failed'
 	};
 
 	/** Refresh a read-only projection from a generation already stored by its owner. */
@@ -338,7 +434,13 @@
 			onInsertBlockAt: insertBlockAt
 		});
 		// The open inspector re-derives its view-model on every settle.
-		session.onSettle(() => (inspectorRevision += 1));
+		session.onSettle((result) => {
+			inspectorRevision += 1;
+			if (result.affected.length === 0) return;
+			traceActive = true;
+			if (traceTimer !== null) clearTimeout(traceTimer);
+			traceTimer = setTimeout(() => (traceActive = false), 700);
+		});
 		exposeCanvasHooks();
 	}
 
@@ -611,6 +713,7 @@
 	});
 
 	onDestroy(() => {
+		if (traceTimer !== null) clearTimeout(traceTimer);
 		const finalController = workspace;
 		const finalFlush = finalController?.flush() ?? Promise.resolve();
 		docEditor?.destroy();
@@ -626,116 +729,217 @@
 </script>
 
 <svelte:window onkeydown={onWindowKeydown} />
+<svelte:document onpointerdown={dismissMoreFromPointer} />
 
 <svelte:head>
 	<title>{title || 'Document'} · OctoMeta</title>
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
-<main class="wrap">
+<AdaptiveContainer
+	testId="workbench"
+	class="workbench"
+	onmodechange={handleLayoutMode}
+>
+	{#snippet children(layoutMode)}
+<main
+	class="wrap workbench-main"
+	data-layout-mode={layoutMode}
+	data-workspace-focus={workspaceFocus}
+	data-workbook-open={workbookOpen}
+>
 	<p class="visually-hidden" role="status" aria-live="polite">{blockAnnouncement}</p>
-	<div class="toolbar">
-		<a class="back mono" href="/app" data-testid="back">← documents</a>
-		{#if titleEditing}
-			<div class="title-edit">
-				<input
-					bind:value={titleDraft}
-					maxlength="120"
-					aria-label="Document title"
-					aria-invalid={titleError ? 'true' : undefined}
-					aria-describedby={titleError ? 'document-title-error' : undefined}
-					onkeydown={(event) => {
-						if (event.key === 'Enter') void commitTitle();
-						if (event.key === 'Escape') {
-							titleEditing = false;
-							titleError = '';
-						}
-					}}
-					onblur={() => void commitTitle()}
-				/>
-				{#if titleError}<span id="document-title-error" role="alert">{titleError}</span>{/if}
+	<header class="workbench-shell">
+		<div class="shell-primary">
+			<a class="back" href="/app" data-testid="back" aria-label="Back to Documents">
+				<Icon glyph={ArrowLeft} size={18} />
+				<span>Documents</span>
+			</a>
+			<div class="document-identity">
+				{#if titleEditing}
+					<div class="title-edit">
+						<input
+							bind:value={titleDraft}
+							maxlength="120"
+							aria-label="Document title"
+							aria-invalid={titleError ? 'true' : undefined}
+							aria-describedby={titleError ? 'document-title-error' : undefined}
+							onkeydown={(event) => {
+								if (event.key === 'Enter') void commitTitle();
+								if (event.key === 'Escape') {
+									titleEditing = false;
+									titleError = '';
+								}
+							}}
+							onblur={() => void commitTitle()}
+						/>
+						{#if titleError}<span id="document-title-error" role="alert">{titleError}</span>{/if}
+					</div>
+				{:else}
+					<button
+						class="title"
+						data-testid="doc-title"
+						type="button"
+						disabled={!canEdit}
+						onclick={startTitleEdit}>{title}</button
+					>
+				{/if}
+				<span class="working-copy mono">Working copy</span>
 			</div>
-		{:else}
-			<button
-				class="title"
-				data-testid="doc-title"
-				type="button"
-				disabled={!canEdit}
-				onclick={startTitleEdit}>{title}</button
+			<span class="grow"></span>
+			<Status
+				kind={saveState === 'error' || phase === 'failed' ? 'error' : 'neutral'}
+				live="polite"
+				testId="save-state"
+				dataState={phase === 'ready' ? saveState : 'loading'}
 			>
-		{/if}
-		<span class="grow"></span>
-		<button
-			class="tool"
-			data-testid="undo"
-			disabled={phase !== 'ready' || !canEdit}
-			onclick={handleUndo}
-			title="Undo (⌘Z)">Undo</button
-		>
-		<button
-			class="tool"
-			data-testid="redo"
-			disabled={phase !== 'ready' || !canEdit}
-			onclick={handleRedo}
-			title="Redo (⇧⌘Z)">Redo</button
-		>
-		<button
-			class="tool"
-			data-testid="move-up"
-			disabled={phase !== 'ready' || !canEdit}
-			onclick={() => docEditor?.moveSelectedBlock(-1)}
-			title="Move block up (⌥↑)">Move ↑</button
-		>
-		<button
-			class="tool"
-			data-testid="move-down"
-			disabled={phase !== 'ready' || !canEdit}
-			onclick={() => docEditor?.moveSelectedBlock(1)}
-			title="Move block down (⌥↓)">Move ↓</button
-		>
-		<label
-			class="tool"
-			class:disabled={!canEdit}
-			aria-disabled={!canEdit}
-			data-testid="insert-image-label"
-		>
-			Image
-			<input
-				type="file"
-				accept="image/*"
-				data-testid="image-input"
-				disabled={!canEdit}
-				bind:this={imageInputEl}
-				onchange={(e) => void insertImage(e.currentTarget)}
+				{phase === 'ready'
+					? layoutMode === 'compact'
+						? COMPACT_SAVE_LABEL[saveState]
+						: SAVE_LABEL[saveState]
+					: phase === 'failed'
+						? layoutMode === 'compact'
+							? 'Storage unavailable'
+							: 'Device storage unavailable'
+						: layoutMode === 'compact'
+							? 'Opening…'
+							: 'Opening local copy…'}
+			</Status>
+			<button
+				class="save-version"
+				type="button"
+				disabled={phase !== 'ready'}
+				onclick={previewSaveNewVersion}
+			>
+				<Icon glyph={Save} size={18} />
+				<span>Save new version</span>
+			</button>
+			<div class="more" bind:this={moreRoot}>
+				<IconButton
+					bind:element={moreButton}
+					glyph={Ellipsis}
+					label="More workbench actions"
+					expanded={moreOpen}
+					hasPopup="dialog"
+					onclick={toggleMore}
+				/>
+				{#if moreOpen}
+					<div
+						class="more-menu ui-surface"
+						data-surface="menu"
+						role="dialog"
+						aria-labelledby="workbench-popover-label"
+					>
+						<p class="menu-label" id="workbench-popover-label">Workbench actions</p>
+						<AppearanceControl />
+						<a href="/app">Back to Documents</a>
+					</div>
+				{/if}
+			</div>
+		</div>
+
+		<div class="shell-context">
+			{#if layoutMode === 'compact'}
+				<SegmentedControl
+					label="Workspace"
+					options={[
+						{ value: 'document', label: 'Document', glyph: FileText },
+						{ value: 'workbook', label: 'Workbook', glyph: Table2 }
+					]}
+					value={workspaceFocus}
+					onchange={focusWorkspace}
+				/>
+			{:else}
+				<IconButton
+					glyph={workbookOpen ? PanelBottomClose : PanelBottomOpen}
+					label={workbookOpen ? 'Hide Workbook' : 'Show Workbook'}
+					tooltip={workbookOpen ? 'Hide Workbook' : 'Show Workbook'}
+					pressed={workbookOpen}
+					onclick={toggleWorkbook}
+				/>
+			{/if}
+			<div class="contextual-tools" aria-label="Contextual editing controls">
+				<IconButton
+					glyph={Undo2}
+					label="Undo"
+					tooltip="Undo (⌘Z)"
+					testId="undo"
+					disabled={phase !== 'ready' || !canEdit}
+					onclick={handleUndo}
+				/>
+				<IconButton
+					glyph={Redo2}
+					label="Redo"
+					tooltip="Redo (⇧⌘Z)"
+					testId="redo"
+					disabled={phase !== 'ready' || !canEdit}
+					onclick={handleRedo}
+				/>
+				<IconButton
+					glyph={ArrowUp}
+					label="Move block up"
+					tooltip="Move block up (⌥↑)"
+					testId="move-up"
+					disabled={phase !== 'ready' || !canEdit}
+					onclick={() => docEditor?.moveSelectedBlock(-1)}
+				/>
+				<IconButton
+					glyph={ArrowDown}
+					label="Move block down"
+					tooltip="Move block down (⌥↓)"
+					testId="move-down"
+					disabled={phase !== 'ready' || !canEdit}
+					onclick={() => docEditor?.moveSelectedBlock(1)}
+				/>
+				<IconButton
+					glyph={ImagePlus}
+					label="Insert image"
+					testId="insert-image-label"
+					disabled={!canEdit}
+					onclick={() => imageInputEl?.click()}
+				/>
+				<input
+					class="visually-hidden"
+					type="file"
+					aria-label="Choose image file"
+					accept="image/*"
+					data-testid="image-input"
+					disabled={!canEdit}
+					bind:this={imageInputEl}
+					onchange={(event) => void insertImage(event.currentTarget)}
+				/>
+				<IconButton
+					glyph={Table2}
+					label="Add Workbook sheet"
+					testId="insert-sheet"
+					disabled={phase !== 'ready' || !canEdit}
+					onclick={insertSheet}
+				/>
+				<button
+					class="tool labelled-tool"
+					type="button"
+					bind:this={parametersButton}
+					aria-expanded={parametersOpen}
+					disabled={phase !== 'ready' || !canEdit}
+					onclick={() => (parametersOpen = !parametersOpen)}
+				>
+					<Icon glyph={Sigma} size={18} />
+					<span>Parameters</span>
+				</button>
+			</div>
+			<ComputationTrace
+				active={traceActive}
+				message="Computation complete. Dependent values updated."
+				oninterrupt={() => (traceActive = false)}
 			/>
-		</label>
-		<button
-			class="tool"
-			data-testid="insert-sheet"
-			disabled={phase !== 'ready' || !canEdit}
-			onclick={insertSheet}
-			title="Insert a calculation sheet">Sheet</button
-		>
-		<button
-			class="tool"
-			type="button"
-			bind:this={parametersButton}
-			aria-expanded={parametersOpen}
-			disabled={phase !== 'ready' || !canEdit}
-			onclick={() => (parametersOpen = !parametersOpen)}>Parameters</button
-		>
-		<span
-			class="save mono"
-			data-testid="save-state"
-			data-save-state={phase === 'ready' ? saveState : 'loading'}
-			class:storage-failure={saveState === 'error' || phase === 'failed'}
-			>{phase === 'ready'
-				? SAVE_LABEL[saveState]
-				: phase === 'failed'
-					? 'Device storage unavailable'
-					: 'Opening local copy…'}</span
-		>
-	</div>
+		</div>
+	</header>
+	{#if versionNotice}
+		<p class="version-notice" role="status">
+			{versionNotice}
+			<button type="button" onclick={() => (versionNotice = '')}>Dismiss</button>
+		</p>
+	{/if}
 	{#if leaseState === 'unsupported'}
 		<p class="lease-state err" data-testid="lease-status" role="alert">
 			<strong>Read-only.</strong> {leaseMessage}
@@ -816,6 +1020,7 @@
 		{#key projectionRevision}
 			<ParametersRail
 				{session}
+				mode={layoutMode}
 				open={parametersOpen}
 				onclose={() => {
 					parametersOpen = false;
@@ -826,6 +1031,7 @@
 			/>
 			<WorkbookDrawer
 				{session}
+				mode={layoutMode}
 				snapshot={restoredWorkbookSnapshot}
 				readonly={!canEdit}
 				bind:expanded={workbookOpen}
@@ -849,6 +1055,7 @@
 	{#if inspectorTarget !== null && phase === 'ready'}
 		<Inspector
 			graph={inspectorSource}
+			mode={layoutMode}
 			nodeId={inspectorTarget}
 			revision={inspectorRevision}
 			focusTick={inspectorFocusTick}
@@ -857,30 +1064,71 @@
 		/>
 	{/if}
 </main>
+	{/snippet}
+</AdaptiveContainer>
 
 <style>
 	/* The canvas is full-page (notebook-style): sheets and images get the whole
 	   viewport; `.wrap`'s side padding is all that frames it. */
 	main {
+		--workbook-panel-height: clamp(280px, 42dvh, 440px);
 		max-width: none;
-		padding-top: var(--s3);
-		padding-bottom: var(--s6);
+		height: 100dvh;
+		min-height: 0;
+		overflow-y: auto;
+		padding-top: max(var(--s2), env(safe-area-inset-top));
+		padding-bottom: calc(var(--s6) + env(safe-area-inset-bottom));
 	}
-	.toolbar {
+	.workbench-main:is(
+		[data-layout-mode='regular'],
+		[data-layout-mode='expanded']
+	)[data-workbook-open='true'] {
+		height: calc(100dvh - var(--workbook-panel-height) - 44px);
+	}
+	.workbench-shell {
+		position: sticky;
+		top: 0;
+		z-index: 35;
+		margin: calc(-1 * max(var(--s2), env(safe-area-inset-top))) calc(-1 * var(--s3)) var(--s3);
+		padding:
+			max(var(--s1), env(safe-area-inset-top))
+			max(var(--s3), env(safe-area-inset-right))
+			var(--s1)
+			max(var(--s3), env(safe-area-inset-left));
+		border-bottom: 1px solid var(--border);
+		background: var(--material);
+		backdrop-filter: blur(var(--material-blur)) saturate(112%);
+	}
+	.shell-primary,
+	.shell-context {
 		display: flex;
 		align-items: center;
 		gap: var(--s1);
-		padding-bottom: var(--s2);
-		margin-bottom: var(--s3);
-		border-bottom: 1px solid var(--grey-3);
+		min-width: 0;
+	}
+	.shell-context {
+		margin-top: var(--s1);
+	}
+	.document-identity {
+		display: grid;
+		min-width: 0;
+		margin-left: var(--s1);
 	}
 	.back {
-		font-size: var(--fs-caption);
-		color: var(--grey-1);
+		display: inline-flex;
+		align-items: center;
+		gap: var(--s1);
+		min-height: 44px;
+		color: var(--text-secondary);
 		text-decoration: none;
 	}
 	.back:hover {
-		color: var(--ink);
+		color: var(--text);
+	}
+	.working-copy {
+		color: var(--text-tertiary);
+		font-size: .68rem;
+		line-height: 1.1;
 	}
 	.title {
 		font-family: var(--font-display);
@@ -899,6 +1147,79 @@
 	.title-edit span { position: absolute; top: 100%; left: 0; z-index: 5; color: var(--error); font-size: .72rem; white-space: nowrap; }
 	.grow {
 		flex: 1;
+	}
+	.contextual-tools {
+		display: flex;
+		align-items: center;
+		gap: var(--s1);
+		margin-left: auto;
+	}
+	.labelled-tool {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--s1);
+		min-height: 44px;
+	}
+	.save-version {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--s1);
+		min-height: 40px;
+		padding: 0 var(--s2);
+		border: 1px solid var(--text);
+		border-radius: var(--radius-control);
+		background: var(--text);
+		color: var(--canvas);
+		font: 650 .82rem var(--font-body);
+		cursor: pointer;
+	}
+	.save-version:disabled {
+		opacity: .45;
+		cursor: default;
+	}
+	.more { position: relative; }
+	.more-menu {
+		position: absolute;
+		top: calc(100% + var(--s1));
+		right: 0;
+		display: grid;
+		gap: var(--s1);
+		width: 230px;
+		padding: var(--s2);
+	}
+	.more-menu a {
+		min-height: 36px;
+		display: flex;
+		align-items: center;
+		color: var(--text);
+		text-decoration: none;
+	}
+	.menu-label {
+		margin: 0;
+		color: var(--text-tertiary);
+		font: 500 var(--fs-caption) var(--font-mono);
+		text-transform: uppercase;
+		letter-spacing: .08em;
+	}
+	.version-notice {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--s2);
+		margin: calc(-1 * var(--s2)) 0 var(--s2);
+		padding: var(--s1) var(--s2);
+		border: 1px solid var(--status-info);
+		border-radius: var(--radius-control);
+		background: var(--status-info-muted);
+		color: var(--text);
+		font-size: .82rem;
+	}
+	.version-notice button {
+		min-height: 36px;
+		border: 0;
+		background: transparent;
+		color: var(--status-info);
+		cursor: pointer;
 	}
 	.tool {
 		font: 500 0.8rem var(--font-body);
@@ -919,24 +1240,6 @@
 	.tool:disabled {
 		color: var(--grey-2);
 		cursor: default;
-	}
-	.tool.disabled {
-		color: var(--grey-2);
-		cursor: default;
-	}
-	.tool input[type='file'] {
-		display: none;
-	}
-	.save {
-		font-size: var(--fs-caption);
-		color: var(--grey-1);
-		min-width: 72px;
-		text-align: right;
-	}
-	.save.storage-failure {
-		color: var(--ink);
-		font-weight: 700;
-		text-decoration: underline;
 	}
 	.notice {
 		color: var(--grey-1);
@@ -1044,20 +1347,94 @@
 		background: var(--surface);
 		overflow: hidden;
 	}
-	@media (max-width: 800px) {
-		main { padding-inline: var(--s2); }
-		.toolbar { flex-wrap: wrap; gap: 6px; }
-		.toolbar .title {
-			max-width: 145px;
-			overflow: hidden;
-			text-overflow: ellipsis;
-			white-space: nowrap;
-		}
-		.toolbar .grow { min-width: 12px; }
-		.toolbar .tool { min-height: 44px; }
-		.editor { min-width: 0; overflow-wrap: anywhere; }
-		.editor :global(.equation-controls) { flex-wrap: wrap; }
-		.editor :global(.equation-controls select) { max-width: 100%; }
+	main[data-layout-mode='compact'] {
+		padding-inline: var(--s2);
+		padding-bottom: calc(var(--s6) + 72px + env(safe-area-inset-bottom));
+	}
+	main[data-layout-mode='compact'] .workbench-shell {
+		margin-inline: calc(-1 * var(--s2));
+		padding-inline: max(var(--s2), env(safe-area-inset-left));
+		background: var(--surface);
+		backdrop-filter: none;
+	}
+	main[data-layout-mode='compact'] .shell-primary {
+		display: grid;
+		grid-template-columns: 44px minmax(0, 1fr) auto 44px;
+		gap: var(--s1);
+	}
+	main[data-layout-mode='compact'] .back {
+		grid-column: 1;
+		grid-row: 1;
+	}
+	main[data-layout-mode='compact'] .back span,
+	main[data-layout-mode='compact'] .grow {
+		display: none;
+	}
+	main[data-layout-mode='compact'] .document-identity {
+		grid-column: 2;
+		grid-row: 1;
+		max-width: 100%;
+		margin-left: 0;
+	}
+	main[data-layout-mode='compact'] .title {
+		width: 100%;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		text-align: left;
+	}
+	main[data-layout-mode='compact'] .shell-primary :global(.status) {
+		grid-column: 3;
+		grid-row: 1;
+		white-space: nowrap;
+	}
+	main[data-layout-mode='compact'] .more {
+		grid-column: 4;
+		grid-row: 1;
+	}
+	main[data-layout-mode='compact'] .save-version {
+		grid-column: 1 / -1;
+		grid-row: 2;
+		justify-content: center;
+		width: 100%;
+	}
+	main[data-layout-mode='compact'] .shell-context {
+		position: fixed;
+		z-index: 50;
+		right: 0;
+		bottom: 0;
+		left: 0;
+		margin: 0;
+		padding:
+			var(--s1)
+			max(var(--s2), env(safe-area-inset-right))
+			calc(var(--s1) + env(safe-area-inset-bottom))
+			max(var(--s2), env(safe-area-inset-left));
+		overflow-x: auto;
+		border-top: 1px solid var(--border);
+		background: var(--material);
+		backdrop-filter: blur(var(--material-blur)) saturate(112%);
+		scrollbar-width: none;
+	}
+	main[data-layout-mode='compact'] .contextual-tools {
+		margin-left: var(--s1);
+	}
+	main[data-layout-mode='compact'] .contextual-tools .tool {
+		min-height: 44px;
+	}
+	main[data-layout-mode='compact'] .shell-context :global(.trace) {
+		display: none;
+	}
+	main[data-layout-mode='compact'] .editor {
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	main[data-layout-mode='compact'] .editor :global(.equation-controls) {
+		flex-wrap: wrap;
+	}
+	main[data-layout-mode='compact'] .editor :global(.equation-controls select) {
+		max-width: 100%;
 	}
 	.editor :global(.equation-controls) {
 		display: flex;
@@ -1204,7 +1581,9 @@
 		gap: var(--s1);
 		padding: 0 var(--s1);
 		background: var(--paper);
-		opacity: 0;
+		/* These controls are keyboard/touch capability, so they cannot exist
+		   only behind pointer hover. Their hairline remains the quiet layer. */
+		opacity: 1;
 		transition: opacity var(--t-fast) var(--ease);
 	}
 	.editor :global(.octo-insert-slot:hover .octo-insert-rule),
@@ -1289,7 +1668,7 @@
 	}
 	:global(.octo-chip-picker-item.is-active) {
 		background: var(--accent-dim);
-		color: var(--accent);
+		color: var(--tint-text);
 	}
 	:global(.octo-chip-picker-empty) {
 		font-family: var(--font-mono);

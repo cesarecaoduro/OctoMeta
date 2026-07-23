@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { X } from '@lucide/svelte';
 	import {
 		format,
 		parseParameterInput,
@@ -6,15 +7,18 @@
 		type GraphNode
 	} from '$lib/engine';
 	import type { GraphSession } from '$lib/adapters/univer';
+	import { IconButton, type AdaptiveMode } from '$lib/ui';
 
 	let {
 		session,
+		mode = 'compact',
 		open,
 		onclose,
 		onchanged,
 		oninsert
 	}: {
 		session: GraphSession;
+		mode?: AdaptiveMode;
 		open: boolean;
 		onclose: () => void;
 		onchanged: () => void;
@@ -51,7 +55,9 @@
 	$effect(() => session.onSettle(() => (revision += 1)));
 	$effect(() => {
 		if (!open) return;
-		queueMicrotask(() => dialogEl?.querySelector<HTMLElement>('.close')?.focus());
+		queueMicrotask(() =>
+			dialogEl?.querySelector<HTMLElement>('[aria-label="Close parameters"]')?.focus()
+		);
 	});
 
 	function handleDialogKeydown(event: KeyboardEvent): void {
@@ -99,7 +105,7 @@
 </script>
 
 {#if open}
-	<div class="backdrop" role="presentation" onclick={(event) => {
+	<div class="backdrop" data-mode={mode} role="presentation" onclick={(event) => {
 		if (event.target === event.currentTarget) onclose();
 	}}>
 		<div
@@ -116,7 +122,7 @@
 					<p class="eyebrow">Published graph</p>
 					<h2>Parameters<span>.</span></h2>
 				</div>
-				<button class="close" type="button" onclick={onclose} aria-label="Close parameters">✕</button>
+				<IconButton glyph={X} label="Close parameters" onclick={onclose} />
 			</header>
 
 			<section aria-labelledby="inputs-title">
@@ -217,7 +223,9 @@
 		padding: var(--s3);
 		border: 1px solid var(--grey-3);
 		border-radius: var(--radius-panel);
-		background: var(--surface);
+		background: var(--material);
+		box-shadow: var(--shadow-floating);
+		backdrop-filter: blur(var(--material-blur));
 	}
 	header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s2); }
 	.eyebrow { margin: 0 0 4px; font: 500 var(--fs-eyebrow) var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--grey-2); }
@@ -226,7 +234,7 @@
 	h3 { margin: 0 0 var(--s1); font: 600 .76rem var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--grey-1); }
 	section { margin-top: var(--s3); padding-top: var(--s2); border-top: 1px solid var(--grey-3); }
 	button, input {
-		min-height: 36px;
+		min-height: 44px;
 		border: 1px solid var(--grey-3);
 		border-radius: var(--radius-chip);
 		background: var(--surface);
@@ -234,8 +242,12 @@
 	}
 	button { cursor: pointer; }
 	button:focus-visible, input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-	.close { min-width: 36px; }
-	.parameter { display: grid; grid-template-columns: minmax(0, 1fr) 108px 36px; gap: 4px; padding: 5px 0; }
+	.parameter {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 112px 48px;
+		gap: var(--s1);
+		padding: var(--s1) 0;
+	}
 	.parameter.selected { background: var(--accent-dim); }
 	.name { overflow: hidden; text-overflow: ellipsis; text-align: left; padding: 0 8px; }
 	.parameter input, output { padding: 0 8px; font-size: .78rem; }
@@ -244,12 +256,15 @@
 	.validation { grid-column: 1 / -1; margin: 0; color: var(--error); font-size: .76rem; }
 	.empty { color: var(--grey-2); font-size: .82rem; }
 	dl { margin: 0; }
-	dl div { display: flex; justify-content: space-between; gap: var(--s2); padding: 5px 0; }
+	dl div { display: flex; justify-content: space-between; gap: var(--s2); padding: var(--s1) 0; }
 	dt { color: var(--grey-2); font-size: .78rem; }
 	dd { margin: 0; text-align: right; font-size: .78rem; overflow-wrap: anywhere; }
-	@media (max-width: 800px) {
-		.backdrop { pointer-events: auto; background: rgba(11, 11, 12, .2); }
-		.rail { inset: 0; width: auto; border: 0; border-radius: 0; }
-		button, input { min-height: 44px; }
+	.backdrop[data-mode='compact'] { pointer-events: auto; background: rgba(11, 11, 12, .28); }
+	.backdrop[data-mode='compact'] .rail {
+		inset: auto 0 0;
+		width: auto;
+		max-height: min(82dvh, 720px);
+		padding-bottom: calc(var(--s3) + env(safe-area-inset-bottom));
+		border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
 	}
 </style>

@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { onDestroy, tick } from 'svelte';
+	import { X } from '@lucide/svelte';
 	import type { NodeId } from '$lib/engine';
 	import { buildInspector, type InspectorSource } from '$lib/editor';
+	import { IconButton, type AdaptiveMode } from '$lib/ui';
 
 	// V1-5-5 · the provenance inspector — the read-only reviewability panel
 	// (PRD §2). Renders the pure view-model (editor/inspector.ts) for the
@@ -27,8 +29,18 @@
 		onnavigate: (nodeId: NodeId) => void;
 		/** Close the panel (close button; Escape lives on the page). */
 		onclose: () => void;
+		/** Current content-driven presentation mode. */
+		mode?: AdaptiveMode;
 	}
-	let { graph, nodeId, revision, focusTick, onnavigate, onclose }: Props = $props();
+	let {
+		graph,
+		nodeId,
+		revision,
+		focusTick,
+		onnavigate,
+		onclose,
+		mode = 'compact'
+	}: Props = $props();
 
 	let panelEl = $state<HTMLElement>();
 	/** Where focus came from when the panel took it; restored on close. */
@@ -70,6 +82,7 @@
 {#if vm}
 	<aside
 		class="inspector"
+		data-mode={mode}
 		data-testid="inspector"
 		aria-label="Provenance inspector"
 		tabindex="-1"
@@ -77,13 +90,12 @@
 	>
 		<header>
 			<span class="eyebrow">Inspector</span>
-			<button
-				class="close"
-				type="button"
-				data-testid="inspector-close"
-				aria-label="Close inspector"
-				onclick={onclose}>✕</button
-			>
+			<IconButton
+				glyph={X}
+				label="Close inspector"
+				testId="inspector-close"
+				onclick={onclose}
+			/>
 		</header>
 
 		<h2 class="title mono" data-testid="inspector-title">{vm.title}</h2>
@@ -190,28 +202,13 @@
 		border: 1px solid var(--grey-3);
 		border-radius: var(--radius-panel);
 		padding: var(--s3);
+		box-shadow: var(--shadow-floating);
 	}
 	header {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		margin-bottom: var(--s2);
-	}
-	.close {
-		font: 500 0.8rem var(--font-body);
-		color: var(--grey-1);
-		background: none;
-		border: 1px solid var(--grey-3);
-		border-radius: var(--radius-chip);
-		padding: 2px 8px;
-		cursor: pointer;
-		transition:
-			color var(--t-fast) var(--ease),
-			border-color var(--t-fast) var(--ease);
-	}
-	.close:hover {
-		color: var(--ink);
-		border-color: var(--ink);
 	}
 	.title {
 		font-size: 1.05rem;
@@ -286,5 +283,12 @@
 	.link-kind {
 		font-size: var(--fs-caption);
 		color: var(--grey-2);
+	}
+	.inspector[data-mode='compact'] {
+		inset: auto 0 0;
+		width: auto;
+		max-height: min(76dvh, 680px);
+		padding-bottom: calc(var(--s3) + env(safe-area-inset-bottom));
+		border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
 	}
 </style>

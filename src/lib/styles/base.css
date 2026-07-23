@@ -9,6 +9,15 @@
 
 html {
 	scroll-behavior: smooth;
+	min-width: 320px;
+	overflow-x: clip;
+	background: var(--canvas);
+}
+
+html.appearance-changing *,
+html.appearance-changing *::before,
+html.appearance-changing *::after {
+	transition: none !important;
 }
 
 /* anchored targets stop clear of the sticky nav */
@@ -17,8 +26,11 @@ html {
 }
 
 body {
-	background: var(--paper);
-	color: var(--ink);
+	min-width: 320px;
+	min-height: 100dvh;
+	overflow-x: clip;
+	background: var(--canvas);
+	color: var(--text);
 	font-family: var(--font-body);
 	font-size: var(--fs-body);
 	line-height: 1.6;
@@ -30,8 +42,8 @@ a {
 }
 
 :focus-visible {
-	outline: 2px solid var(--accent);
-	outline-offset: 3px;
+	outline: var(--focus-ring);
+	outline-offset: var(--focus-offset);
 	border-radius: 2px;
 }
 
@@ -115,7 +127,7 @@ h2 {
 	padding: 1px 7px;
 	border-radius: var(--radius-chip);
 	background: var(--accent-dim);
-	color: var(--accent-2);
+	color: var(--tint-text);
 	transition: background var(--t-med) var(--ease);
 }
 
@@ -159,7 +171,7 @@ h2 {
 	}
 	100% {
 		background: var(--accent-dim);
-		color: var(--accent);
+		color: var(--tint-text);
 	}
 }
 
@@ -305,7 +317,10 @@ h2 {
 	border: 1px solid transparent;
 	cursor: pointer;
 	text-decoration: none;
-	transition: all var(--t-fast) var(--ease);
+	transition:
+		background var(--t-fast) var(--ease),
+		color var(--t-fast) var(--ease),
+		border-color var(--t-fast) var(--ease);
 }
 
 .btn-primary {
@@ -361,5 +376,22 @@ h2 {
 	}
 	html {
 		scroll-behavior: auto;
+	}
+}
+
+@media (forced-colors: active) {
+	:root {
+		--tint: Highlight;
+		--tint-muted: transparent;
+		--status-success: CanvasText;
+		--status-warning: CanvasText;
+		--status-error: CanvasText;
+		--status-info: CanvasText;
+	}
+	button,
+	input,
+	select,
+	[role='button'] {
+		forced-color-adjust: auto;
 	}
 }

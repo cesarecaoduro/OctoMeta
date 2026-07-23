@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Lockup from './Lockup.svelte';
+	import { AppearanceControl } from '$lib/ui';
 
 	let y = $state(0);
 	const scrolled = $derived(y > 8);
@@ -14,6 +15,7 @@
 			<li class="hide-m"><a href="#graph">The graph</a></li>
 			<li class="hide-m"><a href="#geometry">Geometry</a></li>
 			<li class="hide-m"><a href="#deliverable">Deliverables</a></li>
+			<li><AppearanceControl /></li>
 			<li><a href="#waitlist" class="btn btn-primary btn-sm">Join the waitlist</a></li>
 		</ul>
 	</div>
@@ -61,5 +63,10 @@
 		li.hide-m {
 			display: none;
 		}
+	}
+	@media (max-width: 520px) {
+		.nav-inner { padding-inline: var(--s2); }
+		.nav-links { gap: var(--s1); }
+		.nav-links .btn { padding-inline: 12px; }
 	}
 </style>

@@ -23,6 +23,9 @@ importers:
       '@fontsource-variable/jetbrains-mono':
         specifier: 5.3.0
         version: 5.3.0
+      '@lucide/svelte':
+        specifier: 1.25.0
+        version: 1.25.0(svelte@5.56.6)
       '@mmailaender/convex-better-auth-svelte':
         specifier: 0.8.2
         version: 0.8.2(67bc34f4aa37123bff77ba81cfe06e8c)
@@ -605,6 +608,11 @@ packages:
 
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
+
+  '@lucide/svelte@1.25.0':
+    resolution: {integrity: sha512-v9m+dD68jxVnqkU3K59mG/RSRFlPGzmKCGSyMfnXcaGv9jODDQMyQkcp1CGvk3Y/cUj9v7f8rw1n//K0B53xGQ==}
+    peerDependencies:
+      svelte: ^5
 
   '@mapbox/node-pre-gyp@2.0.3':
     resolution: {integrity: sha512-uwPAhccfFJlsfCxMYTwOdVfOz3xqyj8xYL3zJj8f0pb30tLohnnFPhLuqp4/qoEz8sNxe4SESZedcBojRefIzg==}
@@ -3316,6 +3324,10 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   '@js-sdsl/ordered-map@4.4.2': {}
+
+  '@lucide/svelte@1.25.0(svelte@5.56.6)':
+    dependencies:
+      svelte: 5.56.6
 
   '@mapbox/node-pre-gyp@2.0.3':
     dependencies:

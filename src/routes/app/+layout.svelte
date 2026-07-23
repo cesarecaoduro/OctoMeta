@@ -4,6 +4,7 @@
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import Logo from '$lib/components/Logo.svelte';
 	import UserBadge from '$lib/components/UserBadge.svelte';
+	import { AppearanceControl } from '$lib/ui';
 	import { authClient } from '$lib/auth-client';
 	import { rememberOwnerAccount, rememberedOwnerAccount } from '$lib/workspace';
 
@@ -44,17 +45,20 @@
 	});
 </script>
 
-<header class="app-header">
-	<a class="brand" href="/app" aria-label="OctoMeta documents">
-		<Logo size={26} />
-		<span>OctoMeta</span>
-	</a>
-	<nav aria-label="Workspace">
-		<a href="/app">Documents</a>
-	</nav>
-	<span class="grow"></span>
-	<UserBadge />
-</header>
+{#if page.route.id !== '/app/[docId]'}
+	<header class="app-header">
+		<a class="brand" href="/app" aria-label="OctoMeta documents">
+			<Logo size={26} />
+			<span>OctoMeta</span>
+		</a>
+		<nav aria-label="Workspace">
+			<a href="/app">Documents</a>
+		</nav>
+		<span class="grow"></span>
+		<AppearanceControl />
+		<UserBadge />
+	</header>
+{/if}
 
 {#if auth.isAuthenticated || canOpenOffline}
 	{@render children()}
@@ -78,7 +82,8 @@
 		min-height: 58px;
 		padding: 0 max(var(--s2), calc((100vw - 1180px) / 2));
 		border-bottom: 1px solid var(--grey-3);
-		background: color-mix(in srgb, var(--paper) 94%, transparent);
+		background: var(--material);
+		backdrop-filter: blur(var(--material-blur));
 	}
 	.brand { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; font-weight: 650; }
 	nav a { color: var(--grey-1); font-size: .88rem; text-decoration: none; }
@@ -93,5 +98,6 @@
 	.auth-state a { color: var(--accent-2); }
 	@media (max-width: 640px) {
 		.brand span { display: none; }
+		.app-header { gap: var(--s1); padding-inline: var(--s2); }
 	}
 </style>

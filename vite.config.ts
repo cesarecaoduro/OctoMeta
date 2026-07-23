@@ -85,6 +85,14 @@ export default defineConfig({
 				}
 			},
 			{
+				// Shared interface contracts are pure and consumed by every route.
+				test: {
+					name: 'ui',
+					include: ['src/lib/ui/**/*.test.ts'],
+					environment: 'node'
+				}
+			},
+			{
 				// Convex function tests via convex-test — edge-runtime mirrors the
 				// Convex JS runtime (convex-test requirement); includes the V1-4-1
 				// reproducibility CI gate (IMPLEMENTATION_PLAN.md §11 rule 6).

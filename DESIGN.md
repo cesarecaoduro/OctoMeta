@@ -189,9 +189,9 @@ or user-agent detection:
 - **Compact** focuses one primary workspace at a time and places frequent controls
   within comfortable touch reach.
 - **Regular** composes the Document with one companion workspace only when the
-  available content width supports both.
-- **Expanded** places the independently scrolling Workbook to the right of the
-  Document in a resizable horizontal split.
+  available content area supports both.
+- **Expanded** places the independently scrolling Workbook in a non-overlaying bottom
+  drawer that resizes the Document viewport.
 
 Choose transitions where content and controls stop working, then verify continuously
 on both sides of each threshold. Treat orientation, window resizing and iPad
@@ -347,12 +347,12 @@ constrained, combine the top rows without removing capabilities.
 
 Compact layouts focus the Workbook as a full-screen workspace and use fixed sheet
 detents for transient contextual surfaces. Regular layouts compose Document and
-Workbook only when both retain viable content widths; otherwise they switch as focused
-workspaces. Expanded layouts place the independently scrolling Workbook to the right
-of the Document with a directly resizable separator and a Workbook focus mode. Resize
-handles remain keyboard- and touch-accessible; snapping motion is brief and
-interruptible. Persist width per Document and layout mode, clamp it after viewport
-changes, and provide a labelled command to restore the default layout.
+Workbook only when both retain viable content areas; otherwise they switch as focused
+workspaces. Expanded layouts place the independently scrolling Workbook in a bottom
+drawer that shortens rather than overlays the Document viewport. A future adjustable
+separator remains keyboard- and touch-accessible; snapping motion is brief and
+interruptible. Persist drawer height per Document and layout mode, clamp it after
+viewport changes, and provide a labelled command to restore the default layout.
 
 ### 7.5 Feedback hierarchy
 

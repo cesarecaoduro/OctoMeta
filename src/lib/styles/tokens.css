@@ -1,27 +1,43 @@
 /* OctoMeta design tokens: single source of truth, mirrors DESIGN.md §3.
    Imported by the marketing site and, later, the app shell. */
 :root {
-	/* ---- color ---- */
-	--paper: #fafaf9; /* page background */
-	--ink: #0b0b0c; /* text, mark, primary buttons */
-	--grey-1: #55555a; /* secondary text */
-	--grey-2: #9a9aa0; /* tertiary text, ticks, eyebrows */
-	--grey-3: #e4e4e1; /* hairlines: 1px, always */
-	--grey-4: #f1f1ef; /* panel fills, formula bars */
-	--surface: #ffffff; /* cards, demo panels */
-	--accent: #6c5ce7; /* "graph violet": THE accent. Computed values, chips,
-	                      dependency pulses, dimension lines, logo arc nodes,
-	                      CTA hover, focus rings, plus the DESIGN.md §6 text-
-	                      emphasis doses (heading full stops, stat numerals,
-	                      eyebrow ring-ticks, one hero keyword, mono labels).
-	                      Nothing else. 4.65:1 on paper: AA at any size. */
-	--accent-2: #2b2e83; /* deep indigo, gradient partner to --accent. Logo
-	                        mark ONLY. Never in UI chrome. */
-	--accent-light: #a99cff; /* decoration ONLY (2.26:1, fails AA as text):
-	                            underlines, ticks, tints. Never glyphs. */
-	--accent-dim: rgba(108, 92, 231, 0.1);
-	--error: #c42b1c; /* typed graph errors only (#UNIT!, #CYCLE!) */
-	--error-dim: rgba(196, 43, 28, 0.08);
+	/* ---- semantic appearance: light ---- */
+	--canvas: #fafaf9;
+	--surface: #ffffff;
+	--surface-muted: #f1f1ef;
+	--material: rgba(255, 255, 255, .88);
+	--text: #0b0b0c;
+	--text-secondary: #55555a;
+	--text-tertiary: #5f5f65;
+	--border: #e4e4e1;
+	--border-strong: #c8c8c4;
+	--tint: #6c5ce7;
+	--tint-text: #5142bd;
+	--tint-muted: rgba(108, 92, 231, .11);
+	--decoration-violet: #a99cff;
+	--status-success: #287a45;
+	--status-success-muted: rgba(40, 122, 69, .1);
+	--status-warning: #8a5c00;
+	--status-warning-muted: rgba(138, 92, 0, .1);
+	--status-error: #c42b1c;
+	--status-error-muted: rgba(196, 43, 28, .08);
+	--status-info: #176b87;
+	--status-info-muted: rgba(23, 107, 135, .1);
+
+	/* Stable aliases retained for existing product and marketing surfaces. */
+	--paper: var(--canvas);
+	--ink: var(--text);
+	--grey-1: var(--text-secondary);
+	--grey-2: var(--text-tertiary);
+	--grey-3: var(--border);
+	--grey-4: var(--surface-muted);
+	--accent: var(--tint);
+	--accent-2: #2b2e83; /* fixed logo gradient stop only */
+	--accent-light: var(--decoration-violet);
+	--accent-dim: var(--tint-muted);
+	--error: var(--status-error);
+	--error-dim: var(--status-error-muted);
+	--warning: var(--status-warning);
 
 	/* ---- type ---- */
 	--font-display: 'Inter Tight', system-ui, sans-serif; /* w600, ls -0.025em */
@@ -50,9 +66,93 @@
 	--radius-panel: 14px;
 	--radius-chip: 6px;
 	--radius-pill: 999px;
+	--radius-control: 10px;
+	--radius-sheet: 20px;
+	--radius-modal: 18px;
 
 	/* ---- motion ---- */
 	--t-fast: 180ms;
 	--t-med: 280ms;
 	--ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+	--ease-out: cubic-bezier(.2, .8, .2, 1);
+	--motion-feedback: 120ms;
+	--motion-continuity: 240ms;
+	--motion-computation: 640ms;
+
+	/* ---- focus and functional material ---- */
+	--focus-ring: 2px solid var(--tint);
+	--focus-offset: 3px;
+	--material-blur: 16px;
+	--shadow-control: 0 1px 2px rgba(11, 11, 12, .08);
+	--shadow-floating: 0 18px 48px rgba(11, 11, 12, .12);
+}
+
+html[data-appearance='dark'] {
+	--canvas: #111217;
+	--surface: #191a20;
+	--surface-muted: #22232b;
+	--material: rgba(25, 26, 32, .9);
+	--text: #f5f5f2;
+	--text-secondary: #b8b9c0;
+	--text-tertiary: #aaabb3;
+	--border: #363741;
+	--border-strong: #545660;
+	--tint: #b2a8ff;
+	--tint-text: #c9c3ff;
+	--tint-muted: rgba(178, 168, 255, .16);
+	--decoration-violet: #8176d6;
+	--status-success: #73cf91;
+	--status-success-muted: rgba(115, 207, 145, .14);
+	--status-warning: #edc56c;
+	--status-warning-muted: rgba(237, 197, 108, .14);
+	--status-error: #ff9589;
+	--status-error-muted: rgba(255, 149, 137, .14);
+	--status-info: #7ccce6;
+	--status-info-muted: rgba(124, 204, 230, .14);
+	--shadow-control: 0 1px 2px rgba(0, 0, 0, .3);
+	--shadow-floating: 0 20px 54px rgba(0, 0, 0, .38);
+}
+
+@media (prefers-color-scheme: dark) {
+	html:not([data-appearance]) {
+		--canvas: #111217;
+		--surface: #191a20;
+		--surface-muted: #22232b;
+		--material: rgba(25, 26, 32, .9);
+		--text: #f5f5f2;
+		--text-secondary: #b8b9c0;
+		--text-tertiary: #aaabb3;
+		--border: #363741;
+		--border-strong: #545660;
+		--tint: #b2a8ff;
+		--tint-text: #c9c3ff;
+		--tint-muted: rgba(178, 168, 255, .16);
+		--decoration-violet: #8176d6;
+		--status-success: #73cf91;
+		--status-success-muted: rgba(115, 207, 145, .14);
+		--status-warning: #edc56c;
+		--status-warning-muted: rgba(237, 197, 108, .14);
+		--status-error: #ff9589;
+		--status-error-muted: rgba(255, 149, 137, .14);
+		--status-info: #7ccce6;
+		--status-info-muted: rgba(124, 204, 230, .14);
+	}
+}
+
+@media (prefers-reduced-transparency: reduce) {
+	:root {
+		--material: var(--surface);
+		--material-blur: 0px;
+		--shadow-floating: 0 0 0 1px var(--border-strong);
+	}
+}
+
+@media (prefers-contrast: more) {
+	:root {
+		--border: currentColor;
+		--border-strong: currentColor;
+		--focus-ring: 3px solid currentColor;
+		--shadow-control: none;
+		--shadow-floating: none;
+	}
 }

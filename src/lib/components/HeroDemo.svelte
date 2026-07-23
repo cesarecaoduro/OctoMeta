@@ -178,9 +178,9 @@
 			</div>
 			<div>
 				<span class="eyebrow blocklabel">Sheet · bearing</span>
-				<div class="sheet" role="table" aria-label="Calculation sheet" bind:this={sheetEl}>
+				<div class="sheet" bind:this={sheetEl}>
 					<div class="fbar"><span class="fx">fx</span><span>=col.load / footing.B²</span></div>
-					<table>
+					<table aria-label="Calculation sheet">
 						<tbody>
 							<tr bind:this={cellBRow}>
 								<td class="name">footing.B</td>
