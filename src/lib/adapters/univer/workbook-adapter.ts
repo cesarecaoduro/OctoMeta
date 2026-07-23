@@ -10,7 +10,8 @@ import type {
 	SheetId,
 	SheetMeta,
 	SheetProjection,
-	TypedValue
+	TypedValue,
+	PublicationMetadata
 } from '../../engine';
 import {
 	booleanValue,
@@ -97,6 +98,13 @@ export interface WorkbookAdapter {
 	renameSheet(sheetId: SheetId, name: string): WorkbookCommandResult;
 	deleteSheet(sheetId: SheetId): WorkbookCommandResult;
 	publishName(sheetId: SheetId, a1: string, name: string): boolean;
+	/** Publish a selected scalar cell with optional author-facing metadata. */
+	publishValue(
+		sheetId: SheetId,
+		a1: string,
+		name: string,
+		publication: PublicationMetadata
+	): boolean;
 	renameName(oldName: string, newName: string): boolean;
 	deleteName(name: string): boolean;
 	selection(): WorkbookSelection | null;
@@ -426,8 +434,40 @@ export async function attachWorkbookAdapter(
 		},
 		publishName: (sheetId, a1, name) =>
 			insertWorkbookDefinedName(api, name, sheetId, a1),
-		renameName: (oldName, newName) => renameSheetDefinedName(api, oldName, newName),
-		deleteName: (name) => removeSheetDefinedName(api, name),
+		publishValue: (sheetId, a1, name, publication) => {
+			if (session.doc.resolveRef({ name }) !== undefined) return false;
+			const sourceId = session.doc.resolveRef({ sheetId, a1 });
+			const source = sourceId ? session.doc.nodes.get(sourceId) : undefined;
+			if (source?.value.kind === 'table' || source?.value.kind === 'geometry') return false;
+			const published = publishCellName(
+				session,
+				sheetId,
+				a1,
+				name,
+				seedFromCell({ sheetId, a1 }),
+				publication
+			);
+			if (!published.ok) return false;
+			// The graph is authoritative; the command mirrors it into the
+			// workbook's defined-name projection and may harmlessly rebind it.
+			insertWorkbookDefinedName(api, name, sheetId, a1);
+			return true;
+		},
+		renameName: (oldName, newName) => {
+			const renamed = renamePublishedName(session, oldName, newName);
+			if (!renamed.ok) return false;
+			// The graph is authoritative. Mirror the semantic name into Univer
+			// when its defined-name projection is present in the restored snapshot.
+			renameSheetDefinedName(api, oldName, newName);
+			return true;
+		},
+		deleteName: (name) => {
+			const removed = unpublishName(session, name);
+			if (!removed.ok) return false;
+			// A missing projection does not make the authoritative removal fail.
+			removeSheetDefinedName(api, name);
+			return true;
+		},
 		selection: currentSelection,
 		saveSnapshot: () => saveWorkbookSnapshot(api),
 		onMutated: (cb) => {

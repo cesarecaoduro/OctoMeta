@@ -16,6 +16,13 @@ export const graphNodeFields = {
 	nodeId: v.string(),
 	kind: v.string(),
 	name: v.optional(v.string()),
+	publication: v.optional(
+		v.object({
+			label: v.optional(v.string()),
+			unit: v.optional(v.string()),
+			description: v.optional(v.string())
+		})
+	),
 	/** FormulaAST, codec-encoded. */
 	formula: v.optional(v.any()),
 	/** TypedValue, codec-encoded. */

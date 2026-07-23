@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import { PanelBottomClose, Plus, Table2, Trash2 } from '@lucide/svelte';
+	import { BookOpenCheck, PanelBottomClose, Plus, Table2, Trash2 } from '@lucide/svelte';
 	import {
 		attachWorkbookAdapter,
 		type GraphSession,
@@ -9,6 +9,7 @@
 	} from '$lib/adapters/univer';
 	import type { SheetId, SheetMeta } from '$lib/engine';
 	import { Icon, type AdaptiveMode } from '$lib/ui';
+	import PublishedValuesManager from './PublishedValuesManager.svelte';
 
 	let {
 		session,
@@ -16,16 +17,20 @@
 		snapshot = null,
 		readonly = false,
 		expanded = $bindable(false),
+		publishedValuesOpen = $bindable(false),
 		ondirty,
-		onready
+		onready,
+		oninsert
 	}: {
 		session: GraphSession;
 		mode?: AdaptiveMode;
 		snapshot?: unknown;
 		readonly?: boolean;
 		expanded?: boolean;
+		publishedValuesOpen?: boolean;
 		ondirty: () => void;
 		onready?: (adapter: WorkbookAdapter | null) => void;
+		oninsert: (nodeId: string) => boolean;
 	} = $props();
 	const displayed = $derived(expanded);
 
@@ -39,6 +44,7 @@
 	let formulaText = $state('');
 	let renameText = $state('');
 	let cleanup: Array<() => void> = [];
+	let publishedValuesButton = $state<HTMLButtonElement>();
 
 	function refreshSheets(): void {
 		sheets = session.doc.workbook.sheets
@@ -197,6 +203,16 @@
 				}}
 			/>
 			<button type="button" disabled={!selected || readonly} onclick={commitFormula}>Apply</button>
+			<button
+				class="published-values"
+				type="button"
+				bind:this={publishedValuesButton}
+				aria-expanded={publishedValuesOpen}
+				onclick={() => (publishedValuesOpen = true)}
+			>
+				<Icon glyph={BookOpenCheck} size={18} />
+				Published values
+			</button>
 		</div>
 
 		<div class="tab-tools">
@@ -254,6 +270,20 @@
 			inert={readonly}
 		></div>
 	</section>
+	<PublishedValuesManager
+		{session}
+		{adapter}
+		selection={selected}
+		{mode}
+		open={publishedValuesOpen}
+		{readonly}
+		onclose={() => {
+			publishedValuesOpen = false;
+			queueMicrotask(() => publishedValuesButton?.focus());
+		}}
+		onchanged={ondirty}
+		{oninsert}
+	/>
 </aside>
 
 <style>
@@ -310,6 +340,7 @@
 	}
 	.formula-line .cell { min-width: 150px; color: var(--grey-1); font-size: .75rem; }
 	.formula-line input { flex: 1; }
+	.published-values { display: inline-flex; align-items: center; gap: var(--s1); white-space: nowrap; }
 	input, button {
 		min-height: 44px;
 		border: 1px solid var(--grey-3);

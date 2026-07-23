@@ -41,6 +41,7 @@ export interface PersistedNode {
 	nodeId: NodeId;
 	kind: string;
 	name?: string;
+	publication?: { label?: string; unit?: string; description?: string };
 	formula?: unknown;
 	value: unknown;
 	inputs: NodeId[];
@@ -133,6 +134,7 @@ export function serializeAuthoredGraph(graph: DocumentGraph): PersistedAuthoredG
 			nodeId: node.id,
 			kind: node.kind,
 			name: node.name,
+			publication: node.publication,
 			formula: node.formula,
 			value: node.value,
 			inputs: node.inputs,
@@ -251,6 +253,9 @@ export function hydrateGraph(
 			contentHash: decoded.contentHash,
 			provenance: decoded.provenance as Provenance,
 			...(decoded.name !== undefined && { name: decoded.name }),
+			...(decoded.publication !== undefined && {
+				publication: decoded.publication
+			}),
 			...(decoded.formula !== undefined && { formula: decoded.formula as FormulaAST }),
 			...(decoded.blockId !== undefined && { blockId: decoded.blockId }),
 			...(decoded.cellRef !== undefined && { cellRef: decoded.cellRef }),

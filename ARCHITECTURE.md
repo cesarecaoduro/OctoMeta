@@ -34,7 +34,7 @@ flowchart TB
 | State or behavior | Owner | Consumers |
 |---|---|---|
 | Typed values, formulas, errors, dependencies | `src/lib/engine/` | cells, chips, equations, rail |
-| Published aliases and one-hop target resolution | `DocumentGraph` | parameters, equations, names |
+| Published aliases, metadata, use disclosure, and one-hop target resolution | `DocumentGraph` | manager, references, equations |
 | Report block order and payload | `DocumentGraph` | TipTap |
 | Workbook tab ID, name, order | `DocumentGraph.workbook` | custom tab strip, Univer |
 | Cell identity | `CellRef { sheetId, a1 }` | graph and adapter |
@@ -123,7 +123,7 @@ src/
     signin/                       email/password, magic link, optional Google
     app/+layout.server.ts         route gate
     app/+page.svelte              live/trash list, bulk lifecycle actions
-    app/[docId]/                  report shell, parameters, workbook drawer
+    app/[docId]/                  report shell, published-values manager, workbook drawer
     api/auth/[...all]/            Better Auth SvelteKit proxy
 ```
 
@@ -142,6 +142,13 @@ Third-party boundaries are enforced by tests:
   cannot be removed; undo restores the stable ID and captured projection.
 - Published-name rename preserves the alias node ID and rewrites dependents in
   one history entry.
+- Published-value label, unit, and description live on the stable alias and
+  persist with the graph. Document chips and Equation bindings store the alias
+  ID; Workbook defined names are a best-effort projection of authoritative
+  graph mutations.
+- Unpublish review derives uses from graph dependents, chip bindings, and
+  Equation payloads. Confirmed removal retains those consumer identities so
+  they render as explicit, repairable broken references.
 - Cross-tab calculation uses published dotted names. `Sheet!A1` and structural
   row/column operations remain deferred.
 - Quantities store canonical SI magnitude plus a preferred display. R1 supports

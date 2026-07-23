@@ -20,6 +20,8 @@ export interface EquationBlockOptions {
 	subscribe: (callback: () => void) => () => void;
 	/** Commit one exact equation payload through the engine mutation path. */
 	commit: (blockId: string, equation: EquationPayload) => boolean;
+	/** Open the Workbook publication action when no reference is available. */
+	onPublishValue?: () => void;
 }
 
 type KatexModule = typeof import('katex');
@@ -100,7 +102,8 @@ export const EquationBlock = Node.create<EquationBlockOptions>({
 		return {
 			graph: null as unknown as DocumentGraph,
 			subscribe: () => () => {},
-			commit: () => false
+			commit: () => false,
+			onPublishValue: undefined
 		};
 	},
 
@@ -125,7 +128,7 @@ export const EquationBlock = Node.create<EquationBlockOptions>({
 	},
 
 	addNodeView() {
-		const { graph, subscribe, commit } = this.options;
+		const { graph, subscribe, commit, onPublishValue } = this.options;
 		return ({ node, editor: tiptapEditor, getPos }) => {
 			const dom = document.createElement('figure');
 			dom.className = 'equation-block';
@@ -137,14 +140,25 @@ export const EquationBlock = Node.create<EquationBlockOptions>({
 			const mode = document.createElement('select');
 			mode.setAttribute('aria-label', 'Equation source');
 			mode.append(new Option('Static TeX', 'static'), new Option('Published value', 'bound'));
-			const binding = document.createElement('select');
-			binding.setAttribute('aria-label', 'Published value');
+			const binding = document.createElement('input');
+			binding.type = 'search';
+			binding.placeholder = 'Search published values';
+			binding.setAttribute('aria-label', 'Search published values');
+			const bindingOptions = document.createElement('datalist');
+			const bindingOptionsId = `equation-publications-${crypto.randomUUID()}`;
+			bindingOptions.id = bindingOptionsId;
+			binding.setAttribute('list', bindingOptionsId);
 			const display = document.createElement('select');
 			display.setAttribute('aria-label', 'Equation display');
 			for (const value of ['symbolic', 'substituted', 'result', 'steps'] as const) {
 				display.append(new Option(value[0].toUpperCase() + value.slice(1), value));
 			}
-			controls.append(mode, binding, display);
+			const publishAction = document.createElement('button');
+			publishAction.type = 'button';
+			publishAction.className = 'equation-publish-value';
+			publishAction.textContent = 'Publish a workbook value';
+			publishAction.addEventListener('click', () => onPublishValue?.());
+			controls.append(mode, binding, bindingOptions, display, publishAction);
 
 			const editor = document.createElement('textarea');
 			editor.className = 'equation-source';
@@ -231,11 +245,11 @@ export const EquationBlock = Node.create<EquationBlockOptions>({
 
 			const syncBindingOptions = (): void => {
 				const selected = current.mode === 'bound' ? current.nodeId : '';
-				binding.replaceChildren(new Option('Choose a published value…', ''));
+				bindingOptions.replaceChildren();
 				for (const published of publishedNodes(graph)) {
-					binding.append(new Option(published.name ?? published.id, published.id));
+					bindingOptions.append(new Option(published.name ?? published.id));
 				}
-				binding.value = selected;
+				binding.value = graph.nodes.get(selected)?.name ?? '';
 			};
 
 			const syncDisplayOptions = (): void => {
@@ -259,6 +273,7 @@ export const EquationBlock = Node.create<EquationBlockOptions>({
 				help.hidden = !isStatic;
 				binding.hidden = isStatic;
 				display.hidden = isStatic;
+				publishAction.hidden = isStatic || publishedNodes(graph).length > 0;
 				syncBindingOptions();
 				syncDisplayOptions();
 				if (current.mode === 'static') {
@@ -297,19 +312,23 @@ export const EquationBlock = Node.create<EquationBlockOptions>({
 				if (!first) {
 					mode.value = 'static';
 					showError('Publish a workbook value before binding an equation.');
+					publishAction.hidden = false;
 					return;
 				}
 				applyPayload({ mode: 'bound', nodeId: first.id, display: 'result' });
 			});
 
 			binding.addEventListener('change', () => {
-				if (!binding.value) return;
+				const selected = publishedNodes(graph).find(
+					(published) => published.name === binding.value
+				);
+				if (!selected) return;
 				const nextDisplay =
 					current.mode === 'bound' &&
-					supportsDisplay(graph, binding.value, current.display)
+					supportsDisplay(graph, selected.id, current.display)
 						? current.display
 						: 'result';
-				applyPayload({ mode: 'bound', nodeId: binding.value, display: nextDisplay });
+				applyPayload({ mode: 'bound', nodeId: selected.id, display: nextDisplay });
 			});
 
 			display.addEventListener('change', () => {

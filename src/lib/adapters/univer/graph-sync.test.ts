@@ -167,6 +167,26 @@ describe('cell edits through the graph', () => {
 });
 
 describe('published names across sheets', () => {
+	it('publishes optional metadata on the stable alias identity', () => {
+		const session = newSession();
+		edit(session, A, 'A1', 12);
+		const published = publishCellName(session, A, 'A1', 'beam.span', undefined, {
+			label: 'Beam span',
+			unit: 'm',
+			description: 'Clear distance'
+		});
+		if (!published.ok) throw new Error(published.message);
+		const before = published.nodeId;
+
+		const renamed = renamePublishedName(session, 'beam.span', 'beam.clearSpan');
+		expect(renamed).toEqual({ ok: true, nodeId: before });
+		expect(session.doc.nodes.get(before)?.publication).toEqual({
+			label: 'Beam span',
+			unit: 'm',
+			description: 'Clear distance'
+		});
+	});
+
 	it('publishes a cell, resolves the dotted name from another sheet block', () => {
 		const session = newSession();
 		edit(session, A, 'A1', 12);

@@ -23,7 +23,7 @@ import type {
 	TypedValue
 } from './types';
 import { ERR_CODES, errorValue, ulid } from './types';
-import type { GraphNode, Provenance } from './node';
+import type { GraphNode, Provenance, PublicationMetadata } from './node';
 import type { Block, ChipBinding } from './block';
 import { BLOCK_TYPES } from './block';
 import type { FormulaAST } from './formula';
@@ -101,8 +101,15 @@ export type GraphMutation =
 	| { op: 'setFormula'; id: NodeId; formula: FormulaAST }
 	| { op: 'addNode'; node: Omit<GraphNode, 'value' | 'contentHash' | 'inputs'> }
 	| { op: 'removeNode'; id: NodeId }
-	| { op: 'publishName'; cellRef: CellRef; name: string; nodeId?: NodeId }
+	| {
+			op: 'publishName';
+			cellRef: CellRef;
+			name: string;
+			nodeId?: NodeId;
+			publication?: PublicationMetadata;
+	  }
 	| { op: 'renameName'; nodeId: NodeId; name: string }
+	| { op: 'updatePublication'; nodeId: NodeId; publication: PublicationMetadata }
 	| { op: 'rebindChip'; chipId: string; nodeId: NodeId }
 	| WorkbookMutation
 	| {
@@ -145,6 +152,7 @@ const PUBLIC_OPS: ReadonlySet<string> = new Set([
 	'removeNode',
 	'publishName',
 	'renameName',
+	'updatePublication',
 	'rebindChip',
 	'chipOp',
 	'blockOp',
@@ -250,6 +258,8 @@ function applyInternal(
 			return applyPublishName(doc, m, actor, at);
 		case 'renameName':
 			return applyRenameName(doc, m, actor, at);
+		case 'updatePublication':
+			return applyUpdatePublication(doc, m, actor, at);
 		case 'rebindChip':
 			return applyRebindChip(doc, m);
 		case 'chipOp':
@@ -425,6 +435,8 @@ function applyPublishName(
 	if (cellId === undefined) {
 		return fail(`publishName: cell ${m.cellRef.a1} is not bound to a node`);
 	}
+	const publicationProblem = validatePublicationMetadata(m.publication);
+	if (publicationProblem) return fail(`publishName: ${publicationProblem}`);
 	const existingId = doc.resolveRef({ name: m.name });
 	if (existingId !== undefined) {
 		// Rebind: the existing namedOutput now aliases the new cell.
@@ -438,6 +450,7 @@ function applyPublishName(
 		const updated = structuredClone(named);
 		updated.formula = { t: 'ref', ref: structuredClone(m.cellRef) };
 		updated.inputs = [cellId];
+		if (m.publication !== undefined) updated.publication = structuredClone(m.publication);
 		stamp(updated, actor, at);
 		doc.replaceNode(updated);
 		doc.refreshHash(existingId);
@@ -458,6 +471,7 @@ function applyPublishName(
 		value: structuredClone(cellNode.value),
 		inputs: [cellId],
 		contentHash: '',
+		...(m.publication !== undefined && { publication: structuredClone(m.publication) }),
 		provenance: { authoredBy: null }
 	};
 	stamp(node, actor, at);
@@ -467,6 +481,29 @@ function applyPublishName(
 	const affected: AffectedSet = [id];
 	healWaiters(doc, node, inverse, affected);
 	return ok({ affected, inverse, recorded: { ...m, nodeId: id } });
+}
+
+function applyUpdatePublication(
+	doc: DocumentGraph,
+	m: Extract<GraphMutation, { op: 'updatePublication' }>,
+	actor: Actor,
+	at: number
+): ApplyResult {
+	const node = doc.nodes.get(m.nodeId);
+	if (node?.kind !== 'namedOutput') {
+		return fail(`updatePublication: node "${m.nodeId}" is not a published value`);
+	}
+	const problem = validatePublicationMetadata(m.publication);
+	if (problem) return fail(`updatePublication: ${problem}`);
+	const prior = structuredClone(node);
+	const updated = structuredClone(node);
+	updated.publication = structuredClone(m.publication);
+	stamp(updated, actor, at);
+	doc.replaceNode(updated);
+	return ok({
+		affected: [],
+		inverse: [{ op: 'restoreNode', node: prior }]
+	});
 }
 
 function applyRenameName(
@@ -512,6 +549,27 @@ function applyRenameName(
 
 	healWaiters(doc, renamed, inverse, affected);
 	return ok({ affected: [...new Set(affected)], inverse });
+}
+
+function validatePublicationMetadata(metadata: PublicationMetadata | undefined): string | null {
+	if (metadata === undefined) return null;
+	if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+		return 'publication metadata must be an object';
+	}
+	for (const [field, limit] of [
+		['label', 120],
+		['unit', 32],
+		['description', 500]
+	] as const) {
+		const value = metadata[field];
+		if (value === undefined) continue;
+		if (typeof value !== 'string') return `${field} must be a string`;
+		if (value !== value.trim()) return `${field} must not have surrounding whitespace`;
+		if (value.length === 0 || value.length > limit) {
+			return `${field} must contain 1–${limit} characters`;
+		}
+	}
+	return null;
 }
 
 function applyWorkbookOp(

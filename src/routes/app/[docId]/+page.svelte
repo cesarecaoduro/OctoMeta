@@ -11,7 +11,6 @@
 		PanelBottomOpen,
 		Redo2,
 		Save,
-		Sigma,
 		Table2,
 		Undo2
 	} from '@lucide/svelte';
@@ -74,7 +73,6 @@
 	} from '$lib/adapters/univer';
 	import Inspector from './Inspector.svelte';
 	import WorkbookDrawer from './WorkbookDrawer.svelte';
-	import ParametersRail from './ParametersRail.svelte';
 	import SaveVersionDialog from './SaveVersionDialog.svelte';
 
 	// V1-5-1/V1-5-2 · /app/[docId] — the document canvas. Block structure lives
@@ -110,8 +108,8 @@
 	let imageInputEl: HTMLInputElement | undefined;
 	/** Insertion-slot position for the next picked image (null = after selection). */
 	let pendingImageAt: number | null = null;
-	let parametersOpen = $state(false);
 	let workbookOpen = $state(false);
+	let publishedValuesOpen = $state(false);
 	let workspaceFocus = $state<'document' | 'workbook'>('document');
 	let moreOpen = $state(false);
 	let moreRoot = $state<HTMLDivElement>();
@@ -126,9 +124,8 @@
 	let currentLayoutMode = $state<'compact' | 'regular' | 'expanded'>('compact');
 	let layoutInitialized = false;
 	let pendingWorkbookCell: { sheetId: string; a1: string } | null = null;
-		let parametersButton: HTMLButtonElement;
-		let saveVersionButton: HTMLButtonElement;
-		let blockAnnouncement = $state('');
+	let saveVersionButton: HTMLButtonElement;
+	let blockAnnouncement = $state('');
 
 	// V1-5-5 · provenance inspector (read-only). Opens on chip Alt+click /
 	// Alt+Enter (focus moves to the panel) and on selecting a graph-bound
@@ -472,6 +469,7 @@
 				});
 				return true;
 			},
+			onPublishValue: openPublicationAction,
 			editParameter: (publishedNodeId, text) => {
 				if (!canEdit) {
 					return { ok: false, message: 'This working copy is read-only.' };
@@ -523,6 +521,13 @@
 	function handleRedo(): void {
 		if (!canEdit) return;
 		workspace?.redo();
+	}
+
+	/** Open the contextual Workbook publication action from an empty reference picker. */
+	function openPublicationAction(): void {
+		workbookOpen = true;
+		workspaceFocus = 'workbook';
+		publishedValuesOpen = true;
 	}
 
 	/** Add a workbook tab; workbook tabs are not report blocks. */
@@ -632,6 +637,8 @@
 				renameName: (oldName: string, newName: string) =>
 					workbookAdapter?.renameName(oldName, newName) ?? false,
 				selection: () => workbookAdapter?.selection() ?? null,
+				activateCell: (sheetId: string, a1: string) =>
+					workbookAdapter?.activateCell(sheetId, a1) ?? false,
 				chipIds: () => [...graph.chips.keys()],
 				undoCursor: () => graph.undoCursor,
 				chipBinding: (chipId: string) => graph.chips.get(chipId) ?? null,
@@ -692,7 +699,7 @@
 						docEditor?.setEditable(editable);
 						if (!editable) {
 							titleEditing = false;
-							parametersOpen = false;
+							publishedValuesOpen = false;
 						}
 						void refreshReadonlyIfStale();
 					},
@@ -991,17 +998,6 @@
 					disabled={phase !== 'ready' || !canEdit}
 					onclick={insertSheet}
 				/>
-				<button
-					class="tool labelled-tool"
-					type="button"
-					bind:this={parametersButton}
-					aria-expanded={parametersOpen}
-					disabled={phase !== 'ready' || !canEdit}
-					onclick={() => (parametersOpen = !parametersOpen)}
-				>
-					<Icon glyph={Sigma} size={18} />
-					<span>Parameters</span>
-				</button>
 			</div>
 			<ComputationTrace
 				active={traceActive}
@@ -1105,24 +1101,15 @@
 
 	{#if phase === 'ready'}
 		{#key projectionRevision}
-			<ParametersRail
-				{session}
-				mode={layoutMode}
-				open={parametersOpen}
-				onclose={() => {
-					parametersOpen = false;
-					queueMicrotask(() => parametersButton?.focus());
-				}}
-				onchanged={() => workspace?.markChanged()}
-				oninsert={(nodeId) => docEditor?.insertChip(nodeId) ?? false}
-			/>
 			<WorkbookDrawer
 				{session}
 				mode={layoutMode}
 				snapshot={restoredWorkbookSnapshot}
 				readonly={!canEdit}
 				bind:expanded={workbookOpen}
+				bind:publishedValuesOpen
 				ondirty={() => workspace?.markChanged()}
+				oninsert={(nodeId) => docEditor?.insertChip(nodeId) ?? false}
 				onready={(adapter) => {
 					workbookAdapter = adapter;
 					if (adapter) {
@@ -1245,12 +1232,6 @@
 		align-items: center;
 		gap: var(--s1);
 		margin-left: auto;
-	}
-	.labelled-tool {
-		display: inline-flex;
-		align-items: center;
-		gap: var(--s1);
-		min-height: 44px;
 	}
 	.save-version {
 		display: inline-flex;
@@ -1770,6 +1751,20 @@
 		font-size: 0.78rem;
 		color: var(--grey-2);
 		padding: 5px 8px;
+	}
+	:global(.octo-chip-picker-empty p) {
+		margin: 0 0 var(--s1);
+		max-width: 280px;
+		white-space: normal;
+	}
+	:global(.octo-chip-picker-empty button) {
+		min-height: 44px;
+		width: 100%;
+		border: 1px solid var(--grey-3);
+		border-radius: var(--radius-chip);
+		background: var(--surface);
+		color: var(--ink);
+		cursor: pointer;
 	}
 	@media (max-width: 800px) {
 		.editor :global(.octo-block-chrome) {

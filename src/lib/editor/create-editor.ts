@@ -85,6 +85,8 @@ export interface DocEditorOptions {
 	onInspect?: (nodeId: NodeId) => void;
 	/** Open an exact workbook cell when an error originates outside report blocks. */
 	onNavigateCell?: (cellRef: { sheetId: string; a1: string }) => boolean;
+	/** Open the contextual Workbook publication action from empty reference pickers. */
+	onPublishValue?: () => void;
 	/** Validate and commit an editable published input from a chip native input. */
 	editParameter?: (
 		publishedNodeId: NodeId,
@@ -206,6 +208,7 @@ export function createDocEditor(opts: DocEditorOptions): DocEditor {
 			EquationBlock.configure({
 				graph: opts.graph,
 				subscribe: opts.onSettle,
+				onPublishValue: opts.onPublishValue,
 				commit: (blockId, equation) => {
 					const ok = opts.commitMutation({
 						op: 'blockOp',
@@ -247,7 +250,8 @@ export function createDocEditor(opts: DocEditorOptions): DocEditor {
 			}),
 			ChipPicker.configure({
 				items: chipItems,
-				pick: (item, range) => pickChip(item, range)
+				pick: (item, range) => pickChip(item, range),
+				onPublishValue: opts.onPublishValue
 			}),
 			...(opts.onInsertBlockAt !== undefined
 				? [InsertSlots.configure({ insert: opts.onInsertBlockAt })]

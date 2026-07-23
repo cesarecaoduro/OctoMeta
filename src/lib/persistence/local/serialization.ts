@@ -74,6 +74,7 @@ export function localGraphRows(snapshot: LocalGraphSnapshot): LoadedRows {
 				nodeId: node.id,
 				kind: node.kind,
 				name: node.name,
+				publication: node.publication,
 				formula: node.formula,
 				value: node.value,
 				inputs: node.inputs,

@@ -7,6 +7,7 @@ export * from './types';
 export * from './node';
 export * from './units';
 export * from './parameters';
+export * from './publications';
 export * from './formula';
 export * from './registry';
 export * from './block';

@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
-test('narrow workbench uses modal parameters and a full-screen workbook without overflow', async ({
+test('narrow workbench uses contextual published values and a full-screen workbook without overflow', async ({
 	page
 }) => {
 	await page.goto('/app');
@@ -16,14 +16,6 @@ test('narrow workbench uses modal parameters and a full-screen workbook without 
 	expect(dock!.y).toBeGreaterThan(700);
 	expect(dock!.y + dock!.height).toBe(844);
 
-	await page.getByRole('button', { name: 'Parameters' }).click();
-	const dialog = page.getByRole('dialog', { name: 'Parameters' });
-	await expect(dialog).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Close parameters' })).toBeFocused();
-	await page.keyboard.press('Escape');
-	await expect(dialog).toHaveCount(0);
-	await expect(page.getByRole('button', { name: 'Parameters' })).toBeFocused();
-
 	const workbookToggle = page.getByRole('button', { name: 'Workbook', exact: true });
 	await workbookToggle.click();
 	await expect(workbookToggle).toHaveAttribute('aria-pressed', 'true');
@@ -34,6 +26,13 @@ test('narrow workbench uses modal parameters and a full-screen workbook without 
 		await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
 	).toBe(true);
 	await expect(page.locator('#univer-doc-main-canvas')).toHaveAttribute('tabindex', '0');
+	await page.getByRole('button', { name: 'Published values' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Published values' });
+	await expect(dialog).toBeVisible();
+	await expect(page.getByPlaceholder('Search name, label, sheet, or cell')).toBeFocused();
+	await page.keyboard.press('Escape');
+	await expect(dialog).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Published values' })).toBeFocused();
 
 	const axe = await new AxeBuilder({ page }).analyze();
 	expect(axe.violations).toEqual([]);

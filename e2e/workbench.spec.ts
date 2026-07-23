@@ -514,14 +514,6 @@ test('the complete owned steel workbench survives edit, error, reload, trash, an
 	await expect(page.locator('[data-equation-block] .katex')).toBeVisible({ timeout: 15_000 });
 	await expect(page.getByRole('button', { name: /Workbook 3 tabs/ })).toBeVisible();
 
-	await page.getByRole('button', { name: 'Parameters' }).click();
-	const depth = page.getByLabel('Edit steel.d');
-	await depth.fill('22 in');
-	await depth.press('Enter');
-	await expect(chip(page, 'chip-steel-d')).toHaveText('22 in');
-	await expect(chip(page, 'chip-steel-area')).toHaveText('42.00 in²');
-	await page.getByRole('button', { name: 'Close parameters' }).click();
-
 	const [input, calculation] = await page.evaluate(() => window.__canvas.sheetIds());
 	await page.evaluate(() => window.__canvas.clearPersistenceActivity());
 	await page.evaluate(([sheet]) => window.__canvas.setCell(sheet, 'A2', '20 in'), [input]);

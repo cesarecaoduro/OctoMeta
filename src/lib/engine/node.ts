@@ -7,6 +7,13 @@
 import type { BlockId, CellRef, NodeId, TypedValue } from './types';
 import type { FormulaAST } from './formula';
 
+/** Author-owned presentation metadata for one explicitly published scalar value. */
+export interface PublicationMetadata {
+	label?: string;
+	unit?: string;
+	description?: string;
+}
+
 /** Who authored/verified a node's current state. Stamped by the mutation API (V1-2-1). */
 export interface Provenance {
 	authoredBy: 'human' | 'agent' | 'template' | null;
@@ -46,6 +53,8 @@ export interface GraphNode {
 	blockId?: BlockId;
 	/** For Univer-hosted cells. */
 	cellRef?: CellRef;
+	/** Present only on an explicitly published `namedOutput`. */
+	publication?: PublicationMetadata;
 	provenance: Provenance;
 	pending?: PendingChange | null;
 }

@@ -37,6 +37,61 @@ function valueOf(graph: ReturnType<typeof buildBeamFixture>['graph'], id: string
 }
 
 describe('serializeGraph → hydrateGraph round trip', () => {
+	it('preserves published-value metadata and stable identity', () => {
+		const graph = new DocumentGraph();
+		expect(
+			commit(
+				graph,
+				{
+					op: 'addNode',
+					node: {
+						id: 'source',
+						kind: 'input',
+						cellRef: { sheetId: 'sheet-1', a1: 'A1' },
+						provenance: emptyProvenance()
+					}
+				},
+				HUMAN,
+				{ registry: createBuiltinRegistry() }
+			).ok
+		).toBe(true);
+		expect(
+			commit(
+				graph,
+				{ op: 'setInput', id: 'source', value: scalar(12) },
+				HUMAN,
+				{ registry: createBuiltinRegistry() }
+			).ok
+		).toBe(true);
+		expect(
+			commit(
+				graph,
+				{
+					op: 'publishName',
+					cellRef: { sheetId: 'sheet-1', a1: 'A1' },
+					name: 'beam.span',
+					publication: {
+						label: 'Beam span',
+						unit: 'm',
+						description: 'Clear distance'
+					}
+				},
+				HUMAN,
+				{ registry: createBuiltinRegistry() }
+			).ok
+		).toBe(true);
+		const publicationId = graph.resolveRef({ name: 'beam.span' })!;
+
+		const { graph: hydrated } = hydrateGraph(toRows(serializeGraph(graph)));
+
+		expect(hydrated.resolveRef({ name: 'beam.span' })).toBe(publicationId);
+		expect(hydrated.nodes.get(publicationId)?.publication).toEqual({
+			label: 'Beam span',
+			unit: 'm',
+			description: 'Clear distance'
+		});
+	});
+
 	it('preserves exact static and bound equation payloads', () => {
 		const graph = new DocumentGraph();
 		graph.insertBlock({

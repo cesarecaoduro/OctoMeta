@@ -25,6 +25,7 @@ import type {
 	GraphNode,
 	MutationError,
 	NodeId,
+	PublicationMetadata,
 	Result,
 	SheetId,
 	TypedValue
@@ -311,14 +312,20 @@ export function publishCellName(
 	sheetId: SheetId,
 	a1: string,
 	name: string,
-	seed?: TypedValue
+	seed?: TypedValue,
+	publication?: PublicationMetadata
 ): NameOutcome {
 	const ref = cellRefFor(sheetId, a1);
 	if (session.doc.resolveRef(ref) === undefined) {
 		const created = applyValueEdit(session, ref, undefined, seed ?? scalar(0));
 		if (created.kind === 'rejected') return { ok: false, message: created.message };
 	}
-	const r = session.commit({ op: 'publishName', cellRef: ref, name });
+	const r = session.commit({
+		op: 'publishName',
+		cellRef: ref,
+		name,
+		...(publication !== undefined && { publication })
+	});
 	if (!r.ok) return { ok: false, message: r.error.message };
 	const nodeId = session.doc.resolveRef({ name });
 	return nodeId !== undefined

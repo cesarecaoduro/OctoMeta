@@ -120,4 +120,4 @@ UI-aware.
 
 ## Related issues
 
-No related issues documented yet.
+- See also: [Published values need stable identity and explicit lifecycle](../best-practices/published-values-need-stable-identity-publication-lifecycle-20260723.md)
