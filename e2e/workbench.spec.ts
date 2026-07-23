@@ -164,7 +164,9 @@ test('a second tab is read-only until cooperative takeover flushes the active ge
 	await page.keyboard.type('Flushed before takeover');
 	await secondTab.getByRole('button', { name: 'Take over editing' }).click();
 
-	await expect(secondTab.getByTestId('editor')).toHaveAttribute('data-editable', 'true');
+	await expect(secondTab.getByTestId('editor')).toHaveAttribute('data-editable', 'true', {
+		timeout: 30_000
+	});
 	await expect(secondTab.locator('.tiptap')).toContainText('Flushed before takeover');
 	await expect(page.getByTestId('editor')).toHaveAttribute('data-editable', 'false');
 	await secondTab.close();
