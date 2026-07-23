@@ -4,6 +4,12 @@ connects the geometry viewer. V3 adds MCP and the AI layer.*
 
 **Status:** R1.6 implemented; production credentials pending · **Date:** 20 July 2026 · **Companion docs:** [docs/v1-6-workbench-plan.md](docs/v1-6-workbench-plan.md) · [SCHEMA.md](SCHEMA.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [DESIGN.md](DESIGN.md)
 
+The cross-cutting interface direction, ADR alignment, and current issue dependency
+order are defined in
+[docs/specs/2026-07-23-apple-caliber-adaptive-interface.md](docs/specs/2026-07-23-apple-caliber-adaptive-interface.md).
+UI-bearing work applies those requirements as it lands rather than deferring them to a
+later cosmetic redesign.
+
 ---
 
 ## 0. How to use this document
@@ -277,6 +283,10 @@ The hooks are already live at V1 exit: `pending` slot + provenance (V1-1-1, V1-2
 1. **No projection writes around `applyMutation`.** Enforce with a lint rule/test once V1-2-1 lands, not by review vigilance.
 2. **Third-party isolation:** `@univerjs` only under `src/lib/adapters/univer/`; `convex` only under `src/lib/persistence/` (+ `src/convex/`); `@tiptap`/ProseMirror only under the editor components; kernels (V2) only under `src/lib/geometry/`. Cheap to check in review, existential when Univer churns (risk register).
 3. **Licensing:** Apache/MIT/BSD/MPL only; LGPL solely as the replaceable occt `.wasm` (V2); **no GPL** anywhere, including dev deps of shipped code (PRD §10).
-4. **Design compliance:** app surfaces consume `tokens.css`; mono for everything computational; accent only where DESIGN.md §3 allows; no new colors, no shadows, no gradients.
+4. **Design compliance:** app surfaces consume the semantic token system in
+   `tokens.css`; mono remains computational; graph violet, theme-specific status
+   colors, functional material/elevation, icon controls, and motion follow
+   `DESIGN.md`. Gradients remain exclusive to the logo, and accessibility,
+   appearance, adaptive-layout, input, and performance gates apply to every surface.
 5. **Docs:** a task that changes structure or takes a decision updates ARCHITECTURE.md in the same PR. Public methods get doc comments (AGENTS.md).
 6. **CI gates are cumulative:** scalar perf (V1-2-2), reproducibility (V1-4-1), then V2's leak/16 ms/zero-stale/IFC gates. Once added, never disabled.
