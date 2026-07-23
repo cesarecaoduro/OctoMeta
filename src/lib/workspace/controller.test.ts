@@ -29,7 +29,7 @@ function setup() {
 		docId: DOC_ID,
 		registry: createBuiltinRegistry()
 	});
-	const saveDocument = vi.fn(async () => 1);
+	const commitLocal = vi.fn(async (expectedGeneration: number) => expectedGeneration + 1);
 	const projection = {
 		flushPendingChanges: vi.fn(),
 		renderSettledState: vi.fn()
@@ -37,39 +37,52 @@ function setup() {
 	const workbookSnapshot = vi.fn(() => ({ id: 'snapshot' }));
 	const activity = createPersistenceActivityLog();
 	const controller = createWorkspaceController({
-		docId: DOC_ID,
 		graph: session,
-		cloud: { saveDocument },
+		title: () => 'Controller test',
+		local: { initialGeneration: 0, commit: commitLocal },
 		projection,
 		workbookSnapshot,
 		activity,
 		saveDelayMs: 100
 	});
-	return { controller, graph, saveDocument, projection, workbookSnapshot, activity };
+	return { controller, graph, commitLocal, projection, workbookSnapshot, activity };
 }
 
 describe('workspace controller', () => {
 	beforeEach(() => vi.useFakeTimers());
 	afterEach(() => vi.useRealTimers());
 
-	it('routes successful mutations through graph settlement and the existing save cadence', async () => {
-		const { controller, graph, saveDocument, workbookSnapshot } = setup();
+	it('captures authored, workbook, and unified undo state on the local save cadence', async () => {
+		const { controller, graph, commitLocal, workbookSnapshot } = setup();
 		expect(controller.commit(addTextMutation()).ok).toBe(true);
 		expect(graph.blocksOrder).toHaveLength(1);
-		expect(saveDocument).not.toHaveBeenCalled();
+		expect(commitLocal).not.toHaveBeenCalled();
 		await vi.advanceTimersByTimeAsync(100);
 		expect(workbookSnapshot).toHaveBeenCalledTimes(1);
-		expect(saveDocument).toHaveBeenCalledWith(DOC_ID, graph, { id: 'snapshot' });
+		expect(commitLocal).toHaveBeenCalledWith(
+			0,
+			expect.objectContaining({
+				title: 'Controller test',
+				workbookSnapshot: { id: 'snapshot' },
+				graph: expect.objectContaining({
+					authored: expect.objectContaining({ blocksOrder: graph.blocksOrder }),
+					history: expect.objectContaining({
+						undoCursor: 1,
+						undoLog: expect.arrayContaining([expect.objectContaining({ seq: 1 })])
+					})
+				})
+			})
+		);
 	});
 
 	it('does not schedule persistence when the graph rejects a mutation', async () => {
 		const graph = new DocumentGraph();
 		const session = createGraphSession({ doc: graph, docId: DOC_ID });
-		const saveDocument = vi.fn(async () => 1);
+		const commitLocal = vi.fn(async (expectedGeneration: number) => expectedGeneration + 1);
 		const controller = createWorkspaceController({
-			docId: DOC_ID,
 			graph: session,
-			cloud: { saveDocument },
+			title: () => 'Rejected mutation',
+			local: { initialGeneration: 0, commit: commitLocal },
 			projection: { flushPendingChanges() {}, renderSettledState() {} },
 			workbookSnapshot: () => ({}),
 			activity: createPersistenceActivityLog(),
@@ -83,17 +96,38 @@ describe('workspace controller', () => {
 		};
 		expect(controller.commit(missingMove).ok).toBe(false);
 		await vi.advanceTimersByTimeAsync(100);
-		expect(saveDocument).not.toHaveBeenCalled();
+		expect(commitLocal).not.toHaveBeenCalled();
+	});
+
+	it('flushes pending projection changes into every timed capture without a duplicate generation', async () => {
+		const { controller, graph, commitLocal, projection } = setup();
+		projection.flushPendingChanges.mockImplementationOnce(() => {
+			expect(controller.commitProjection(addTextMutation()).ok).toBe(true);
+		});
+
+		controller.markChanged();
+		await vi.advanceTimersByTimeAsync(100);
+
+		expect(graph.blocksOrder).toHaveLength(1);
+		expect(commitLocal).toHaveBeenCalledTimes(1);
+		expect(commitLocal).toHaveBeenCalledWith(
+			0,
+			expect.objectContaining({
+				graph: expect.objectContaining({
+					authored: expect.objectContaining({ blocksOrder: graph.blocksOrder })
+				})
+			})
+		);
 	});
 
 	it('coordinates projection flush, history, render, and persistence', async () => {
-		const { controller, graph, saveDocument, projection } = setup();
+		const { controller, graph, commitLocal, projection } = setup();
 		controller.commit(addTextMutation());
 		await controller.flush();
-		expect(saveDocument).toHaveBeenCalledTimes(1);
+		expect(commitLocal).toHaveBeenCalledTimes(1);
 
 		expect(controller.undo()).toBe(true);
-		expect(projection.flushPendingChanges).toHaveBeenCalledTimes(2);
+		expect(projection.flushPendingChanges).toHaveBeenCalledTimes(3);
 		expect(projection.renderSettledState).toHaveBeenCalledTimes(1);
 		expect(graph.blocksOrder).toEqual([]);
 		await controller.flush();
@@ -102,7 +136,8 @@ describe('workspace controller', () => {
 		expect(projection.renderSettledState).toHaveBeenCalledTimes(2);
 		expect(graph.blocksOrder).toHaveLength(1);
 		await controller.flush();
-		expect(saveDocument).toHaveBeenCalledTimes(3);
+		expect(commitLocal).toHaveBeenCalledTimes(3);
+		expect(commitLocal.mock.calls.map(([generation]) => generation)).toEqual([0, 1, 2]);
 	});
 
 	it('exposes the shared persistence activity log through the workspace seam', () => {

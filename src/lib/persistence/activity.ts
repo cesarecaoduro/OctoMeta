@@ -27,6 +27,8 @@ export type PersistenceOperation =
 	| 'documents.load'
 	| 'files.upload'
 	| 'files.resolveUrl'
+	| 'workspace.load'
+	| 'workspace.list'
 	| 'workspace.commit';
 
 /** One metadata-only activity notification. */

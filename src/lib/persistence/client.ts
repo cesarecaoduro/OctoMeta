@@ -12,6 +12,7 @@ import type { DocumentGraph } from '../engine';
 import type { LoadedRows } from './serialize';
 import { serializeGraph } from './serialize';
 import { documentBundleHash, workbookSnapshotHash } from './canonical';
+import { createEmptyWorkbookSnapshot } from './workbook-snapshot';
 import {
 	observePersistence,
 	type PersistenceAccess,
@@ -19,8 +20,13 @@ import {
 	type PersistenceOperation
 } from './activity';
 
-/** A persisted document's id. Opaque string outside this layer. */
-export type DocumentId = Id<'documents'>;
+declare const documentIdBrand: unique symbol;
+
+/** Stable product document identity; Convex row IDs remain private to this adapter. */
+export type DocumentId = string & { readonly [documentIdBrand]: 'DocumentId' };
+
+const convexDocumentId = (documentId: DocumentId): Id<'documents'> =>
+	documentId as unknown as Id<'documents'>;
 
 /** Document list entry (`documents.list`), newest-updated first. */
 export interface DocumentSummary {
@@ -107,36 +113,41 @@ export function createPersistence(client: ConvexClient, options: PersistenceOpti
 		);
 	return {
 		createDocument: (title) =>
-			tracked('documents.create', 'write', () =>
-				client.mutation(api.documents.create, { title })
+			tracked(
+				'documents.create',
+				'write',
+				async () =>
+					(await client.mutation(api.documents.create, { title })) as unknown as DocumentId
 			),
 		listDocuments: () =>
 			tracked(
 				'documents.list',
 				'read',
-				async () => (await client.query(api.documents.list, {})) as DocumentSummary[]
+				async () =>
+					(await client.query(api.documents.list, {})) as unknown as DocumentSummary[]
 			),
 		listTrash: () =>
 			tracked(
 				'documents.listTrash',
 				'read',
-				async () => (await client.query(api.documents.listTrash, {})) as DocumentSummary[]
+				async () =>
+					(await client.query(api.documents.listTrash, {})) as unknown as DocumentSummary[]
 			),
 		renameDocument: (docId, title) =>
 			tracked('documents.rename', 'write', async () => {
-				await client.mutation(api.documents.rename, { docId, title });
+				await client.mutation(api.documents.rename, { docId: convexDocumentId(docId), title });
 			}),
 		deleteDocument: (docId) =>
 			tracked('documents.trash', 'write', async () => {
-				await client.mutation(api.documents.trash, { docId });
+				await client.mutation(api.documents.trash, { docId: convexDocumentId(docId) });
 			}),
 		restoreDocument: (docId) =>
 			tracked('documents.restore', 'write', async () => {
-				await client.mutation(api.documents.restore, { docId });
+				await client.mutation(api.documents.restore, { docId: convexDocumentId(docId) });
 			}),
 		deleteForever: (docId) =>
 			tracked('documents.remove', 'write', async () => {
-				await client.mutation(api.documents.remove, { docId });
+				await client.mutation(api.documents.remove, { docId: convexDocumentId(docId) });
 			}),
 		emptyTrash: () =>
 			tracked('documents.emptyTrash', 'write', async () => {
@@ -151,11 +162,12 @@ export function createPersistence(client: ConvexClient, options: PersistenceOpti
 			tracked('documents.save', 'write', async () => {
 				const { workbookManifest, ...graphPayload } = serializeGraph(graph);
 				const workbookSnapshot =
-					providedSnapshot ?? freshWorkbookSnapshot(String(docId), workbookManifest);
+					providedSnapshot ??
+					createEmptyWorkbookSnapshot(String(docId), String(docId), workbookManifest);
 				const snapshotHash = workbookSnapshotHash(workbookSnapshot);
 				const bundleHash = documentBundleHash(graphPayload, workbookManifest, snapshotHash);
 				const result = await client.mutation(api.documents.save, {
-					docId,
+					docId: convexDocumentId(docId),
 					expectedRevision: revisions.get(docId) ?? 0,
 					graph: graphPayload,
 					workbookManifest,
@@ -169,7 +181,7 @@ export function createPersistence(client: ConvexClient, options: PersistenceOpti
 		loadDocument: (docId) =>
 			tracked('documents.load', 'read', async () => {
 				const result = (await client.query(api.documents.load, {
-					docId
+					docId: convexDocumentId(docId)
 				})) as DocumentLoadState;
 				if (result.state === 'live') revisions.set(docId, result.document.revision);
 				return result;
@@ -188,7 +200,7 @@ export function createPersistence(client: ConvexClient, options: PersistenceOpti
 				if (!response.ok) throw new Error(`upload failed: HTTP ${response.status}`);
 				const { storageId } = (await response.json()) as { storageId: string };
 				await client.action(api.files.claimUpload, {
-					docId,
+					docId: convexDocumentId(docId),
 					storageId: storageId as Id<'_storage'>
 				});
 				return storageId;
@@ -197,22 +209,5 @@ export function createPersistence(client: ConvexClient, options: PersistenceOpti
 			tracked('files.resolveUrl', 'read', () =>
 				client.query(api.files.getUrl, { storageId: storageId as Id<'_storage'> })
 			)
-	};
-}
-
-function freshWorkbookSnapshot(
-	unitId: string,
-	manifest: DocumentGraph['workbook']
-): Record<string, unknown> {
-	return {
-		id: unitId,
-		name: unitId,
-		sheetOrder: manifest.sheets.map((sheet) => sheet.id),
-		sheets: Object.fromEntries(
-			manifest.sheets.map((sheet) => [
-				sheet.id,
-				{ id: sheet.id, name: sheet.name, cellData: {} }
-			])
-		)
 	};
 }

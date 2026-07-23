@@ -1,15 +1,42 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { usePersistence, type DocumentId, type DocumentSummary } from '$lib/persistence';
+	import { DocumentGraph, ulid } from '$lib/engine';
+	import {
+		createLocalWorkspaceRepository,
+		createEmptyWorkbookSnapshot,
+		createPersistenceActivityLog,
+		serializeLocalGraph,
+		usePersistence,
+		type DocumentId,
+		type DocumentSummary,
+		type LocalDocumentSummary
+	} from '$lib/persistence';
 	import { buildSteelDemoFixture } from '$lib/persistence/fixtures';
+	import { authClient } from '$lib/auth-client';
 
-	const persistence = usePersistence();
+	const persistenceActivity = createPersistenceActivityLog();
+	const persistence = usePersistence(persistenceActivity.observe);
+	const localRepository = createLocalWorkspaceRepository({
+		observe: persistenceActivity.observe
+	});
+	const authSession = authClient.useSession();
 	const RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
+	type CloudIndexDocument = DocumentSummary & {
+		kind: 'cloud';
+		hasLocalWorkingCopy: boolean;
+	};
+	type LocalIndexDocument = Pick<
+		DocumentSummary,
+		'_id' | 'title' | 'stats' | 'createdAt' | 'updatedAt'
+	> & { kind: 'local-only' };
+	type IndexDocument = CloudIndexDocument | LocalIndexDocument;
+	const isCloudDocument = (document: IndexDocument): document is CloudIndexDocument =>
+		document.kind === 'cloud';
 
 	let view = $state<'live' | 'trash'>('live');
-	let liveDocs = $state<DocumentSummary[] | null>(null);
-	let trashDocs = $state<DocumentSummary[] | null>(null);
+	let liveDocs = $state<IndexDocument[] | null>(null);
+	let trashDocs = $state<CloudIndexDocument[] | null>(null);
 	let error = $state<string | null>(null);
 	let creating = $state(false);
 	let loadingDemo = $state(false);
@@ -21,9 +48,9 @@
 	let renameError = $state('');
 	let confirmingTrashId = $state<DocumentId | null>(null);
 	let permanentTarget = $state<
-		| { kind: 'one'; document: DocumentSummary }
-		| { kind: 'bulk'; documents: DocumentSummary[] }
-		| { kind: 'empty'; documents: DocumentSummary[] }
+		| { kind: 'one'; document: CloudIndexDocument }
+		| { kind: 'bulk'; documents: CloudIndexDocument[] }
+		| { kind: 'empty'; documents: CloudIndexDocument[] }
 		| null
 	>(null);
 	let confirmationText = $state('');
@@ -31,13 +58,30 @@
 	let toast = $state<{ kind: 'ok' | 'err'; text: string } | null>(null);
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
+	function accountId(): string {
+		const id = $authSession.data?.user.id;
+		if (!id) throw new Error('Authenticated account is unavailable.');
+		return id;
+	}
+
+	function localDocumentSummary(local: LocalDocumentSummary): IndexDocument {
+		return {
+			_id: local.documentId as DocumentId,
+			title: local.title,
+			stats: local.stats,
+			createdAt: local.createdAt,
+			updatedAt: local.updatedAt,
+			kind: 'local-only'
+		};
+	}
+
 	const source = $derived(view === 'live' ? liveDocs : trashDocs);
 	const visible = $derived.by(() => {
 		const normalized = search.trim().toLocaleLowerCase();
 		const rows = [...(source ?? [])].filter((document) =>
 			document.title.toLocaleLowerCase().includes(normalized)
 		);
-		const byId = (left: DocumentSummary, right: DocumentSummary) =>
+		const byId = (left: IndexDocument, right: IndexDocument) =>
 			String(left._id).localeCompare(String(right._id));
 		rows.sort((left, right) => {
 			if (sort === 'title-asc') return left.title.localeCompare(right.title) || byId(left, right);
@@ -48,10 +92,16 @@
 		return rows;
 	});
 	const selectedDocuments = $derived(
-		(source ?? []).filter((document) => selected.has(document._id))
+		(source ?? []).filter(
+			(document): document is CloudIndexDocument =>
+				isCloudDocument(document) && selected.has(document._id)
+		)
 	);
 	const allVisibleSelected = $derived(
-		visible.length > 0 && visible.every((document) => selected.has(document._id))
+		visible.some(isCloudDocument) &&
+		visible
+			.filter(isCloudDocument)
+			.every((document) => selected.has(document._id))
 	);
 
 	function showToast(kind: 'ok' | 'err', text: string): void {
@@ -62,10 +112,38 @@
 
 	async function refresh(): Promise<void> {
 		try {
-			[liveDocs, trashDocs] = await Promise.all([
+			const [cloudDocuments, trash, localDocuments] = await Promise.all([
 				persistence.listDocuments(),
-				persistence.listTrash()
+				persistence.listTrash(),
+				localRepository.listDocuments(accountId())
 			]);
+			const merged = new Map<string, IndexDocument>(
+				cloudDocuments.map((document) => [
+					String(document._id),
+					{ ...document, kind: 'cloud', hasLocalWorkingCopy: false }
+				])
+			);
+			for (const local of localDocuments) {
+				const cloud = merged.get(local.documentId);
+				merged.set(
+					local.documentId,
+					cloud && isCloudDocument(cloud)
+						? {
+								...cloud,
+								title: local.title,
+								stats: local.stats,
+								updatedAt: Math.max(cloud.updatedAt, local.updatedAt),
+								hasLocalWorkingCopy: true
+							}
+						: localDocumentSummary(local)
+				);
+			}
+			liveDocs = [...merged.values()];
+			trashDocs = trash.map((document) => ({
+				...document,
+				kind: 'cloud',
+				hasLocalWorkingCopy: false
+			}));
 			error = null;
 			selected = new Set([...selected].filter((id) => (source ?? []).some((doc) => doc._id === id)));
 		} catch (cause) {
@@ -84,7 +162,23 @@
 	async function createDoc(): Promise<void> {
 		creating = true;
 		try {
-			const id = await persistence.createDocument('Untitled');
+			const id = ulid() as DocumentId;
+			const graph = new DocumentGraph();
+			await localRepository.commit({
+				accountId: accountId(),
+				documentId: String(id),
+				workspaceId: 'main',
+				expectedGeneration: 0,
+				content: {
+					title: 'Untitled',
+					graph: serializeLocalGraph(graph),
+					workbookSnapshot: createEmptyWorkbookSnapshot(
+						String(id),
+						'Untitled',
+						graph.workbook
+					)
+				}
+			});
 			await goto(`/app/${id}`);
 		} catch (cause) {
 			error = cause instanceof Error ? cause.message : String(cause);
@@ -115,19 +209,20 @@
 
 	function toggleVisible(): void {
 		const next = new Set(selected);
-		if (allVisibleSelected) visible.forEach((document) => next.delete(document._id));
-		else visible.forEach((document) => next.add(document._id));
+		const selectable = visible.filter(isCloudDocument);
+		if (allVisibleSelected) selectable.forEach((document) => next.delete(document._id));
+		else selectable.forEach((document) => next.add(document._id));
 		selected = next;
 	}
 
-	function startRename(document: DocumentSummary): void {
+	function startRename(document: IndexDocument): void {
 		renamingId = document._id;
 		renameValue = document.title;
 		renameError = '';
 		confirmingTrashId = null;
 	}
 
-	async function commitRename(document: DocumentSummary): Promise<void> {
+	async function commitRename(document: IndexDocument): Promise<void> {
 		if (renamingId !== document._id) return;
 		const title = renameValue.trim();
 		if (title.length === 0) {
@@ -141,7 +236,19 @@
 		renamingId = null;
 		if (title === document.title) return;
 		try {
-			await persistence.renameDocument(document._id, title);
+			if (document.kind === 'local-only' || document.hasLocalWorkingCopy) {
+				const current = await localRepository.load(accountId(), String(document._id), 'main');
+				if (!current) throw new Error('Local working copy is missing.');
+				await localRepository.commit({
+					accountId: accountId(),
+					documentId: String(document._id),
+					workspaceId: 'main',
+					expectedGeneration: current.generation,
+					content: { ...current.content, title }
+				});
+			} else {
+				await persistence.renameDocument(document._id, title);
+			}
 			showToast('ok', `Renamed to “${title}”.`);
 			await refresh();
 		} catch (cause) {
@@ -149,7 +256,7 @@
 		}
 	}
 
-	async function moveToTrash(documents: DocumentSummary[]): Promise<void> {
+	async function moveToTrash(documents: CloudIndexDocument[]): Promise<void> {
 		acting = true;
 		try {
 			await Promise.all(documents.map((document) => persistence.deleteDocument(document._id)));
@@ -164,13 +271,20 @@
 		}
 	}
 
-	async function restore(documents: DocumentSummary[]): Promise<void> {
+	async function restore(documents: IndexDocument[]): Promise<void> {
+		const cloudDocuments = documents.filter(isCloudDocument);
+		if (cloudDocuments.length === 0) return;
 		acting = true;
 		try {
-			await Promise.all(documents.map((document) => persistence.restoreDocument(document._id)));
+			await Promise.all(
+				cloudDocuments.map((document) => persistence.restoreDocument(document._id))
+			);
 			selected = new Set();
 			await refresh();
-			showToast('ok', `${documents.length} document${documents.length === 1 ? '' : 's'} restored.`);
+			showToast(
+				'ok',
+				`${cloudDocuments.length} document${cloudDocuments.length === 1 ? '' : 's'} restored.`
+			);
 		} catch (cause) {
 			showToast('err', `Could not restore: ${cause instanceof Error ? cause.message : String(cause)}`);
 		} finally {
@@ -216,6 +330,10 @@
 		confirmationText = '';
 	}
 
+	function openPermanentDocument(document: IndexDocument): void {
+		if (isCloudDocument(document)) openPermanent({ kind: 'one', document });
+	}
+
 	function fmtDate(timestamp: number): string {
 		return new Date(timestamp).toLocaleDateString(undefined, {
 			day: 'numeric',
@@ -229,14 +347,24 @@
 		return `${(bytes / 1024).toFixed(bytes < 102_400 ? 1 : 0)} KiB`;
 	}
 
-	function daysLeft(document: DocumentSummary): number {
+	function daysLeft(document: IndexDocument): number {
+		if (!isCloudDocument(document)) return 30;
 		if (document.deletedAt === undefined) return 30;
 		return Math.max(0, Math.ceil((document.deletedAt + RETENTION_MS - Date.now()) / 86_400_000));
 	}
 
-	onMount(() => void refresh());
+	onMount(() => {
+		Object.assign(window as object, {
+			__documentIndex: {
+				persistenceActivity: () => persistenceActivity.snapshot(),
+				clearPersistenceActivity: () => persistenceActivity.clear()
+			}
+		});
+		void refresh();
+	});
 	onDestroy(() => {
 		if (toastTimer !== null) clearTimeout(toastTimer);
+		localRepository.close();
 	});
 </script>
 
@@ -355,13 +483,17 @@
 			<ul class="list" data-testid="doc-list">
 				{#each visible as document (document._id)}
 					<li class="row" data-testid="doc-row" data-title={document.title}>
-						<input
-							class="select"
-							type="checkbox"
-							checked={selected.has(document._id)}
-							onchange={() => toggleSelected(document._id)}
-							aria-label={`Select ${document.title}`}
-						/>
+						{#if document.kind === 'local-only'}
+							<span class="select" aria-hidden="true"></span>
+						{:else}
+							<input
+								class="select"
+								type="checkbox"
+								checked={selected.has(document._id)}
+								onchange={() => toggleSelected(document._id)}
+								aria-label={`Select ${document.title}`}
+							/>
+						{/if}
 						<div class="document-main">
 							{#if renamingId === document._id}
 								<input
@@ -389,6 +521,7 @@
 							{/if}
 							<p class="stats mono">
 								{document.stats.blocks} blocks · {document.stats.tabs} tabs · {document.stats.nodes} nodes · {fmtBytes(document.stats.bytes)}
+								{#if document.kind === 'local-only'} · Local only{/if}
 							</p>
 						</div>
 						<div class="dates mono">
@@ -398,14 +531,16 @@
 						<div class="actions">
 							{#if view === 'live'}
 								<button data-testid="rename" onclick={() => startRename(document)}>Rename</button>
-								{#if confirmingTrashId === document._id}
+								{#if document.kind === 'local-only'}
+									<span class="local-badge">On this device</span>
+								{:else if confirmingTrashId === document._id}
 									<button class="danger-action" onclick={() => void moveToTrash([document])}>Confirm trash</button>
 								{:else}
 									<button data-testid="delete" onclick={() => (confirmingTrashId = document._id)}>Trash</button>
 								{/if}
 							{:else}
 								<button onclick={() => void restore([document])}>Restore</button>
-								<button class="danger-action" onclick={() => openPermanent({ kind: 'one', document })}>Delete forever</button>
+								<button class="danger-action" onclick={() => openPermanentDocument(document)}>Delete forever</button>
 							{/if}
 						</div>
 					</li>
@@ -477,6 +612,7 @@
 	.dates { display: grid; gap: 4px; color: var(--grey-2); font-size: var(--fs-caption); text-align: right; }
 	.actions { display: flex; gap: 5px; justify-content: flex-end; }
 	.actions button { min-height: 34px; font-size: .78rem; }
+	.local-badge { align-self: center; color: var(--grey-1); font: var(--fs-caption) var(--font-mono); }
 	.rename { width: 100%; box-sizing: border-box; padding: 0 10px; font-weight: 600; }
 	.field-error { margin: 4px 0 0; color: var(--error); font-size: .78rem; }
 	.empty, .notice { margin-top: var(--s3); padding: var(--s5) var(--s3); border: 1px dashed var(--grey-3); border-radius: var(--radius-card); text-align: center; }
