@@ -45,6 +45,8 @@
 	let error = $state('');
 	let confirmingRemoval = $state(false);
 	let dialogEl = $state<HTMLDivElement>();
+	let returnFocus = $state<HTMLElement | null>(null);
+	let wasOpen = false;
 
 	const values = $derived.by(() => {
 		void revision;
@@ -70,8 +72,20 @@
 		error = '';
 	});
 	$effect(() => {
-		if (!open) return;
-		queueMicrotask(() => dialogEl?.querySelector<HTMLElement>('input[type="search"]')?.focus());
+		if (open && !wasOpen) {
+			wasOpen = true;
+			returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+			queueMicrotask(() => dialogEl?.querySelector<HTMLElement>('input[type="search"]')?.focus());
+			return;
+		}
+		if (!open && wasOpen) {
+			wasOpen = false;
+			const target = returnFocus;
+			returnFocus = null;
+			queueMicrotask(() => {
+				if (target?.isConnected) target.focus();
+			});
+		}
 	});
 
 	function metadata(): PublicationMetadata {
@@ -147,10 +161,32 @@
 	}
 
 	function handleKeydown(event: KeyboardEvent): void {
-		if (event.key !== 'Escape') return;
-		event.preventDefault();
-		if (confirmingRemoval) confirmingRemoval = false;
-		else onclose();
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			if (confirmingRemoval) confirmingRemoval = false;
+			else onclose();
+			return;
+		}
+		if (event.key !== 'Tab' || !dialogEl) return;
+		const focusable = Array.from(
+			dialogEl.querySelectorAll<HTMLElement>(
+				'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [href], [tabindex]:not([tabindex="-1"])'
+			)
+		).filter((element) => !element.hidden);
+		if (focusable.length === 0) {
+			event.preventDefault();
+			dialogEl.focus();
+			return;
+		}
+		const first = focusable[0];
+		const last = focusable.at(-1)!;
+		if (event.shiftKey && document.activeElement === first) {
+			event.preventDefault();
+			last.focus();
+		} else if (!event.shiftKey && document.activeElement === last) {
+			event.preventDefault();
+			first.focus();
+		}
 	}
 </script>
 
@@ -324,7 +360,7 @@
 		backdrop-filter: blur(var(--material-blur));
 	}
 	header, .actions { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); }
-	.eyebrow { margin: 0 0 4px; font: 500 var(--fs-eyebrow) var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--grey-2); }
+	.eyebrow { margin: 0 0 var(--s1); font: 500 var(--fs-eyebrow) var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--grey-2); }
 	h2 { margin: 0; font: 600 1.5rem var(--font-display); }
 	h2 span { color: var(--accent); }
 	h3 { margin: 0 0 var(--s2); font: 600 .78rem var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--grey-1); }
@@ -356,9 +392,9 @@
 	.table button.selected { background: var(--accent-dim); box-shadow: inset 3px 0 var(--accent); }
 	.table span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 	.table strong, .table small { display: block; overflow: hidden; text-overflow: ellipsis; }
-	.table small { margin-top: 2px; color: var(--grey-1); }
+	.table small { margin-top: var(--s1); color: var(--grey-1); }
 	.editor-panel { display: flex; flex-direction: column; gap: var(--s2); }
-	.editor-panel > label { display: grid; gap: 4px; color: var(--grey-1); font-size: .78rem; }
+	.editor-panel > label { display: grid; gap: var(--s1); color: var(--grey-1); font-size: .78rem; }
 	label small { color: var(--grey-2); }
 	input, textarea, button {
 		min-height: 44px;
@@ -366,7 +402,7 @@
 		border-radius: var(--radius-chip);
 		background: var(--surface);
 		color: var(--ink);
-		padding: 8px 10px;
+		padding: var(--s1) var(--s2);
 		font: inherit;
 	}
 	textarea { resize: vertical; }

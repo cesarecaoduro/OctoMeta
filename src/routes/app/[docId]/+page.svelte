@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import {
 		ArrowDown,
 		ArrowLeft,
@@ -224,7 +224,7 @@
 			versionReview = null;
 			versionProgress = null;
 			versionOutcome = null;
-			queueMicrotask(() => saveVersionButton?.focus());
+			void tick().then(() => saveVersionButton?.focus());
 		}
 
 	function startTitleEdit(): void {
@@ -742,10 +742,20 @@
 						documentId: String(docId),
 						workspaceId: 'main',
 						expectedGeneration: 0,
-						cloudBase: {
-							version: loaded.document.revision,
-							bundleHash: loaded.document.bundleHash
-						},
+							cloudBase: {
+								version: loaded.document.revision,
+								bundleHash: loaded.document.bundleHash,
+								summary: {
+									blocks: loaded.blocks.length,
+									nodes: loaded.nodes.length,
+									sheets: loaded.document.stats.tabs,
+									assets: new Set(
+										loaded.blocks
+											.map((block) => block.image?.storageId)
+											.filter((storageId): storageId is string => Boolean(storageId))
+									).size
+								}
+							},
 						content
 						});
 						initialGeneration = local.generation;

@@ -138,6 +138,12 @@ describe('immutable cloud versions', () => {
 	it('rejects a stale expected head before creating another version', async () => {
 		const t = backend();
 		await t.mutation(api.documentVersions.save, await saveArgs());
+		await expect(
+			t.mutation(
+				api.documentVersions.save,
+				await saveArgs(workingCopy(), 'stale-unchanged-operation')
+			)
+		).rejects.toThrow('HEAD_CONFLICT:1');
 		const stale = workingCopy();
 		stale.content.title = 'Stale local title';
 

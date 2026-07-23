@@ -67,8 +67,19 @@ function workingCopy(): LocalWorkingCopyRecord {
 			},
 			workbookSnapshot: {
 				id: '01K123456789ABCDEFGHJKMNPQ',
+				activeSheetId: 'sheet-1',
+				resources: [{ name: 'local-plugin-cache' }],
 				sheetOrder: ['sheet-1'],
-				sheets: { 'sheet-1': { id: 'sheet-1', name: 'Sheet 1', cellData: {} } }
+				sheets: {
+					'sheet-1': {
+						id: 'sheet-1',
+						name: 'Sheet 1',
+						cellData: {},
+						scrollLeft: 120,
+						scrollTop: 80,
+						zoomRatio: 1.25
+					}
+				}
 			}
 		},
 		createdAt: 1,
@@ -84,7 +95,14 @@ describe('cloud version review', () => {
 			nextVersion: 1,
 			source: 'Working copy',
 			capturedGeneration: 3,
-			summary: { blocks: 1, nodes: 3, sheets: 1, assets: 0 },
+			summary: {
+				blocks: 1,
+				nodes: 3,
+				sheets: 1,
+				assets: 0,
+				changes: { blocks: 1, nodes: 3, sheets: 1, assets: 0 },
+				generations: 3
+			},
 			warnings: [
 				{ kind: 'broken-references', count: 1 },
 				{ kind: 'incomplete-calculations', count: 1 }
@@ -100,9 +118,30 @@ describe('cloud version review', () => {
 			}
 		});
 		expect(JSON.stringify(review.bundle)).not.toMatch(
-			/undo|selection|activity|drawer|preference|history/i
+			/undo|selection|activity|drawer|preference|history|scrollLeft|scrollTop|zoomRatio|resources/i
 		);
 		expect(review.bundleHash).toMatch(/^[a-f0-9]{64}$/);
+	});
+
+	it('compares the captured authored counts with the acknowledged Main base', async () => {
+		const record = workingCopy();
+		record.cloudBase = {
+			version: 4,
+			bundleHash: 'main-v4',
+			generation: 2,
+			summary: { blocks: 0, nodes: 1, sheets: 1, assets: 0 }
+		};
+
+		const review = await buildCloudVersionReview(record);
+
+		expect(review).toMatchObject({
+			nextVersion: 5,
+			expectedHeadNumber: 4,
+			summary: {
+				changes: { blocks: 1, nodes: 2, sheets: 0, assets: 0 },
+				generations: 1
+			}
+		});
 	});
 
 	it('keeps edits made during the cloud request dirty after acknowledging the captured generation', async () => {
@@ -164,7 +203,11 @@ describe('cloud version review', () => {
 		]);
 		expect(await repository.load(initial.accountId, initial.documentId, 'main')).toMatchObject({
 			generation: 2,
-			cloudBase: { version: 1, generation: 1 },
+			cloudBase: {
+				version: 1,
+				generation: 1,
+				summary: { blocks: 1, nodes: 3, sheets: 1, assets: 0 }
+			},
 			content: { title: 'Edited during upload' }
 		});
 		repository.close();

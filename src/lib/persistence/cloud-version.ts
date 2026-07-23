@@ -1,5 +1,6 @@
 import type { PersistedAuthoredGraph } from './serialize';
 import type {
+	LocalCloudSnapshotSummary,
 	LocalWorkingCopyRecord,
 	LocalWorkspaceRepository,
 	PendingCloudVersionOperation
@@ -40,7 +41,10 @@ export interface CloudVersionReview {
 	capturedGeneration: number;
 	expectedHeadNumber: number;
 	expectedHeadHash: string | null;
-	summary: { blocks: number; nodes: number; sheets: number; assets: number };
+	summary: LocalCloudSnapshotSummary & {
+		changes: LocalCloudSnapshotSummary | null;
+		generations: number;
+	};
 	warnings: CloudVersionWarning[];
 	blockers: CloudVersionBlocker[];
 	bundle: CloudVersionBundle;
@@ -137,7 +141,65 @@ function cloudBundle(record: LocalWorkingCopyRecord): CloudVersionBundle {
 			blocks: rows.blocks.map(({ docId: _docId, ...block }) => block),
 			chips: rows.chips
 		},
-		workbookSnapshot: structuredClone(record.content.workbookSnapshot)
+		workbookSnapshot: authoredWorkbookSnapshot(record.content.workbookSnapshot)
+	};
+}
+
+const LOCAL_WORKBOOK_KEYS = new Set([
+	'activeSheetId',
+	'focused',
+	'resources',
+	'redoStack',
+	'scrollLeft',
+	'scrollTop',
+	'selection',
+	'selections',
+	'undoStack',
+	'viewport',
+	'zoomRatio'
+]);
+
+/**
+ * Copy only authored workbook JSON while structurally removing local view,
+ * selection, history, and opaque plugin state at every nesting level.
+ */
+export function authoredWorkbookSnapshot(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(authoredWorkbookSnapshot);
+	if (!value || typeof value !== 'object') return value;
+	const authored: Record<string, unknown> = {};
+	for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+		if (LOCAL_WORKBOOK_KEYS.has(key)) continue;
+		authored[key] = authoredWorkbookSnapshot(nested);
+	}
+	return authored;
+}
+
+/** Count authored bundle elements for review and later Main comparisons. */
+export function cloudVersionSnapshotSummary(
+	bundle: CloudVersionBundle
+): LocalCloudSnapshotSummary {
+	const assets = new Set(
+		bundle.graph.blocks
+			.map((block) => block.image?.storageId)
+			.filter((storageId): storageId is string => Boolean(storageId))
+	);
+	return {
+		blocks: bundle.graph.blocks.length,
+		nodes: bundle.graph.nodes.length,
+		sheets: bundle.graph.workbookManifest.sheets.length,
+		assets: assets.size
+	};
+}
+
+function changedCounts(
+	current: LocalCloudSnapshotSummary,
+	base: LocalCloudSnapshotSummary
+): LocalCloudSnapshotSummary {
+	return {
+		blocks: current.blocks - base.blocks,
+		nodes: current.nodes - base.nodes,
+		sheets: current.sheets - base.sheets,
+		assets: current.assets - base.assets
 	};
 }
 
@@ -252,11 +314,13 @@ function assembleReview(input: {
 	message?: string;
 }): CloudVersionReview {
 	const { record, bundle, bundleJson } = input;
-	const assets = new Set(
-		bundle.graph.blocks
-			.map((block) => block.image?.storageId)
-			.filter((storageId): storageId is string => Boolean(storageId))
-	);
+	const currentSummary = cloudVersionSnapshotSummary(bundle);
+	const baseSummary = record.cloudBase?.summary ?? (record.cloudBase ? null : {
+		blocks: 0,
+		nodes: 0,
+		sheets: 0,
+		assets: 0
+	});
 	return {
 		nextVersion: input.expectedHeadNumber + 1,
 		source:
@@ -267,10 +331,12 @@ function assembleReview(input: {
 		expectedHeadNumber: input.expectedHeadNumber,
 		expectedHeadHash: input.expectedHeadHash,
 		summary: {
-			blocks: bundle.graph.blocks.length,
-			nodes: bundle.graph.nodes.length,
-			sheets: bundle.graph.workbookManifest.sheets.length,
-			assets: assets.size
+			...currentSummary,
+			changes: baseSummary ? changedCounts(currentSummary, baseSummary) : null,
+			generations: Math.max(
+				0,
+				input.capturedGeneration - (record.cloudBase?.generation ?? 0)
+			)
 		},
 		warnings: warningState(bundle.graph.nodes),
 		blockers: blockerState(bundle),
@@ -367,7 +433,13 @@ export function createCloudVersionController(
 					workspaceId: options.workspaceId,
 					operationId: operation.operationId,
 					version: result.version,
-					bundleHash: result.bundleHash
+					bundleHash: result.bundleHash,
+					summary: {
+						blocks: review.summary.blocks,
+						nodes: review.summary.nodes,
+						sheets: review.summary.sheets,
+						assets: review.summary.assets
+					}
 				});
 				const dirtyAfterSave =
 					acknowledged.generation > (acknowledged.cloudBase?.generation ?? 0);

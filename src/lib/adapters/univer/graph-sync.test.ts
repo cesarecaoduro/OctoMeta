@@ -216,6 +216,19 @@ describe('published names across sheets', () => {
 		expect(display(session, A, 'D4')).toBe(3);
 	});
 
+	it('rejects empty and error-valued cells as publications', () => {
+		const session = newSession();
+		expect(publishCellName(session, A, 'D4', 'pad.empty')).toEqual({
+			ok: false,
+			message: 'Select a cell with a scalar value to publish.'
+		});
+		edit(session, A, 'E4', '=missing.value');
+		expect(publishCellName(session, A, 'E4', 'pad.error')).toEqual({
+			ok: false,
+			message: 'Only resolved scalar workbook values can be published.'
+		});
+	});
+
 	it('rename rewrites dependents to the new name and keeps values (Excel semantics)', () => {
 		const session = newSession();
 		edit(session, A, 'A1', 12);

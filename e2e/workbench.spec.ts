@@ -387,7 +387,12 @@ test('the unified index manages a local document without cloud calls', async ({ 
 	row = page.getByTestId('doc-row').filter({ hasText: 'Index lifecycle' }).first();
 	await expect(row).toBeVisible();
 	await row.getByTestId('save-entry').click();
-	await expect(page.getByTestId('toast')).toContainText('No cloud write was made');
+	const review = page.getByRole('dialog', { name: 'Save version 1' });
+	await expect(review).toBeVisible();
+	await expect(review).toContainText('Working copy');
+	await review.getByRole('button', { name: 'Close version review and continue editing' }).click();
+	await page.getByTestId('back').click();
+	row = page.getByTestId('doc-row').filter({ hasText: 'Index lifecycle' }).first();
 	await row.getByTestId('export-entry').click();
 	await expect(page.getByTestId('toast')).toContainText('not available yet');
 	await row.getByTestId('duplicate').click();
@@ -410,7 +415,10 @@ test('the unified index manages a local document without cloud calls', async ({ 
 		await page.evaluate(() =>
 			window.__documentIndex
 				.persistenceActivity()
-				.filter((activity) => activity.target === 'cloud')
+				.filter(
+					(activity) =>
+						activity.target === 'cloud' && activity.access === 'write'
+				)
 		)
 	).toEqual([]);
 });

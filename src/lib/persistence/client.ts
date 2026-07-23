@@ -33,6 +33,11 @@ export type DocumentId = string & { readonly [documentIdBrand]: 'DocumentId' };
 const convexDocumentId = (documentId: DocumentId): Id<'documents'> =>
 	documentId as unknown as Id<'documents'>;
 
+function versionQueriesUnavailable(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : String(error);
+	return message.includes("Could not find public function for 'documentVersions:loadHead'");
+}
+
 /** Document list entry (`documents.list`), newest-updated first. */
 export interface DocumentSummary {
 	_id: DocumentId;
@@ -201,9 +206,19 @@ export function createPersistence(client: ConvexClient, options: PersistenceOpti
 			}),
 		loadDocument: (docId) =>
 			tracked('documents.load', 'read', async () => {
-				const versioned = await client.query(api.documentVersions.loadHead, {
-					publicDocumentId: String(docId)
-				});
+				let versioned;
+				try {
+					versioned = await client.query(api.documentVersions.loadHead, {
+						publicDocumentId: String(docId)
+					});
+				} catch (error) {
+					if (!versionQueriesUnavailable(error)) throw error;
+					const legacy = (await client.query(api.documents.load, {
+						docId: convexDocumentId(docId)
+					})) as DocumentLoadState;
+					if (legacy.state === 'live') revisions.set(docId, legacy.document.revision);
+					return legacy;
+				}
 				if (versioned.state === 'live') {
 					const bundle = versioned.bundle;
 					revisions.set(docId, versioned.version.versionNumber);
@@ -252,7 +267,7 @@ export function createPersistence(client: ConvexClient, options: PersistenceOpti
 				}
 				if (versioned.state === 'missing') return { state: 'missing' as const };
 				const result = (await client.query(api.documents.load, {
-					docId: String(docId)
+					docId: convexDocumentId(docId)
 				})) as DocumentLoadState;
 				if (result.state === 'live') revisions.set(docId, result.document.revision);
 				return result;

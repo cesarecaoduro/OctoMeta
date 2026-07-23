@@ -28,6 +28,10 @@
 	);
 	const blocked = $derived(review.blockers.length > 0 || !online);
 
+	function signed(value: number): string {
+		return value > 0 ? `+${value}` : String(value);
+	}
+
 	function handleKeydown(event: KeyboardEvent): void {
 		if (event.key === 'Escape') {
 			event.preventDefault();
@@ -107,18 +111,31 @@
 					</dl>
 				</section>
 
-				<section aria-labelledby="version-summary-title">
-					<h3 id="version-summary-title">Change summary</h3>
-					<p>
-						{review.summary.blocks} blocks, {review.summary.nodes} graph nodes, and
-						{review.summary.sheets} Workbook
-						{review.summary.sheets === 1 ? ' sheet' : ' sheets'} in the captured snapshot.
-					</p>
-					<p>
-						<strong>{review.summary.assets}</strong>
-						{review.summary.assets === 1 ? ' asset' : ' assets'} to verify or upload.
-					</p>
-				</section>
+					<section aria-labelledby="version-summary-title">
+						<h3 id="version-summary-title">Change summary</h3>
+						<p>
+							<strong>{review.summary.generations}</strong>
+							local {review.summary.generations === 1 ? 'generation' : 'generations'} since
+							{review.expectedHeadNumber === 0 ? ' the empty Main' : ` Main v${review.expectedHeadNumber}`}.
+						</p>
+						{#if review.summary.changes}
+							<p class="mono">
+								{signed(review.summary.changes.blocks)} blocks ·
+								{signed(review.summary.changes.nodes)} graph nodes ·
+								{signed(review.summary.changes.sheets)} Workbook sheets ·
+								{signed(review.summary.changes.assets)} assets
+							</p>
+						{:else}
+							<p>
+								The earlier Main totals predate change summaries; current authored totals are shown.
+							</p>
+						{/if}
+						<p>
+							Current snapshot: {review.summary.blocks} blocks, {review.summary.nodes} graph nodes,
+							{review.summary.sheets} Workbook {review.summary.sheets === 1 ? 'sheet' : 'sheets'},
+							and {review.summary.assets} {review.summary.assets === 1 ? 'asset' : 'assets'}.
+						</p>
+					</section>
 			</div>
 
 			{#if review.warnings.length > 0}

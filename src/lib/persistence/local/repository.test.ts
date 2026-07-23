@@ -249,12 +249,18 @@ describe('local workspace repository', () => {
 			workspaceId: 'main',
 			operationId: 'operation-1',
 			version: 1,
-			bundleHash: 'bundle-hash'
+			bundleHash: 'bundle-hash',
+			summary: { blocks: 0, nodes: 0, sheets: 1, assets: 0 }
 		});
 
 		expect(await repository.load('account-a', 'document-1', 'main')).toMatchObject({
 			generation: 2,
-			cloudBase: { version: 1, bundleHash: 'bundle-hash', generation: 1 },
+			cloudBase: {
+				version: 1,
+				bundleHash: 'bundle-hash',
+				generation: 1,
+				summary: { blocks: 0, nodes: 0, sheets: 1, assets: 0 }
+			},
 			content: { title: 'Edited during upload' }
 		});
 		expect(

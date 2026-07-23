@@ -30,6 +30,13 @@ test('narrow workbench uses contextual published values and a full-screen workbo
 	const dialog = page.getByRole('dialog', { name: 'Published values' });
 	await expect(dialog).toBeVisible();
 	await expect(page.getByPlaceholder('Search name, label, sheet, or cell')).toBeFocused();
+	await dialog.getByRole('button', { name: 'Close published values' }).focus();
+	await page.keyboard.press('Shift+Tab');
+	expect(
+		await page.evaluate(() =>
+			Boolean(document.activeElement?.closest('[role="dialog"][aria-label="Published values"]'))
+		)
+	).toBe(true);
 	await page.keyboard.press('Escape');
 	await expect(dialog).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Published values' })).toBeFocused();

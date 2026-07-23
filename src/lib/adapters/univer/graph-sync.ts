@@ -303,9 +303,9 @@ function applyFormulaEdit(
 export type NameOutcome = { ok: true; nodeId: NodeId } | { ok: false; message: string };
 
 /**
- * Publish a dotted name on a cell (`publishName` mutation). When the cell has
- * no node yet (publishing an empty cell), an input node is created first,
- * seeded with `seed` (default scalar 0) so the name resolves immediately.
+ * Publish a dotted name on a cell (`publishName` mutation). A caller importing
+ * a workbook-defined name may provide the cell's current scalar `seed`; a
+ * genuinely empty or error-valued cell is rejected.
  */
 export function publishCellName(
 	session: GraphSession,
@@ -316,8 +316,18 @@ export function publishCellName(
 	publication?: PublicationMetadata
 ): NameOutcome {
 	const ref = cellRefFor(sheetId, a1);
-	if (session.doc.resolveRef(ref) === undefined) {
-		const created = applyValueEdit(session, ref, undefined, seed ?? scalar(0));
+	const sourceId = session.doc.resolveRef(ref);
+	const sourceValue = sourceId ? session.doc.nodes.get(sourceId)?.value : seed;
+	if (!sourceValue) return { ok: false, message: 'Select a cell with a scalar value to publish.' };
+	if (
+		sourceValue.kind === 'error' ||
+		sourceValue.kind === 'table' ||
+		sourceValue.kind === 'geometry'
+	) {
+		return { ok: false, message: 'Only resolved scalar workbook values can be published.' };
+	}
+	if (sourceId === undefined) {
+		const created = applyValueEdit(session, ref, undefined, sourceValue);
 		if (created.kind === 'rejected') return { ok: false, message: created.message };
 	}
 	const r = session.commit({

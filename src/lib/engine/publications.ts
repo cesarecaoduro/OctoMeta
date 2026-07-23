@@ -17,7 +17,11 @@ export interface PublishedValue {
 
 /** One current consumer disclosed before a published value is removed. */
 export interface PublishedValueUse {
-	kind: 'document-reference' | 'equation-reference' | 'workbook-formula';
+	kind:
+		| 'document-reference'
+		| 'equation-reference'
+		| 'workbook-formula'
+		| 'graph-dependent';
 	id: string;
 	label: string;
 }
@@ -102,7 +106,17 @@ export function publishedValueUses(
 	}
 	for (const dependentId of graph.dependentsOf(publicationId)) {
 		const dependent = graph.nodes.get(dependentId);
-		if (!dependent?.cellRef) continue;
+		if (!dependent) continue;
+		if (!dependent.cellRef) {
+			uses.push({
+				kind: 'graph-dependent',
+				id: dependent.id,
+				label: dependent.blockId
+					? `Graph expression in block ${dependent.blockId}`
+					: `Graph expression ${dependent.id}`
+			});
+			continue;
+		}
 		const sheet = graph.sheet(dependent.cellRef.sheetId);
 		uses.push({
 			kind: 'workbook-formula',
@@ -113,7 +127,8 @@ export function publishedValueUses(
 	const rank: Record<PublishedValueUse['kind'], number> = {
 		'document-reference': 0,
 		'equation-reference': 1,
-		'workbook-formula': 2
+		'workbook-formula': 2,
+		'graph-dependent': 3
 	};
 	return uses.sort(
 		(left, right) =>

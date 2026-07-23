@@ -177,6 +177,17 @@ describe('published values', () => {
 			}
 		};
 		must(applyMutation(graph, computed, HUMAN));
+		const graphExpression: GraphMutation = {
+			op: 'addNode',
+			node: {
+				id: 'graph-double-span',
+				kind: 'computed',
+				blockId: 'equation',
+				formula: parsed.ast,
+				provenance: emptyProvenance()
+			}
+		};
+		must(applyMutation(graph, graphExpression, HUMAN));
 
 		expect(publishedValueUses(graph, publicationId)).toEqual([
 			{
@@ -193,6 +204,11 @@ describe('published values', () => {
 				kind: 'workbook-formula',
 				id: 'cell-double-span',
 				label: 'Inputs · C4'
+			},
+			{
+				kind: 'graph-dependent',
+				id: 'graph-double-span',
+				label: 'Graph expression in block equation'
 			}
 		]);
 

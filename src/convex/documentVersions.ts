@@ -163,6 +163,13 @@ export const save = mutation({
 
 		const currentVersion = document?.mainVersionNumber ?? 0;
 		const currentHash = document?.mainHash ?? null;
+		if (
+			currentVersion !== args.expectedHeadNumber ||
+			currentHash !== args.expectedHeadHash
+		) {
+			throw new Error(`HEAD_CONFLICT:${currentVersion}:${currentHash ?? ''}`);
+		}
+		if (!document && args.expectedHeadNumber !== 0) throw new Error('HEAD_CONFLICT:0:');
 		if (document && currentHash === args.bundleHash) {
 			return {
 				status: 'unchanged' as const,
@@ -173,13 +180,6 @@ export const save = mutation({
 				bundleHash: currentHash
 			};
 		}
-		if (
-			currentVersion !== args.expectedHeadNumber ||
-			currentHash !== args.expectedHeadHash
-		) {
-			throw new Error(`HEAD_CONFLICT:${currentVersion}:${currentHash ?? ''}`);
-		}
-		if (!document && args.expectedHeadNumber !== 0) throw new Error('HEAD_CONFLICT:0:');
 		if ((document?.versionCount ?? 0) >= VERSION_LIMIT) throw new Error('HISTORY_LIMIT');
 		if ((document?.versionBytes ?? 0) + bundleBytes.byteLength > VERSION_BYTES_LIMIT) {
 			throw new Error('HISTORY_SIZE_LIMIT');

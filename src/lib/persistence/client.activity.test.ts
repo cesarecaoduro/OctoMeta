@@ -77,4 +77,21 @@ describe('cloud persistence activity', () => {
 			}
 		]);
 	});
+
+	it('falls back to the legacy read while version queries are not deployed', async () => {
+		const query = vi
+			.fn()
+			.mockRejectedValueOnce(
+				new Error(
+					"Could not find public function for 'documentVersions:loadHead'."
+				)
+			)
+			.mockResolvedValueOnce({ state: 'missing' });
+		const persistence = createPersistence(fakeClient({ query: query as never }));
+
+		await expect(
+			persistence.loadDocument('legacy-document' as DocumentId)
+		).resolves.toEqual({ state: 'missing' });
+		expect(query).toHaveBeenCalledTimes(2);
+	});
 });

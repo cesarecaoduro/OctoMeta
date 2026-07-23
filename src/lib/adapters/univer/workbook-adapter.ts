@@ -438,13 +438,20 @@ export async function attachWorkbookAdapter(
 			if (session.doc.resolveRef({ name }) !== undefined) return false;
 			const sourceId = session.doc.resolveRef({ sheetId, a1 });
 			const source = sourceId ? session.doc.nodes.get(sourceId) : undefined;
-			if (source?.value.kind === 'table' || source?.value.kind === 'geometry') return false;
+			if (
+				!source ||
+				source.value.kind === 'error' ||
+				source.value.kind === 'table' ||
+				source.value.kind === 'geometry'
+			) {
+				return false;
+			}
 			const published = publishCellName(
 				session,
 				sheetId,
 				a1,
 				name,
-				seedFromCell({ sheetId, a1 }),
+				undefined,
 				publication
 			);
 			if (!published.ok) return false;

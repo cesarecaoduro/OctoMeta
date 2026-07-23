@@ -10,11 +10,20 @@ export type LocalWorkspaceDescriptor =
 	| { kind: 'main' }
 	| { kind: 'branch'; name: string };
 
+/** Authored counts retained with a cloud base for later change summaries. */
+export interface LocalCloudSnapshotSummary {
+	blocks: number;
+	nodes: number;
+	sheets: number;
+	assets: number;
+}
+
 /** Immutable cloud generation from which a local working copy began. */
 export interface LocalCloudBase {
 	version: number;
 	bundleHash: string;
 	generation: number;
+	summary?: LocalCloudSnapshotSummary;
 }
 
 /** Authored content and unified history captured in one durable generation. */
@@ -96,6 +105,7 @@ export interface AcknowledgeCloudVersionInput {
 	operationId: string;
 	version: number;
 	bundleHash: string;
+	summary: LocalCloudSnapshotSummary;
 }
 
 /** Input for copying one main working copy into a new local-only document. */
@@ -440,7 +450,8 @@ export function createLocalWorkspaceRepository(
 						cloudBase: {
 							version: input.version,
 							bundleHash: input.bundleHash,
-							generation: operation.capturedGeneration
+							generation: operation.capturedGeneration,
+							summary: structuredClone(input.summary)
 						}
 					};
 					await Promise.all([
