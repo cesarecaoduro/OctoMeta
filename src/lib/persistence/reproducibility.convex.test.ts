@@ -181,14 +181,21 @@ describe('development reset safety', () => {
 	it('counts the allowlist, blocks product writes, deletes in stages, and unlocks after zero rows', async () => {
 		const t = ownedBackend();
 		await t.mutation(api.documents.create, { title: 'Reset me' });
+		await t.run(async (ctx) => {
+			await ctx.storage.store(new Blob(['orphaned product file'], { type: 'text/plain' }));
+		});
 		expect(await t.query(internal.maintenance.countResetRows, {})).toMatchObject({
 			documents: 1,
 			workbookSnapshots: 1,
 			assets: 0,
+			rootStorage: 1,
 			truncated: false
 		});
 
 		await t.mutation(internal.maintenance.beginReset, {});
+		await expect(t.mutation(internal.maintenance.finishReset, {})).rejects.toThrow(
+			'RESET_VERIFICATION_FAILED'
+		);
 		await expect(
 			t.mutation(api.documents.create, { title: 'Blocked during reset' })
 		).rejects.toThrow('MAINTENANCE_MODE');
@@ -200,6 +207,11 @@ describe('development reset safety', () => {
 		expect(
 			await t.mutation(internal.maintenance.deleteResetBatch, { stage: 'documents' })
 		).toBe(1);
+		const storageIds = await t.query(internal.maintenance.nextRootStorageBatch, {});
+		expect(storageIds).toHaveLength(1);
+		await t.run(async (ctx) => {
+			for (const storageId of storageIds) await ctx.storage.delete(storageId);
+		});
 		expect(await t.query(internal.maintenance.countResetRows, {})).toEqual({
 			documents: 0,
 			graphNodes: 0,
@@ -208,10 +220,50 @@ describe('development reset safety', () => {
 			chipBindings: 0,
 			workbookSnapshots: 0,
 			assets: 0,
+			rootStorage: 0,
 			truncated: false
 		});
-		await t.mutation(internal.maintenance.finishReset, {});
+		await expect(t.mutation(internal.maintenance.finishReset, {})).resolves.toMatchObject({
+			documents: 0,
+			rootStorage: 0,
+			truncated: false
+		});
+		expect(await t.run(async (ctx) => await ctx.db.query('maintenance').collect())).toEqual([]);
 		await expect(t.mutation(api.documents.create, { title: 'Writable again' })).resolves.toBeTruthy();
+	});
+
+	it('runs the guarded reset end to end without deleting waitlist data', async () => {
+		vi.stubEnv('RESET_ENVIRONMENT', 'test');
+		vi.stubEnv('DEV_RESET_TOKEN', 'test-reset-token');
+		try {
+			const t = ownedBackend();
+			await t.mutation(api.documents.create, { title: 'Delete this product data' });
+			await t.run(async (ctx) => {
+				await ctx.db.insert('waitlist', {
+					email: 'preserve@example.com',
+					source: 'reset-test'
+				});
+				await ctx.storage.store(new Blob(['delete this orphan'], { type: 'text/plain' }));
+			});
+
+			const result = await t.action(api.maintenance.developmentReset, {
+				token: 'test-reset-token',
+				dryRun: false,
+				acknowledgeBackup: 'IRREVERSIBLE BACKUP CONFIRMED'
+			});
+
+			expect(result.after).toMatchObject({
+				documents: 0,
+				rootStorage: 0,
+				truncated: false
+			});
+			expect(
+				await t.run(async (ctx) => await ctx.db.query('waitlist').collect())
+			).toMatchObject([{ email: 'preserve@example.com', source: 'reset-test' }]);
+			expect(await t.run(async (ctx) => await ctx.db.query('maintenance').collect())).toEqual([]);
+		} finally {
+			vi.unstubAllEnvs();
+		}
 	});
 });
 

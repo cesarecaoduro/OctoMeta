@@ -32,6 +32,7 @@ export interface ResetCounts {
 	chipBindings: number;
 	workbookSnapshots: number;
 	assets: number;
+	rootStorage: number;
 	truncated: boolean;
 }
 
@@ -65,6 +66,11 @@ export const developmentReset = action({
 					assetIds: assets.map((asset) => asset.assetId)
 				});
 			}
+			for (;;) {
+				const storageIds = await ctx.runQuery(internal.maintenance.nextRootStorageBatch, {});
+				if (storageIds.length === 0) break;
+				for (const storageId of storageIds) await ctx.storage.delete(storageId);
+			}
 			for (const stage of RESET_STAGES) {
 				for (;;) {
 					const deleted = await ctx.runMutation(internal.maintenance.deleteResetBatch, {
@@ -73,11 +79,7 @@ export const developmentReset = action({
 					if (deleted === 0) break;
 				}
 			}
-			const after = await ctx.runQuery(internal.maintenance.countResetRows, {});
-			if (Object.entries(after).some(([key, count]) => key !== 'truncated' && count !== 0)) {
-				throw new Error('RESET_VERIFICATION_FAILED');
-			}
-			await ctx.runMutation(internal.maintenance.finishReset, {});
+			const after = await ctx.runMutation(internal.maintenance.finishReset, {});
 			return { dryRun: false, before, after };
 		} catch (cause) {
 			// Fail closed: the lock deliberately remains held for inspection.
@@ -90,52 +92,10 @@ export const developmentReset = action({
 	}
 });
 
-/** Count only allowlisted product rows; marketing/auth/component data is excluded. */
+/** Count allowlisted product rows and root storage; waitlist/auth/component data is excluded. */
 export const countResetRows = internalQuery({
 	args: {},
-	handler: async (ctx): Promise<ResetCounts> => {
-		const count = async (
-			table:
-				| 'documents'
-				| 'graphNodes'
-				| 'blocks'
-				| 'undoLog'
-				| 'chipBindings'
-				| 'workbookSnapshots'
-				| 'assets'
-		): Promise<{ count: number; truncated: boolean }> => {
-			const rows = await ctx.db.query(table).take(COUNT_CAP + 1);
-			return { count: Math.min(rows.length, COUNT_CAP), truncated: rows.length > COUNT_CAP };
-		};
-		const [documents, graphNodes, blocks, undoLog, chipBindings, workbookSnapshots, assets] =
-			await Promise.all([
-				count('documents'),
-				count('graphNodes'),
-				count('blocks'),
-				count('undoLog'),
-				count('chipBindings'),
-				count('workbookSnapshots'),
-				count('assets')
-			]);
-		return {
-			documents: documents.count,
-			graphNodes: graphNodes.count,
-			blocks: blocks.count,
-			undoLog: undoLog.count,
-			chipBindings: chipBindings.count,
-			workbookSnapshots: workbookSnapshots.count,
-			assets: assets.count,
-			truncated: [
-				documents,
-				graphNodes,
-				blocks,
-				undoLog,
-				chipBindings,
-				workbookSnapshots,
-				assets
-			].some((result) => result.truncated)
-		};
-	}
+	handler: async (ctx): Promise<ResetCounts> => readResetCounts(ctx)
 });
 
 /** Atomically acquire the singleton product-write lock. */
@@ -174,6 +134,16 @@ export const nextAssetBatch = internalQuery({
 		await requireResetLock(ctx);
 		const assets = await ctx.db.query('assets').take(RESET_BATCH);
 		return assets.map((asset) => ({ assetId: asset._id, storageId: asset.storageId }));
+	}
+});
+
+/** Return one locked batch of root file-storage objects, including orphaned legacy files. */
+export const nextRootStorageBatch = internalQuery({
+	args: {},
+	handler: async (ctx) => {
+		await requireResetLock(ctx);
+		const files = await ctx.db.system.query('_storage').take(RESET_BATCH);
+		return files.map((file) => file._id);
 	}
 });
 
@@ -219,19 +189,72 @@ export const deleteResetBatch = internalMutation({
 	}
 });
 
-/** Release the reset lock after the action has independently verified zero rows. */
+/** Atomically verify zero product state and delete the singleton reset lock. */
 export const finishReset = internalMutation({
 	args: {},
-	handler: async (ctx) => {
+	handler: async (ctx): Promise<ResetCounts> => {
 		const lock = await requireResetLock(ctx);
-		await ctx.db.patch(lock._id, {
-			locked: false,
-			operation: undefined,
-			startedAt: undefined,
-			updatedAt: Date.now()
-		});
+		const after = await readResetCounts(ctx);
+		if (Object.entries(after).some(([key, count]) => key !== 'truncated' && count !== 0)) {
+			throw new Error('RESET_VERIFICATION_FAILED');
+		}
+		await ctx.db.delete(lock._id);
+		return after;
 	}
 });
+
+async function readResetCounts(
+	ctx: Pick<QueryCtx, 'db'> | Pick<MutationCtx, 'db'>
+): Promise<ResetCounts> {
+	const count = async (
+		table:
+			| 'documents'
+			| 'graphNodes'
+			| 'blocks'
+			| 'undoLog'
+			| 'chipBindings'
+			| 'workbookSnapshots'
+			| 'assets'
+	): Promise<{ count: number; truncated: boolean }> => {
+		const rows = await ctx.db.query(table).take(COUNT_CAP + 1);
+		return { count: Math.min(rows.length, COUNT_CAP), truncated: rows.length > COUNT_CAP };
+	};
+	const [documents, graphNodes, blocks, undoLog, chipBindings, workbookSnapshots, assets] =
+		await Promise.all([
+			count('documents'),
+			count('graphNodes'),
+			count('blocks'),
+			count('undoLog'),
+			count('chipBindings'),
+			count('workbookSnapshots'),
+			count('assets')
+		]);
+	const rootStorageRows = await ctx.db.system.query('_storage').take(COUNT_CAP + 1);
+	const rootStorage = {
+		count: Math.min(rootStorageRows.length, COUNT_CAP),
+		truncated: rootStorageRows.length > COUNT_CAP
+	};
+	return {
+		documents: documents.count,
+		graphNodes: graphNodes.count,
+		blocks: blocks.count,
+		undoLog: undoLog.count,
+		chipBindings: chipBindings.count,
+		workbookSnapshots: workbookSnapshots.count,
+		assets: assets.count,
+		rootStorage: rootStorage.count,
+		truncated: [
+			documents,
+			graphNodes,
+			blocks,
+			undoLog,
+			chipBindings,
+			workbookSnapshots,
+			assets,
+			rootStorage
+		].some((result) => result.truncated)
+	};
+}
 
 function assertResetAuthority(token: string, acknowledgement: string): void {
 	validateResetAuthority({
