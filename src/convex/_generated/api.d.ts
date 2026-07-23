@@ -11,8 +11,8 @@
 import type * as assetClaims from "../assetClaims.js";
 import type * as auth from "../auth.js";
 import type * as crons from "../crons.js";
-import type * as documents from "../documents.js";
 import type * as documentVersions from "../documentVersions.js";
+import type * as documents from "../documents.js";
 import type * as emailTemplates from "../emailTemplates.js";
 import type * as emails from "../emails.js";
 import type * as files from "../files.js";
@@ -30,8 +30,8 @@ declare const fullApi: ApiFromModules<{
   assetClaims: typeof assetClaims;
   auth: typeof auth;
   crons: typeof crons;
-  documents: typeof documents;
   documentVersions: typeof documentVersions;
+  documents: typeof documents;
   emailTemplates: typeof emailTemplates;
   emails: typeof emails;
   files: typeof files;
