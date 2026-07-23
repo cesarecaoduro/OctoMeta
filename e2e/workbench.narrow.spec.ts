@@ -11,6 +11,10 @@ test('narrow workbench uses modal parameters and a full-screen workbook without 
 	expect(
 		await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
 	).toBe(true);
+	const dock = await page.locator('.shell-context').boundingBox();
+	expect(dock).not.toBeNull();
+	expect(dock!.y).toBeGreaterThan(700);
+	expect(dock!.y + dock!.height).toBe(844);
 
 	await page.getByRole('button', { name: 'Parameters' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Parameters' });
@@ -20,9 +24,9 @@ test('narrow workbench uses modal parameters and a full-screen workbook without 
 	await expect(dialog).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Parameters' })).toBeFocused();
 
-	const workbookToggle = page.getByRole('button', { name: /Workbook 3 tabs/ });
+	const workbookToggle = page.getByRole('button', { name: 'Workbook', exact: true });
 	await workbookToggle.click();
-	await expect(workbookToggle).toHaveAttribute('aria-expanded', 'true');
+	await expect(workbookToggle).toHaveAttribute('aria-pressed', 'true');
 	const box = await page.getByRole('complementary', { name: 'Attached workbook' }).boundingBox();
 	expect(box?.width).toBe(390);
 	expect(box?.height).toBe(844);

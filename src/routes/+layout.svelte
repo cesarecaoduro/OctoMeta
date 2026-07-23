@@ -3,9 +3,11 @@
 	import { createSvelteAuthClient } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import { authClient } from '$lib/auth-client';
 	import { setupPersistence } from '$lib/persistence';
+	import { AppearanceProvider } from '$lib/ui';
 	import '$lib/styles/fonts.css';
 	import '$lib/styles/tokens.css';
 	import '$lib/styles/base.css';
+	import '$lib/styles/primitives.css';
 
 	let { children } = $props();
 
@@ -15,4 +17,5 @@
 	createSvelteAuthClient({ authClient, convexClient });
 </script>
 
+<AppearanceProvider />
 {@render children()}

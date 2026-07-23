@@ -1,0 +1,52 @@
+/* Cross-surface primitives for issue #26. Components add behavior; these
+   classes keep material, focus, sheet, modal, menu, and motion rules coherent. */
+.ui-surface {
+	min-width: 0;
+	color: var(--text);
+	background: var(--canvas);
+}
+
+.ui-surface[data-surface='floating'],
+.ui-surface[data-surface='sheet'],
+.ui-surface[data-surface='modal'],
+.ui-surface[data-surface='menu'] {
+	border: 1px solid var(--border);
+	background: var(--material);
+	box-shadow: var(--shadow-floating);
+}
+
+.ui-surface[data-surface='floating'],
+.ui-surface[data-surface='menu'] {
+	border-radius: var(--radius-control);
+}
+
+.ui-surface[data-surface='sheet'] {
+	border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+}
+
+.ui-surface[data-surface='modal'] {
+	border-radius: var(--radius-modal);
+}
+
+@supports (backdrop-filter: blur(1px)) {
+	.ui-surface[data-surface='floating'],
+	.ui-surface[data-surface='sheet'],
+	.ui-surface[data-surface='modal'],
+	.ui-surface[data-surface='menu'] {
+		backdrop-filter: blur(var(--material-blur)) saturate(112%);
+	}
+}
+
+@media (prefers-reduced-transparency: reduce) {
+	.ui-surface[data-surface] {
+		background: var(--surface);
+		backdrop-filter: none;
+	}
+}
+
+@media (prefers-contrast: more) {
+	.ui-surface[data-surface] {
+		border-color: currentColor;
+		box-shadow: none;
+	}
+}

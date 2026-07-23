@@ -101,13 +101,16 @@ test('local create, document and workbook edits, history, and reload make zero C
 	await expect(page.getByTestId('save-state')).toHaveText('Stored on this device');
 
 	await page.getByTestId('slot-insert-text').last().click();
+	await expect(page.locator('.tiptap')).toBeFocused();
 	await page.keyboard.type('Local narrative survives reload');
 	await expect(page.locator('.tiptap')).toContainText('Local narrative survives reload');
+	await expect(page.locator('.trace')).not.toHaveClass(/active/);
 	await expect(page.getByTestId('save-state')).toHaveText('Saving locally…');
 
 	await page.waitForFunction(() => window.__canvas.sheetsMounted(), null, { timeout: 30_000 });
 	const [sheetId] = await page.evaluate(() => window.__canvas.sheetIds());
 	await page.evaluate(([sheet]) => window.__canvas.setCell(sheet, 'A1', 42), [sheetId]);
+	await expect(page.locator('.trace')).toHaveClass(/active/);
 	await expect.poll(() => page.evaluate(([sheet]) => window.__canvas.graphDisplay(sheet, 'A1'), [sheetId])).toBe(42);
 	await page.getByTestId('undo').click();
 	await expect.poll(() => page.evaluate(([sheet]) => window.__canvas.graphDisplay(sheet, 'A1'), [sheetId])).toBe('#VALUE!');
@@ -593,6 +596,7 @@ test('the complete owned steel workbench survives edit, error, reload, trash, an
 	expect(await page.evaluate(() => window.__canvas.sheetIds().length)).toBe(3);
 	expect(await page.evaluate(() => window.__canvas.getRawCell('sheet-steel-calculation', 'A1')?.f)).toBeFalsy();
 
+	await expect(page.locator('[data-u-comp][tabindex="1"]')).toHaveCount(0);
 	const axe = await new AxeBuilder({ page }).analyze();
 	expect(axe.violations).toEqual([]);
 
