@@ -11,7 +11,7 @@ Direct `convex`/`convex-svelte` imports are restricted to this directory and
 | `server.ts` | Server token bridge kept inside the Convex import boundary |
 | `serialize.ts` | Graph/bundle serialization and fail-closed hydration |
 | `canonical.ts` | Stable bytes, workbook hash, and complete bundle hash |
-| `local/repository.ts` | Account-scoped IndexedDB working copies, summaries, and generation CAS |
+| `local/repository.ts` | IndexedDB working copies, workspace summaries, cloud bases, local lifecycle, and generation CAS |
 | `local/autosave.ts` | Non-overlapping 500 ms trailing / 2 s maximum local commit queue |
 | `local/serialization.ts` | Local authored/history envelope, structurally distinct from cloud payloads |
 | `workbook-snapshot.ts` | Shared empty-workbook snapshot factory |
@@ -24,6 +24,13 @@ undo history/cursor, workbook manifest, and the Univer snapshot. The repository
 updates the working copy and its document summary in the same transaction only
 when `expectedGeneration` matches. Transaction aborts and stale generations
 leave the previous durable copy unchanged.
+
+Each downloaded main working copy records the cloud base revision, bundle hash,
+and local generation. Subsequent local generations preserve that base, allowing
+the unified index to distinguish a clean downloaded copy from local changes.
+Branch summaries use independent workspace keys and are grouped by the pure
+`$lib/workspace/document-index` model. Duplicate and discard are local-only
+transactions; a duplicate resets undo history and cloud lineage.
 
 The workspace controller captures accepted document/workbook/history changes,
 coalesces rapid input for 500 ms, and forces a commit within 2 seconds of

@@ -41,6 +41,7 @@ flowchart TB
 | Workbook visual/cell snapshot | Univer adapter | atomic persistence bundle |
 | Undo/redo | engine history | report, cells, names, tabs |
 | Working copy generation and local durability | IndexedDB | document index and workbench |
+| Unified local/cloud index state | `src/lib/workspace/document-index.ts` | document list |
 | Account identity and cloud ownership | Better Auth + Convex | route gate and cloud operations |
 | Product document/workspace identity | Application-generated IDs | graph, IndexedDB, route |
 | Save revision, hashes, limits | Convex | persistence facade |
@@ -50,7 +51,9 @@ flowchart TB
 
 1. `/app/[docId]` first loads the authenticated account's IndexedDB `main`
    working copy. A cloud-backed document without a local copy is read once and
-   committed locally before the editable surface mounts.
+   committed locally before the editable surface mounts. That first generation
+   records the cloud base revision and hash; later generations make local-change
+   state observable without a cloud write.
 2. New documents are application-ID local records; creation sends no Convex
    product mutation. Convex still distinguishes live, trashed, missing,
    unauthorized, and integrity-failed states for cloud fallback reads.
@@ -95,12 +98,13 @@ src/
     persistence/
       client.ts                   only UI-facing Convex facade
       serialize.ts, canonical.ts  bundle codec, hashes, integrity validation
-      local/repository.ts         account-scoped IndexedDB generations + summaries
+      local/repository.ts         IndexedDB generations + per-workspace summaries
       local/autosave.ts           500 ms trailing / 2 s maximum local save queue
       local/serialization.ts      distinct local authored + history envelope
       workbook-snapshot.ts        shared empty-workbook snapshot factory
       saver.ts                    retained legacy cloud saver utility
       fixtures.ts                 real-commit demo/reproducibility fixtures
+    workspace/document-index.ts   grouped local/cloud/branch index model
     components/UserBadge.svelte   authenticated account control
   routes/
     signin/                       email/password, magic link, optional Google
@@ -160,6 +164,13 @@ atomically receive one tab and revision zero. Saves enforce count/byte caps,
 validate referenced assets, compare the expected revision, and replace the
 entire document bundle in one transaction. Load verifies both snapshot and
 bundle hashes before returning an editable state.
+
+The browser repository stores one summary per `accountId + documentId +
+workspaceId`. Main and branch summaries therefore remain independently
+addressable while the document-index model groups them beneath one parent.
+Local duplicate and discard transactions touch IndexedDB only. Save/export
+controls are explicit non-mutating entry points until their dedicated
+cloud-version and portable-file workflows replace them.
 
 Assets are claimed only after MIME, signature, size, ownership, and document
 checks. Reachability includes live blocks and retained undo. Unreachable files

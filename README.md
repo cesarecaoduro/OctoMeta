@@ -6,11 +6,34 @@ OctoMeta is an authenticated engineering workbench. A report canvas, attached
 multi-tab workbook, parameters, equations, derivations, and provenance are
 projections of one typed dependency graph.
 
-The R1.6 workbench is implemented on `feat/v1-6-workbench`: owned documents,
-atomic graph/workbook persistence, a single Univer workbook per document,
-imperial engineering units, safe KaTeX equations, trash/retention, durable
-asset cleanup, a guarded development reset, CI, and a protected production
-release workflow.
+The current delivery program rebuilds OctoMeta as a browser-first, local-first
+technical-document workspace. It retains the typed graph, TipTap report, and
+attached Univer workbook proven by the earlier workbench, while replacing its
+cloud-first authoring model with explicit local durability and immutable cloud
+versions. New documents are created locally, edits and unified undo history
+autosave on the device, and the document index presents local-only,
+cloud-backed, and cloud-only documents together without publishing as a side
+effect.
+
+## Local-first document index
+
+The authenticated `/app` index distinguishes storage state explicitly:
+
+- **On this device · No cloud version** identifies a local-only document.
+- A downloaded cloud document shows its base revision and whether newer local
+  generations exist.
+- **Cloud only · Not downloaded to this device** identifies authorized cloud
+  metadata whose working content is not available locally yet.
+- Device-local branches are grouped beneath their parent document.
+
+Local working copies can be renamed, duplicated with fresh undo history, or
+discarded directly from the index. **Save new version** and **Export** are
+visible entry points but remain non-mutating until the immutable cloud-version
+and portable-export work lands; invoking either currently explains that no
+cloud write occurred. Listing the index and opening a new local document make
+no Convex product write. Live cloud metadata is read once when the index opens;
+Trash is loaded only when opened, and local lifecycle actions reuse the loaded
+metadata without issuing additional Convex calls.
 
 ## Prerequisites
 
@@ -63,9 +86,10 @@ pnpm audit --prod --audit-level=high
 pnpm secret:scan
 ```
 
-The Playwright suite creates an isolated owner, exercises the desktop demo
-through reload/trash/restore, verifies route gating and safe TeX handling, and
-runs the narrow layout at `390×844` with axe.
+The Playwright suite creates an isolated owner, verifies local index lifecycle
+actions, view-scoped cloud reads, and zero-cloud-call local actions, exercises
+the desktop demo through reload/trash/restore, verifies route gating and safe
+TeX handling, and runs the narrow layout at `390×844` with axe.
 
 ## Development reset
 
@@ -122,11 +146,29 @@ production.
 
 ## Project documents
 
+GitHub [issue #5](https://github.com/cesarecaoduro/OctoMeta/issues/5) and its
+child issues are the live delivery tracker. Repository documents provide the
+stable specification, decisions, and implementation context behind those
+tickets.
+
+### Current
+
 | File | Purpose |
 |---|---|
-| [PRD.md](PRD.md) | Product requirements and version arc |
-| [docs/v1-6-workbench-plan.md](docs/v1-6-workbench-plan.md) | R1.6 execution contract and completion evidence |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Current ownership boundaries and code map |
+| [docs/specs/2026-07-22-local-first-document-workspace.md](docs/specs/2026-07-22-local-first-document-workspace.md) | Current product specification for the local-first workspace rebuild |
+| [docs/plans/2026-07-22-feat-local-first-document-workspace-plan.md](docs/plans/2026-07-22-feat-local-first-document-workspace-plan.md) | Current delivery plan, phase gates, and verification strategy |
+| [CONTEXT.md](CONTEXT.md) | Canonical domain language and cross-cutting constraints |
+| [docs/adr/](docs/adr/) | System-wide architectural decisions and trade-offs |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Implemented ownership boundaries, runtime flow, and code map |
 | [SCHEMA.md](SCHEMA.md) | Typed graph and persisted bundle schema |
-| [DESIGN.md](DESIGN.md) | Brand, tokens, and UI direction |
-| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Historical milestones and current release addendum |
+| [DESIGN.md](DESIGN.md) | Brand, design tokens, and interface direction |
+| [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md) | GitHub issue workflow used for active delivery |
+
+### Historical context
+
+| File | Status |
+|---|---|
+| [PRD.md](PRD.md) | Founding product thesis and original version arc; some implementation assumptions are superseded |
+| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Completed V1/R1.6 milestone briefs and workbench pivot |
+| [docs/v1-6-workbench-plan.md](docs/v1-6-workbench-plan.md) | Completed R1.6 execution contract and release evidence |
+| [docs/plans/2026-07-21-feat-browser-first-versioned-persistence-plan.md](docs/plans/2026-07-21-feat-browser-first-versioned-persistence-plan.md) | Superseded persistence plan retained for decision history |

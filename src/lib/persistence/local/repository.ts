@@ -3,7 +3,19 @@ import { observePersistence, type PersistenceActivityObserver } from '../activit
 import type { LocalGraphSnapshot } from './serialization';
 
 const DATABASE_NAME = 'octometa-browser-workspace';
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
+
+/** The role one browser-local working copy plays beneath a document. */
+export type LocalWorkspaceDescriptor =
+	| { kind: 'main' }
+	| { kind: 'branch'; name: string };
+
+/** Immutable cloud generation from which a local working copy began. */
+export interface LocalCloudBase {
+	version: number;
+	bundleHash: string;
+	generation: number;
+}
 
 /** Authored content and unified history captured in one durable generation. */
 export interface LocalWorkingCopyContent {
@@ -17,30 +29,48 @@ export interface LocalWorkingCopyRecord {
 	accountId: string;
 	documentId: string;
 	workspaceId: string;
+	workspace: LocalWorkspaceDescriptor;
 	generation: number;
+	cloudBase?: LocalCloudBase;
 	content: LocalWorkingCopyContent;
 	createdAt: number;
 	updatedAt: number;
 }
 
 /** Lightweight browser-local document entry used by the unified index. */
-export interface LocalDocumentSummary {
+export interface LocalWorkspaceSummary {
 	accountId: string;
 	documentId: string;
+	workspaceId: string;
+	workspace: LocalWorkspaceDescriptor;
 	title: string;
 	generation: number;
+	cloudBase?: LocalCloudBase;
 	stats: { blocks: number; tabs: number; nodes: number; bytes: number };
 	createdAt: number;
 	updatedAt: number;
 }
+
+/** Backwards-compatible name for callers that list only main working copies. */
+export type LocalDocumentSummary = LocalWorkspaceSummary;
 
 /** Input for one expected-generation working-copy transaction. */
 export interface CommitLocalWorkingCopyInput {
 	accountId: string;
 	documentId: string;
 	workspaceId: string;
+	workspace?: LocalWorkspaceDescriptor;
 	expectedGeneration: number;
+	cloudBase?: Omit<LocalCloudBase, 'generation'>;
 	content: LocalWorkingCopyContent;
+}
+
+/** Input for copying one main working copy into a new local-only document. */
+export interface DuplicateLocalDocumentInput {
+	accountId: string;
+	sourceDocumentId: string;
+	documentId: string;
+	title: string;
 }
 
 /** Raised when another writer has already advanced a working copy. */
@@ -63,7 +93,12 @@ interface LocalWorkspaceDatabase extends DBSchema {
 	};
 	documentSummaries: {
 		key: [accountId: string, documentId: string];
-		value: LocalDocumentSummary;
+		value: Omit<LocalWorkspaceSummary, 'workspaceId' | 'workspace'>;
+		indexes: { byAccount: string };
+	};
+	workspaceSummaries: {
+		key: [accountId: string, documentId: string, workspaceId: string];
+		value: LocalWorkspaceSummary;
 		indexes: { byAccount: string };
 	};
 }
@@ -80,6 +115,12 @@ export interface LocalWorkspaceRepository {
 	): Promise<LocalWorkingCopyRecord | null>;
 	/** List browser-local document summaries belonging to exactly one account. */
 	listDocuments(accountId: string): Promise<LocalDocumentSummary[]>;
+	/** List every main and branch working copy belonging to exactly one account. */
+	listWorkspaces(accountId: string): Promise<LocalWorkspaceSummary[]>;
+	/** Copy one main working copy into a new local-only document with fresh history. */
+	duplicateDocument(input: DuplicateLocalDocumentInput): Promise<LocalWorkingCopyRecord>;
+	/** Remove every browser-local working copy for one document. */
+	discardDocument(accountId: string, documentId: string): Promise<number>;
 	/** Close this repository's shared IndexedDB connection. */
 	close(): void;
 }
@@ -94,13 +135,32 @@ export interface LocalWorkspaceRepositoryOptions {
 function openLocalDatabase(name: string): Promise<IDBPDatabase<LocalWorkspaceDatabase>> {
 	let opened: IDBPDatabase<LocalWorkspaceDatabase> | undefined;
 	return openDB<LocalWorkspaceDatabase>(name, DATABASE_VERSION, {
-		upgrade(database) {
+		async upgrade(database, oldVersion, _newVersion, transaction) {
 			if (!database.objectStoreNames.contains('workspaces')) {
 				database.createObjectStore('workspaces');
 			}
 			if (!database.objectStoreNames.contains('documentSummaries')) {
 				const summaries = database.createObjectStore('documentSummaries');
 				summaries.createIndex('byAccount', 'accountId');
+			}
+			if (!database.objectStoreNames.contains('workspaceSummaries')) {
+				const summaries = database.createObjectStore('workspaceSummaries');
+				summaries.createIndex('byAccount', 'accountId');
+			}
+			if (oldVersion === 1) {
+				let cursor = await transaction.objectStore('documentSummaries').openCursor();
+				while (cursor) {
+					const legacy = cursor.value;
+					const summary: LocalWorkspaceSummary = {
+						...legacy,
+						workspaceId: 'main',
+						workspace: { kind: 'main' }
+					};
+					await transaction
+						.objectStore('workspaceSummaries')
+						.put(summary, [summary.accountId, summary.documentId, 'main']);
+					cursor = await cursor.continue();
+				}
 			}
 		},
 		blocking() {
@@ -111,6 +171,70 @@ function openLocalDatabase(name: string): Promise<IDBPDatabase<LocalWorkspaceDat
 		opened = database;
 		return database;
 	});
+}
+
+function workspaceDescriptor(
+	workspaceId: string,
+	provided?: LocalWorkspaceDescriptor
+): LocalWorkspaceDescriptor {
+	return provided ?? (workspaceId === 'main' ? { kind: 'main' } : { kind: 'branch', name: workspaceId });
+}
+
+function normalizeRecord(record: LocalWorkingCopyRecord): LocalWorkingCopyRecord {
+	return {
+		...record,
+		workspace: workspaceDescriptor(record.workspaceId, record.workspace)
+	};
+}
+
+function statsFor(content: LocalWorkingCopyContent): LocalWorkspaceSummary['stats'] {
+	return {
+		blocks: content.graph.authored.blocks.length,
+		tabs: content.graph.authored.workbookManifest.sheets.length,
+		nodes: content.graph.authored.nodes.length,
+		bytes: new TextEncoder().encode(JSON.stringify(content)).byteLength
+	};
+}
+
+function summaryFor(record: LocalWorkingCopyRecord): LocalWorkspaceSummary {
+	return {
+		accountId: record.accountId,
+		documentId: record.documentId,
+		workspaceId: record.workspaceId,
+		workspace: record.workspace,
+		title: record.content.title,
+		generation: record.generation,
+		...(record.cloudBase ? { cloudBase: record.cloudBase } : {}),
+		stats: statsFor(record.content),
+		createdAt: record.createdAt,
+		updatedAt: record.updatedAt
+	};
+}
+
+function duplicateContent(
+	content: LocalWorkingCopyContent,
+	documentId: string,
+	title: string
+): LocalWorkingCopyContent {
+	const duplicated = structuredClone(content);
+	duplicated.title = title;
+	duplicated.graph.authored.blocks = duplicated.graph.authored.blocks.map((block) => ({
+		...block,
+		docId: documentId
+	}));
+	duplicated.graph.history = { undoCursor: 0, undoLog: [] };
+	if (
+		typeof duplicated.workbookSnapshot === 'object' &&
+		duplicated.workbookSnapshot !== null &&
+		!Array.isArray(duplicated.workbookSnapshot)
+	) {
+		duplicated.workbookSnapshot = {
+			...(duplicated.workbookSnapshot as Record<string, unknown>),
+			id: documentId,
+			name: title
+		};
+	}
+	return duplicated;
 }
 
 /** Create an IndexedDB-backed repository without opening the database until first use. */
@@ -128,6 +252,24 @@ export function createLocalWorkspaceRepository(
 		});
 		return databasePromise;
 	};
+	const listWorkspaceSummaries = (accountId: string): Promise<LocalWorkspaceSummary[]> =>
+		observePersistence(
+			options.observe,
+			{ target: 'local', access: 'read', operation: 'workspace.list' },
+			async () => {
+				const rows = await (await database()).getAllFromIndex(
+					'workspaceSummaries',
+					'byAccount',
+					accountId
+				);
+				return rows.sort(
+					(left, right) =>
+						right.updatedAt - left.updatedAt ||
+						left.documentId.localeCompare(right.documentId) ||
+						left.workspaceId.localeCompare(right.workspaceId)
+				);
+			}
+		);
 
 	return {
 		commit: (input) =>
@@ -137,7 +279,7 @@ export function createLocalWorkspaceRepository(
 				async () => {
 					const db = await database();
 					const transaction = db.transaction(
-						['workspaces', 'documentSummaries'],
+						['workspaces', 'workspaceSummaries'],
 						'readwrite'
 					);
 					const key: [string, string, string] = [
@@ -145,7 +287,8 @@ export function createLocalWorkspaceRepository(
 						input.documentId,
 						input.workspaceId
 					];
-					const current = await transaction.objectStore('workspaces').get(key);
+					const currentRow = await transaction.objectStore('workspaces').get(key);
+					const current = currentRow ? normalizeRecord(currentRow) : undefined;
 					const actualGeneration = current?.generation ?? 0;
 					if (actualGeneration !== input.expectedGeneration) {
 						transaction.abort();
@@ -158,32 +301,30 @@ export function createLocalWorkspaceRepository(
 						accountId: input.accountId,
 						documentId: input.documentId,
 						workspaceId: input.workspaceId,
+						workspace: workspaceDescriptor(input.workspaceId, input.workspace ?? current?.workspace),
 						generation: actualGeneration + 1,
+						...(input.cloudBase
+							? {
+								cloudBase: {
+									...input.cloudBase,
+									generation: actualGeneration + 1
+								}
+							}
+							: current?.cloudBase
+								? { cloudBase: current.cloudBase }
+								: {}),
 						content: input.content,
 						createdAt: current?.createdAt ?? timestamp,
 						updatedAt: timestamp
 					};
-					const summary: LocalDocumentSummary = {
-						accountId: input.accountId,
-						documentId: input.documentId,
-						title: input.content.title,
-						generation: record.generation,
-						stats: {
-							blocks: input.content.graph.authored.blocks.length,
-							tabs: input.content.graph.authored.workbookManifest.sheets.length,
-							nodes: input.content.graph.authored.nodes.length,
-							bytes: new TextEncoder().encode(JSON.stringify(input.content)).byteLength
-						},
-						createdAt: record.createdAt,
-						updatedAt: timestamp
-					};
+					const summary = summaryFor(record);
 
 					try {
 						await Promise.all([
 							transaction.objectStore('workspaces').put(record, key),
 							transaction
-								.objectStore('documentSummaries')
-								.put(summary, [input.accountId, input.documentId])
+								.objectStore('workspaceSummaries')
+								.put(summary, key)
 						]);
 						await transaction.done;
 					} catch (error) {
@@ -197,25 +338,77 @@ export function createLocalWorkspaceRepository(
 			observePersistence(
 				options.observe,
 				{ target: 'local', access: 'read', operation: 'workspace.load' },
-				async () =>
-					(await (await database()).get('workspaces', [accountId, documentId, workspaceId])) ??
-					null
+				async () => {
+					const record = await (await database()).get('workspaces', [
+						accountId,
+						documentId,
+						workspaceId
+					]);
+					return record ? normalizeRecord(record) : null;
+				}
 			),
-		listDocuments: (accountId) =>
+		listDocuments: async (accountId) =>
+			(await listWorkspaceSummaries(accountId)).filter((row) => row.workspace.kind === 'main'),
+		listWorkspaces: listWorkspaceSummaries,
+		duplicateDocument: (input) =>
 			observePersistence(
 				options.observe,
-				{ target: 'local', access: 'read', operation: 'workspace.list' },
+				{ target: 'local', access: 'write', operation: 'workspace.duplicate' },
 				async () => {
-					const rows = await (await database()).getAllFromIndex(
-						'documentSummaries',
-						'byAccount',
-						accountId
+					const db = await database();
+					const transaction = db.transaction(['workspaces', 'workspaceSummaries'], 'readwrite');
+					const source = await transaction.objectStore('workspaces').get([
+						input.accountId,
+						input.sourceDocumentId,
+						'main'
+					]);
+					if (!source) throw new Error('LOCAL_WORKING_COPY_NOT_FOUND');
+					const key: [string, string, string] = [input.accountId, input.documentId, 'main'];
+					if (await transaction.objectStore('workspaces').get(key)) {
+						throw new Error('LOCAL_DOCUMENT_ALREADY_EXISTS');
+					}
+					const timestamp = now();
+					const record: LocalWorkingCopyRecord = {
+						accountId: input.accountId,
+						documentId: input.documentId,
+						workspaceId: 'main',
+						workspace: { kind: 'main' },
+						generation: 1,
+						content: duplicateContent(source.content, input.documentId, input.title),
+						createdAt: timestamp,
+						updatedAt: timestamp
+					};
+					await Promise.all([
+						transaction.objectStore('workspaces').put(record, key),
+						transaction.objectStore('workspaceSummaries').put(summaryFor(record), key)
+					]);
+					await transaction.done;
+					return record;
+				}
+			),
+		discardDocument: (accountId, documentId) =>
+			observePersistence(
+				options.observe,
+				{ target: 'local', access: 'write', operation: 'workspace.discard' },
+				async () => {
+					const db = await database();
+					const transaction = db.transaction(['workspaces', 'workspaceSummaries'], 'readwrite');
+					const summaries = await transaction
+						.objectStore('workspaceSummaries')
+						.index('byAccount')
+						.getAll(accountId);
+					const matches = summaries.filter((summary) => summary.documentId === documentId);
+					await Promise.all(
+						matches.flatMap((summary) => {
+							const key: [string, string, string] = [accountId, documentId, summary.workspaceId];
+							return [
+								transaction.objectStore('workspaces').delete(key),
+								transaction.objectStore('workspaceSummaries').delete(key)
+							];
+						})
 					);
-					return rows.sort(
-						(left, right) =>
-							right.updatedAt - left.updatedAt ||
-							left.documentId.localeCompare(right.documentId)
-					);
+					await transaction.done;
+					return matches.length;
 				}
 			),
 		close(): void {

@@ -134,6 +134,7 @@ produce no Convex product writes.
 
 ## Related Issues
 
+- [A unified document index needs workspace state](unified-document-index-needs-workspace-state-local-persistence-20260723.md)
 - [ADR 0001: Create documents locally before their first cloud save](../../adr/0001-local-first-document-creation.md)
 - [ADR 0011: Keep one unified undo history per working copy](../../adr/0011-one-local-history-per-working-copy.md)
 - [Local-first document workspace specification](../../specs/2026-07-22-local-first-document-workspace.md)

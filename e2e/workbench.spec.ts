@@ -121,6 +121,129 @@ test('local create, document and workbook edits, history, and reload make zero C
 	).toEqual([]);
 });
 
+test('the unified index manages a local document without cloud calls', async ({ page }) => {
+	await page.goto('/app');
+	await page.getByTestId('new-doc').click();
+	await expect(page.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	await page.getByTestId('back').click();
+
+	let row = page.getByTestId('doc-row').filter({ hasText: 'Untitled' }).first();
+	await expect(row.getByTestId('storage-status')).toContainText(
+		'On this device · No cloud version'
+	);
+	await expect(row.getByTestId('save-entry')).toBeVisible();
+	await expect(row.getByTestId('export-entry')).toBeVisible();
+	await expect(row.getByTestId('duplicate')).toBeVisible();
+	await expect(row.getByTestId('discard')).toBeVisible();
+
+	await page.evaluate(() => window.__documentIndex.clearPersistenceActivity());
+	await row.getByTestId('rename').click();
+	await page.getByTestId('rename-input').fill('Index lifecycle');
+	await page.getByTestId('rename-input').press('Enter');
+	row = page.getByTestId('doc-row').filter({ hasText: 'Index lifecycle' }).first();
+	await expect(row).toBeVisible();
+	await row.getByTestId('save-entry').click();
+	await expect(page.getByTestId('toast')).toContainText('No cloud write was made');
+	await row.getByTestId('export-entry').click();
+	await expect(page.getByTestId('toast')).toContainText('not available yet');
+	await row.getByTestId('duplicate').click();
+
+	const duplicate = page.getByTestId('doc-row').filter({ hasText: 'Index lifecycle copy' });
+	await expect(duplicate).toHaveCount(1);
+	await expect(duplicate.getByTestId('storage-status')).toContainText(
+		'On this device · No cloud version'
+	);
+	await duplicate.getByTestId('discard').click();
+	await duplicate.getByTestId('confirm-discard').click();
+	await expect(duplicate).toHaveCount(0);
+
+	row = page.getByTestId('doc-row').filter({ hasText: 'Index lifecycle' }).first();
+	await row.getByTestId('discard').click();
+	await row.getByTestId('confirm-discard').click();
+	await expect(page.getByTestId('doc-row').filter({ hasText: 'Index lifecycle' })).toHaveCount(0);
+
+	expect(
+		await page.evaluate(() =>
+			window.__documentIndex
+				.persistenceActivity()
+				.filter((activity) => activity.target === 'cloud')
+		)
+	).toEqual([]);
+});
+
+test('the document index reads cloud collections only when their view needs them', async ({
+	page
+}) => {
+	const authRequests: string[] = [];
+	page.on('request', (request) => {
+		const url = new URL(request.url());
+		if (url.pathname.startsWith('/api/auth/')) authRequests.push(url.pathname);
+	});
+	await page.goto('/app');
+	await expect(page.getByTestId('new-doc')).toBeEnabled();
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.__documentIndex
+					.persistenceActivity()
+					.filter(
+						(activity) =>
+							activity.target === 'cloud' &&
+							activity.access === 'read' &&
+							activity.phase === 'succeeded'
+					)
+					.map((activity) => activity.operation)
+			)
+		)
+		.toEqual(['documents.list']);
+
+	await page.waitForTimeout(1_000);
+	expect(
+		await page.evaluate(() =>
+			window.__documentIndex
+				.persistenceActivity()
+				.filter(
+					(activity) =>
+						activity.operation === 'documents.list' && activity.phase === 'succeeded'
+				)
+		)
+	).toHaveLength(1);
+	expect(authRequests).toEqual(['/api/auth/get-session', '/api/auth/convex/token']);
+	const settledAuthRequests = [...authRequests];
+	await page.waitForTimeout(1_000);
+	expect(authRequests).toEqual(settledAuthRequests);
+
+	await page.getByRole('tab', { name: /Trash/ }).click();
+	await expect
+		.poll(() =>
+			page.evaluate(() =>
+				window.__documentIndex
+					.persistenceActivity()
+					.filter(
+						(activity) =>
+							activity.operation === 'documents.listTrash' &&
+							activity.phase === 'succeeded'
+					)
+					.length
+			)
+		)
+		.toBe(1);
+
+	await page.getByRole('tab', { name: /Live/ }).click();
+	await page.getByRole('tab', { name: /Trash/ }).click();
+	await page.waitForTimeout(500);
+	expect(
+		await page.evaluate(() =>
+			window.__documentIndex
+				.persistenceActivity()
+				.filter(
+					(activity) =>
+						activity.operation === 'documents.listTrash' && activity.phase === 'succeeded'
+				)
+		)
+	).toHaveLength(1);
+});
+
 test('the complete owned steel workbench survives edit, error, reload, trash, and restore', async ({
 	page
 }) => {
@@ -234,6 +357,7 @@ test('the complete owned steel workbench survives edit, error, reload, trash, an
 
 	await page.getByTestId('back').click();
 	const row = page.getByTestId('doc-row').filter({ hasText: 'Steel beam check' }).first();
+	await expect(row.getByTestId('storage-status')).toContainText('Base v1 · Local changes');
 	await row.getByTestId('delete').click();
 	await row.getByRole('button', { name: 'Confirm trash' }).click();
 	await page.getByRole('tab', { name: /Trash/ }).click();
@@ -243,6 +367,20 @@ test('the complete owned steel workbench survives edit, error, reload, trash, an
 	await page.locator(`[data-testid="doc-link"][href="${docPath}"]`).click();
 	await expect(page).toHaveURL(docUrl);
 	await expect(chip(page, 'chip-steel-area')).toHaveText('38.00 in²');
+	await page.getByTestId('back').click();
+	await page.evaluate(() => window.__documentIndex.clearPersistenceActivity());
+	await row.getByTestId('discard').click();
+	await row.getByTestId('confirm-discard').click();
+	await expect(row.getByTestId('storage-status')).toContainText(
+		'Cloud only · Not downloaded to this device'
+	);
+	expect(
+		await page.evaluate(() =>
+			window.__documentIndex
+				.persistenceActivity()
+				.filter((activity) => activity.target === 'cloud' && activity.access === 'write')
+		)
+	).toEqual([]);
 
 	expect(consoleErrors).toEqual([]);
 });
