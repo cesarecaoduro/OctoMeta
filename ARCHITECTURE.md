@@ -173,6 +173,8 @@ all product rows and assets. The administrative reset:
 - accepts only `development` or `test`;
 - requires a deployment-specific secret and exact backup acknowledgement;
 - counts/deletes a hardcoded product allowlist;
+- deletes root file storage, including orphaned legacy objects, while leaving
+  Better Auth and Resend component storage untouched;
 - locks all product writes;
 - deletes in bounded stages;
 - unlocks only after zero-row verification;
