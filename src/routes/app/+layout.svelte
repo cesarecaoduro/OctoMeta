@@ -1,10 +1,47 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { useAuth } from '@mmailaender/convex-better-auth-svelte/svelte';
 	import Logo from '$lib/components/Logo.svelte';
 	import UserBadge from '$lib/components/UserBadge.svelte';
+	import { authClient } from '$lib/auth-client';
+	import { rememberOwnerAccount, rememberedOwnerAccount } from '$lib/workspace';
 
 	let { children } = $props();
 	const auth = useAuth();
+	const authSession = authClient.useSession();
+	let online = $state(true);
+	let offlineOwner = $state<string | null>(null);
+	const canOpenOffline = $derived(!online && offlineOwner !== null);
+
+	$effect(() => {
+		const accountId = $authSession.data?.user.id;
+		if (!accountId) return;
+		rememberOwnerAccount(accountId);
+		offlineOwner = accountId;
+	});
+
+	$effect(() => {
+		const routeUrl = page.url.href;
+		if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+		void navigator.serviceWorker.ready.then((registration) => {
+			registration.active?.postMessage({ type: 'cache-owner-route', url: routeUrl });
+		});
+	});
+
+	onMount(() => {
+		online = navigator.onLine;
+		offlineOwner = rememberedOwnerAccount();
+		const update = (): void => {
+			online = navigator.onLine;
+		};
+		window.addEventListener('online', update);
+		window.addEventListener('offline', update);
+		return () => {
+			window.removeEventListener('online', update);
+			window.removeEventListener('offline', update);
+		};
+	});
 </script>
 
 <header class="app-header">
@@ -19,7 +56,7 @@
 	<UserBadge />
 </header>
 
-{#if auth.isAuthenticated}
+{#if auth.isAuthenticated || canOpenOffline}
 	{@render children()}
 {:else if auth.isLoading}
 	<main class="auth-state" aria-busy="true">

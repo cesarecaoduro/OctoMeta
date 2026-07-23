@@ -11,12 +11,14 @@
 	let {
 		session,
 		snapshot = null,
+		readonly = false,
 		expanded = $bindable(false),
 		ondirty,
 		onready
 	}: {
 		session: GraphSession;
 		snapshot?: unknown;
+		readonly?: boolean;
 		expanded?: boolean;
 		ondirty: () => void;
 		onready?: (adapter: WorkbookAdapter | null) => void;
@@ -59,7 +61,9 @@
 				adapter = mounted;
 				onready?.(mounted);
 				cleanup.push(
-					mounted.onMutated(ondirty),
+					mounted.onMutated(() => {
+						if (!readonly) ondirty();
+					}),
 					mounted.onSelect((next) => {
 						selected = next;
 						activeSheetId = next.sheetId;
@@ -102,6 +106,7 @@
 	}
 
 	function addWorkbookTab(): void {
+		if (readonly) return;
 		const result = adapter?.addSheet();
 		if (!result) return;
 		if (!result.ok) {
@@ -116,7 +121,7 @@
 	}
 
 	function commitTabRename(): void {
-		if (!adapter) return;
+		if (!adapter || readonly) return;
 		const sheetId = activeSheetId;
 		const name = renameText.trim();
 		const result = adapter.renameSheet(sheetId, name);
@@ -131,7 +136,7 @@
 	}
 
 	function deleteActiveTab(): void {
-		if (!adapter) return;
+		if (!adapter || readonly) return;
 		const result = adapter.deleteSheet(activeSheetId);
 		if (!result.ok) {
 			error = result.message;
@@ -147,7 +152,7 @@
 	}
 
 	function commitFormula(): void {
-		if (!adapter || !selected) return;
+		if (!adapter || !selected || readonly) return;
 		adapter.setCellText(selected.sheetId, selected.a1, formulaText);
 		ondirty();
 	}
@@ -176,7 +181,7 @@
 				class="mono"
 				aria-label="Cell value or formula"
 				bind:value={formulaText}
-				disabled={!selected}
+				disabled={!selected || readonly}
 				onkeydown={(event) => {
 					if (event.key === 'Enter') {
 						event.preventDefault();
@@ -184,7 +189,7 @@
 					}
 				}}
 			/>
-			<button type="button" disabled={!selected} onclick={commitFormula}>Apply</button>
+			<button type="button" disabled={!selected || readonly} onclick={commitFormula}>Apply</button>
 		</div>
 
 		<div class="tab-tools">
@@ -200,7 +205,13 @@
 						>{sheet.name}</button>
 					{/each}
 				</div>
-				<button class="add" type="button" onclick={addWorkbookTab} aria-label="Add workbook tab">+</button>
+				<button
+					class="add"
+					type="button"
+					disabled={readonly}
+					onclick={addWorkbookTab}
+					aria-label="Add workbook tab">+</button
+				>
 			</div>
 			<form
 				class="rename"
@@ -209,12 +220,17 @@
 					commitTabRename();
 				}}
 			>
-				<input aria-label="Active tab name" bind:value={renameText} maxlength="64" />
-				<button type="submit">Rename</button>
+				<input
+					aria-label="Active tab name"
+					bind:value={renameText}
+					maxlength="64"
+					disabled={readonly}
+				/>
+				<button type="submit" disabled={readonly}>Rename</button>
 				<button
 					class="danger"
 					type="button"
-					disabled={sheets.length === 1}
+					disabled={readonly || sheets.length === 1}
 					onclick={deleteActiveTab}>Delete</button
 				>
 			</form>
@@ -222,7 +238,14 @@
 
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
 		{#if loading}<p class="loading mono" aria-live="polite">Starting workbook…</p>{/if}
-		<div class="grid" bind:this={gridEl} data-testid="workbook-grid"></div>
+		<div
+			class="grid"
+			class:readonly
+			bind:this={gridEl}
+			data-testid="workbook-grid"
+			aria-disabled={readonly}
+			inert={readonly}
+		></div>
 	</section>
 </aside>
 
@@ -299,6 +322,7 @@
 		min-height: 230px;
 		background: var(--surface);
 	}
+	.grid.readonly { pointer-events: none; }
 	.loading, .error { position: absolute; z-index: 1; margin: var(--s2); }
 	.error { color: var(--error); }
 	@media (max-width: 800px) {

@@ -41,6 +41,29 @@ async function waitSaved(page: Page): Promise<void> {
 	});
 }
 
+async function failWorkspaceWritesWithQuota(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		const originalPut = IDBObjectStore.prototype.put;
+		Object.assign(window, {
+			__restoreIndexedDbPut: () => {
+				IDBObjectStore.prototype.put = originalPut;
+			}
+		});
+		IDBObjectStore.prototype.put = function (...args: Parameters<IDBObjectStore['put']>) {
+			if (this.name === 'workspaces') {
+				throw new DOMException('Device quota is full.', 'QuotaExceededError');
+			}
+			return originalPut.apply(this, args);
+		};
+	});
+}
+
+async function restoreWorkspaceWrites(page: Page): Promise<void> {
+	await page.evaluate(() => {
+		(window as typeof window & { __restoreIndexedDbPut(): void }).__restoreIndexedDbPut();
+	});
+}
+
 async function durableWorkingCopy(page: Page): Promise<{
 	generation: number;
 	content: { title: string; graph: { history: { undoCursor: number } } };
@@ -119,6 +142,224 @@ test('local create, document and workbook edits, history, and reload make zero C
 				.filter((activity) => activity.target === 'cloud' && activity.access === 'write')
 		)
 	).toEqual([]);
+});
+
+test('a second tab is read-only until cooperative takeover flushes the active generation', async ({
+	page
+}) => {
+	await page.goto('/app');
+	await page.getByTestId('new-doc').click();
+	await expect(page.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	const documentUrl = page.url();
+
+	const secondTab = await page.context().newPage();
+	await secondTab.goto(documentUrl);
+	await expect(secondTab.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	await expect(secondTab.getByTestId('editor')).toHaveAttribute('data-editable', 'false');
+	await expect(secondTab.getByTestId('lease-status')).toContainText(
+		'open for editing in another tab'
+	);
+
+	await page.getByTestId('slot-insert-text').last().click();
+	await page.keyboard.type('Flushed before takeover');
+	await secondTab.getByRole('button', { name: 'Take over editing' }).click();
+
+	await expect(secondTab.getByTestId('editor')).toHaveAttribute('data-editable', 'true', {
+		timeout: 30_000
+	});
+	await expect(secondTab.locator('.tiptap')).toContainText('Flushed before takeover');
+	await expect(page.getByTestId('editor')).toHaveAttribute('data-editable', 'false');
+	await secondTab.close();
+});
+
+test('the active tab keeps storing generations after a read-only tab opens', async ({ page }) => {
+	await page.goto('/app');
+	await page.getByTestId('new-doc').click();
+	await expect(page.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	await page.getByTestId('slot-insert-text').last().click();
+	await expect(page.locator('.tiptap')).toBeFocused();
+	await page.keyboard.type('C');
+	await waitSaved(page);
+
+	const secondTab = await page.context().newPage();
+	await secondTab.goto(page.url());
+	await expect(secondTab.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	await expect(secondTab.getByTestId('editor')).toHaveAttribute('data-editable', 'false');
+	await expect(secondTab.locator('.tiptap')).toContainText('C');
+	const readonlyRuntime = await secondTab.evaluate(() => {
+		const marker = crypto.randomUUID();
+		Object.assign(window, { __readonlyRuntimeMarker: marker });
+		return marker;
+	});
+
+	await page.bringToFront();
+	await page.locator('.tiptap').click();
+	await page.keyboard.type('iao');
+	await expect(page.locator('.tiptap')).toContainText('Ciao');
+	await waitSaved(page);
+	await expect(page.getByTestId('storage-recovery')).toHaveCount(0);
+	await expect.poll(async () => (await durableWorkingCopy(page)).content.graph.authored.blocks)
+		.toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					pm: expect.objectContaining({
+						content: expect.arrayContaining([
+							expect.objectContaining({ text: expect.stringContaining('Ciao') })
+						])
+					})
+				})
+			])
+		);
+	await expect(secondTab.locator('.tiptap')).toContainText('Ciao');
+	await expect(secondTab.getByTestId('editor')).toHaveAttribute('data-editable', 'false');
+
+	await page.waitForFunction(() => window.__canvas.sheetsMounted(), null, { timeout: 30_000 });
+	const [sheetId] = await page.evaluate(() => window.__canvas.sheetIds());
+	await page.evaluate(([sheet]) => window.__canvas.setCell(sheet, 'A1', 42), [sheetId]);
+	await waitSaved(page);
+	await expect
+		.poll(() => secondTab.evaluate(([sheet]) => window.__canvas.graphDisplay(sheet, 'A1'), [sheetId]))
+		.toBe(42);
+
+	expect(
+		await secondTab.evaluate(
+			() => (window as typeof window & { __readonlyRuntimeMarker?: string }).__readonlyRuntimeMarker
+		)
+	).toBe(readonlyRuntime);
+	await secondTab.close();
+});
+
+test('takeover stays read-only when the active generation cannot be stored', async ({ page }) => {
+	await page.goto('/app');
+	await page.getByTestId('new-doc').click();
+	await expect(page.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	const secondTab = await page.context().newPage();
+	await secondTab.goto(page.url());
+	await expect(secondTab.getByTestId('editor')).toHaveAttribute('data-editable', 'false');
+
+	await failWorkspaceWritesWithQuota(page);
+	await page.getByTestId('slot-insert-text').last().click();
+	await page.keyboard.type('Must remain with the active owner');
+	await expect(page.getByTestId('save-state')).toHaveAttribute('data-save-state', 'error');
+
+	await secondTab.getByRole('button', { name: 'Take over editing' }).click();
+	await expect(secondTab.getByTestId('editor')).toHaveAttribute('data-editable', 'false');
+	await expect(secondTab.getByTestId('lease-status')).toContainText(
+		'Takeover was not completed'
+	);
+	await expect(page.getByTestId('editor')).toHaveAttribute('data-editable', 'true');
+
+	await restoreWorkspaceWrites(page);
+	await page.getByRole('button', { name: 'Retry local save' }).click();
+	await waitSaved(page);
+	await secondTab.close();
+});
+
+test('unsupported edit locking opens the working copy read-only with actionable guidance', async ({
+	page
+}) => {
+	await page.goto('/app');
+	await page.getByTestId('new-doc').click();
+	await expect(page.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	const documentUrl = page.url();
+
+	await page.context().addInitScript(() => {
+		Object.defineProperty(navigator, 'locks', {
+			configurable: true,
+			value: undefined
+		});
+	});
+	const unsupportedTab = await page.context().newPage();
+	await unsupportedTab.goto(documentUrl);
+
+	await expect(unsupportedTab.getByTestId('editor')).toHaveAttribute(
+		'data-editable',
+		'false'
+	);
+	await expect(unsupportedTab.getByTestId('lease-status')).toContainText(
+		'browser that supports Web Locks and BroadcastChannel'
+	);
+	await expect(
+		unsupportedTab.getByRole('button', { name: 'Take over editing' })
+	).toHaveCount(0);
+	await unsupportedTab.close();
+});
+
+test('a previously opened owner working copy remains editable across an offline reload', async ({
+	page
+}) => {
+	await page.goto('/app');
+	await page.getByTestId('new-doc').click();
+	await expect(page.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	await expect
+		.poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length > 0))
+		.toBe(true);
+	await page.evaluate(async () => {
+		await navigator.serviceWorker.ready;
+		if (navigator.serviceWorker.controller) return;
+		await new Promise<void>((resolve) => {
+			navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), {
+				once: true
+			});
+		});
+	});
+	await expect
+		.poll(() =>
+			page.evaluate(async () => {
+				for (const cacheName of await caches.keys()) {
+					if (!cacheName.startsWith('octometa-owner-pages-')) continue;
+					if (await (await caches.open(cacheName)).match(location.href)) return true;
+				}
+				return false;
+			})
+		)
+		.toBe(true);
+
+	await page.context().setOffline(true);
+	await expect(page.getByText('Offline. Changes continue to save on this device.')).toBeVisible();
+	await page.getByTestId('slot-insert-text').last().click();
+	await expect(page.locator('.tiptap')).toBeFocused();
+	await page.keyboard.type('Offline owner work survives reload');
+	await expect(page.locator('.tiptap')).toContainText('Offline owner work survives reload');
+	await waitSaved(page);
+	await page.reload();
+
+	await expect(page.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	await expect(page.getByTestId('editor')).toHaveAttribute('data-editable', 'true');
+	await expect(page.locator('.tiptap')).toContainText('Offline owner work survives reload');
+	await page.evaluate(() => window.__canvas.clearPersistenceActivity());
+	await page.context().setOffline(false);
+	await page.waitForTimeout(750);
+	expect(
+		await page.evaluate(() =>
+			window.__canvas
+				.persistenceActivity()
+				.filter((activity) => activity.target === 'cloud' && activity.access === 'write')
+		)
+	).toEqual([]);
+});
+
+test('a quota failure never reports durability and offers a successful retry', async ({
+	page
+}) => {
+	await page.goto('/app');
+	await page.getByTestId('new-doc').click();
+	await expect(page.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	await waitSaved(page);
+	await failWorkspaceWritesWithQuota(page);
+
+	await page.getByTestId('slot-insert-text').last().click();
+	await page.keyboard.type('Work that still needs a durable transaction');
+	await expect(page.getByTestId('save-state')).toHaveAttribute('data-save-state', 'error');
+	await expect(page.getByTestId('save-state')).not.toHaveText('Stored on this device');
+	await expect(page.getByTestId('storage-recovery')).toContainText(
+		'Free device storage, then retry'
+	);
+
+	await restoreWorkspaceWrites(page);
+	await page.getByRole('button', { name: 'Retry local save' }).click();
+	await waitSaved(page);
+	await expect(page.getByTestId('storage-recovery')).toHaveCount(0);
 });
 
 test('the unified index manages a local document without cloud calls', async ({ page }) => {

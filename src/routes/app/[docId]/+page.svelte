@@ -16,16 +16,25 @@
 	import {
 		createLocalWorkspaceRepository,
 		createPersistenceActivityLog,
+		createWorkspaceLease,
+		describeLocalStorageFailure,
 		hydrateGraph,
 		localGraphRows,
 		serializeLocalGraph,
 		usePersistence,
 		type DocumentId,
 		type LocalWorkingCopyContent,
-		type SaveState
+		type LocalStorageFailure,
+		type SaveState,
+		type WorkspaceLease,
+		type WorkspaceLeaseState
 	} from '$lib/persistence';
 	import { authClient } from '$lib/auth-client';
-	import { createWorkspaceController, type WorkspaceController } from '$lib/workspace';
+	import {
+		createWorkspaceController,
+		resolveOwnerAccount,
+		type WorkspaceController
+	} from '$lib/workspace';
 	import { createDocEditor, type DocEditor, type InsertableBlockType } from '$lib/editor';
 	import {
 		createGraphSession,
@@ -62,7 +71,11 @@
 	let titleDraft = $state('');
 	let titleError = $state('');
 	let saveState = $state<SaveState>('idle');
+	let storageFailure = $state<LocalStorageFailure | null>(null);
 	let online = $state(true);
+	let leaseState = $state<WorkspaceLeaseState>('acquiring');
+	let leaseMessage = $state('');
+	let activeLeaseTab = $state('');
 	let editorEl: HTMLDivElement;
 	let imageInputEl: HTMLInputElement | undefined;
 	/** Insertion-slot position for the next picked image (null = after selection). */
@@ -102,6 +115,7 @@
 	}
 
 	function startTitleEdit(): void {
+		if (leaseState !== 'owner') return;
 		titleDraft = title;
 		titleError = '';
 		titleEditing = true;
@@ -109,6 +123,10 @@
 
 	function commitTitle(): void {
 		if (!titleEditing) return;
+		if (leaseState !== 'owner') {
+			titleEditing = false;
+			return;
+		}
 		const next = titleDraft.trim();
 		if (!next) {
 			titleError = 'Title is required.';
@@ -136,7 +154,14 @@
 	let registry: FunctionRegistry;
 	let session: GraphSession = $state()!;
 	let workspace: WorkspaceController | null = null;
+	let lease: WorkspaceLease | null = null;
 	let docEditor: DocEditor | null = null;
+	let ownerAccountId = '';
+	let loadedGeneration = 0;
+	let pendingPeerGeneration = 0;
+	let readonlyRefreshInFlight = false;
+	let projectionRevision = $state(0);
+	const canEdit = $derived(leaseState === 'owner');
 
 	let workbookAdapter: WorkbookAdapter | null = $state(null);
 	let restoredWorkbookSnapshot: unknown = $state(null);
@@ -148,8 +173,39 @@
 		error: 'Device save failed'
 	};
 
+	/** Refresh a read-only projection from a generation already stored by its owner. */
+	async function refreshReadonlyIfStale(): Promise<void> {
+		if (
+			readonlyRefreshInFlight ||
+			phase !== 'ready' ||
+			leaseState !== 'readonly' ||
+			pendingPeerGeneration <= loadedGeneration ||
+			!ownerAccountId
+		) {
+			return;
+		}
+		readonlyRefreshInFlight = true;
+		try {
+			const local = await localRepository.load(ownerAccountId, String(docId), 'main');
+			if (leaseState !== 'readonly') return;
+			if (!local || local.generation <= loadedGeneration) {
+				pendingPeerGeneration = loadedGeneration;
+				return;
+			}
+			installWorkingCopy(ownerAccountId, local.content, local.generation);
+			projectionRevision += 1;
+		} catch (error) {
+			pendingPeerGeneration = loadedGeneration;
+			console.warn('read-only projection refresh failed:', error);
+		} finally {
+			readonlyRefreshInFlight = false;
+			if (pendingPeerGeneration > loadedGeneration) void refreshReadonlyIfStale();
+		}
+	}
+
 	/** The single write path through the framework-neutral workspace controller. */
 	function commitMutation(m: GraphMutation): boolean {
+		if (!canEdit) return false;
 		const result = workspace?.commit(m);
 		if (!result?.ok) {
 			const message = result && !result.ok ? result.error.message : 'workspace not ready';
@@ -161,6 +217,7 @@
 
 	/** Editor projection writes are scheduled by the editor's `onChanged` signal. */
 	function commitProjectionMutation(m: GraphMutation): boolean {
+		if (!canEdit) return false;
 		const result = workspace?.commitProjection(m);
 		if (!result?.ok) {
 			const message = result && !result.ok ? result.error.message : 'workspace not ready';
@@ -170,6 +227,121 @@
 		return true;
 	}
 
+	/** Install one durable working-copy generation into the current route. */
+	function installWorkingCopy(
+		accountId: string,
+		content: LocalWorkingCopyContent,
+		generation: number
+	): void {
+		const { graph: hydrated, mismatches } = hydrateGraph(localGraphRows(content.graph), {
+			registry
+		});
+		if (mismatches.length > 0) {
+			console.warn('reproducibility mismatches on load:', mismatches);
+		}
+
+		docEditor?.destroy();
+		workspace?.dispose();
+		workbookAdapter = null;
+		title = content.title;
+		graph = hydrated;
+		session = createGraphSession({ doc: graph, registry, docId, actor: HUMAN });
+		restoredWorkbookSnapshot = content.workbookSnapshot;
+		loadedGeneration = generation;
+		saveState = 'idle';
+		storageFailure = null;
+
+		workspace = createWorkspaceController({
+			graph: session,
+			title: () => title,
+			local: {
+				initialGeneration: generation,
+				commit: async (expectedGeneration, captured) => {
+					const committed = await localRepository.commit({
+						accountId,
+						documentId: String(docId),
+						workspaceId: 'main',
+						expectedGeneration,
+						content: captured
+					});
+					loadedGeneration = committed.generation;
+					lease?.announceStoredGeneration(committed.generation);
+					return committed.generation;
+				}
+			},
+			projection: {
+				flushPendingChanges: () => docEditor?.flushProse(),
+				renderSettledState: () => docEditor?.renderFromGraph()
+			},
+			workbookSnapshot: () =>
+				workbookAdapter?.saveSnapshot() ?? $state.snapshot(restoredWorkbookSnapshot),
+			activity: persistenceActivity,
+			onSaveState: (state) => (saveState = state),
+			onLocalSaveError: (error) => {
+				storageFailure = error === null ? null : describeLocalStorageFailure(error);
+			}
+		});
+		docEditor = createDocEditor({
+			element: editorEl,
+			editable: canEdit,
+			graph,
+			docId,
+			registry,
+			resolveImageUrl: (storageId) => persistence.fileUrl(storageId),
+			commitMutation: commitProjectionMutation,
+			onChanged: () => workspace?.markChanged(),
+			onUndo: handleUndo,
+			onRedo: handleRedo,
+			onAnnounce: (message) => {
+				blockAnnouncement = '';
+				queueMicrotask(() => (blockAnnouncement = message));
+			},
+			// Chips re-render + flash on every settle (commit/undo/redo).
+			onSettle: (cb) => session.onSettle(() => cb()),
+			// Alt+click / Alt+Enter on a chip opens the inspector (V1-5-5).
+			onInspect: (nodeId) => openInspector(nodeId, { focus: true }),
+			onNavigateCell: (cellRef) => {
+				if (!graph.sheet(cellRef.sheetId)) return false;
+				workbookOpen = true;
+				pendingWorkbookCell = cellRef;
+				queueMicrotask(() => {
+					if (workbookAdapter?.activateCell(cellRef.sheetId, cellRef.a1)) {
+						pendingWorkbookCell = null;
+					}
+				});
+				return true;
+			},
+			editParameter: (publishedNodeId, text) => {
+				if (!canEdit) {
+					return { ok: false, message: 'This working copy is read-only.' };
+				}
+				const resolved = resolvePublishedTarget(graph, publishedNodeId);
+				if (!resolved || resolved.targetNode.kind !== 'input') {
+					return { ok: false, message: 'This parameter is read-only.' };
+				}
+				const parsed = parseParameterInput(text, resolved.targetNode.value);
+				if (!parsed.ok) return parsed;
+				const result = workspace?.commit({
+					op: 'setInput',
+					id: resolved.targetNode.id,
+					value: parsed.value
+				});
+				if (!result?.ok) {
+					return {
+						ok: false,
+						message: result && !result.ok ? result.error.message : 'Workspace not ready.'
+					};
+				}
+				return { ok: true };
+			},
+			// Notebook-style insertion slots between blocks and at the end.
+			onInsertBlockAt: insertBlockAt
+		});
+		// The open inspector re-derives its view-model on every settle.
+		session.onSettle(() => (inspectorRevision += 1));
+		exposeCanvasHooks();
+	}
+
 	/**
 	 * Engine-history undo/redo — the ONE stack spanning prose blockOps, cell
 	 * edits, and name publishes. Runs through the session so every mounted
@@ -177,15 +349,18 @@
 	 * too (Univer's internal undo is suppressed by the sheet NodeView).
 	 */
 	function handleUndo(): void {
+		if (!canEdit) return;
 		workspace?.undo();
 	}
 
 	function handleRedo(): void {
+		if (!canEdit) return;
 		workspace?.redo();
 	}
 
 	/** Add a workbook tab; workbook tabs are not report blocks. */
 	function insertSheet(): void {
+		if (!canEdit) return;
 		const result = workbookAdapter?.addSheet();
 		if (result?.ok) workspace?.markChanged();
 	}
@@ -193,6 +368,7 @@
 	/** Upload the picked file, then add an image block — at the pending slot
 	 * position when a slot initiated the pick, else after the current block. */
 	async function insertImage(input: HTMLInputElement): Promise<void> {
+		if (!canEdit) return;
 		const file = input.files?.[0];
 		input.value = '';
 		const slotAt = pendingImageAt;
@@ -219,7 +395,7 @@
 
 	/** Insertion slots (notebook-style): add a block exactly at the slot's gap. */
 	function insertBlockAt(type: InsertableBlockType, index: number): void {
-		if (!docEditor) return;
+		if (!docEditor || !canEdit) return;
 		if (type === 'image') {
 			// The block lands once the file is picked (insertImage above).
 			pendingImageAt = index;
@@ -247,6 +423,19 @@
 
 	function flushAll(): void {
 		void workspace?.flush().catch(() => {});
+	}
+
+	async function requestTakeover(): Promise<void> {
+		leaseMessage = '';
+		if (await lease?.requestTakeover()) location.reload();
+	}
+
+	async function retryLocalSave(): Promise<void> {
+		try {
+			await workspace?.flush();
+		} catch {
+			// The persistent recovery panel remains until a transaction succeeds.
+		}
 	}
 
 	/**
@@ -315,8 +504,38 @@
 		window.addEventListener('offline', setOnline);
 		void (async () => {
 			try {
-				const accountId = $authSession.data?.user.id;
+				const accountId = resolveOwnerAccount(
+					$authSession.data?.user.id,
+					!navigator.onLine
+				);
 				if (!accountId) throw new Error('Authenticated account is unavailable.');
+				ownerAccountId = accountId;
+				lease = createWorkspaceLease({
+					accountId,
+					documentId: String(docId),
+					workspaceId: 'main',
+					flush: async () => {
+						await workspace?.flush();
+					},
+					onStatus: (status) => {
+						leaseState = status.state;
+						leaseMessage = status.message ?? '';
+						activeLeaseTab = status.activeTabId?.slice(0, 8) ?? '';
+						const editable = status.state === 'owner';
+						docEditor?.setEditable(editable);
+						if (!editable) {
+							titleEditing = false;
+							parametersOpen = false;
+						}
+						void refreshReadonlyIfStale();
+					},
+					onStoredGeneration: (generation) => {
+						pendingPeerGeneration = Math.max(pendingPeerGeneration, generation);
+						void refreshReadonlyIfStale();
+					}
+				});
+				await lease.start();
+				if (cancelled) return;
 				registry = createBuiltinRegistry();
 				let local = await localRepository.load(accountId, String(docId), 'main');
 				let content: LocalWorkingCopyContent;
@@ -357,95 +576,9 @@
 					initialGeneration = local.generation;
 				}
 				if (cancelled) return;
-				title = content.title;
-				const { graph: hydrated, mismatches } = hydrateGraph(localGraphRows(content.graph), { registry });
-				if (mismatches.length > 0) {
-					console.warn('reproducibility mismatches on load:', mismatches);
-				}
-				graph = hydrated;
-				session = createGraphSession({ doc: graph, registry, docId, actor: HUMAN });
-				restoredWorkbookSnapshot = content.workbookSnapshot;
-				workspace = createWorkspaceController({
-					graph: session,
-					title: () => title,
-					local: {
-						initialGeneration,
-						commit: async (expectedGeneration, captured) =>
-							(
-								await localRepository.commit({
-									accountId,
-									documentId: String(docId),
-									workspaceId: 'main',
-									expectedGeneration,
-									content: captured
-								})
-							).generation
-					},
-					projection: {
-						flushPendingChanges: () => docEditor?.flushProse(),
-						renderSettledState: () => docEditor?.renderFromGraph()
-					},
-					workbookSnapshot: () =>
-						workbookAdapter?.saveSnapshot() ?? restoredWorkbookSnapshot,
-					activity: persistenceActivity,
-					onSaveState: (state) => (saveState = state)
-				});
-				docEditor = createDocEditor({
-					element: editorEl,
-					graph,
-					docId,
-					registry,
-					resolveImageUrl: (storageId) => persistence.fileUrl(storageId),
-					commitMutation: commitProjectionMutation,
-					onChanged: () => workspace?.markChanged(),
-					onUndo: handleUndo,
-					onRedo: handleRedo,
-					onAnnounce: (message) => {
-						blockAnnouncement = '';
-						queueMicrotask(() => (blockAnnouncement = message));
-					},
-					// Chips re-render + flash on every settle (commit/undo/redo).
-					onSettle: (cb) => session.onSettle(() => cb()),
-					// Alt+click / Alt+Enter on a chip opens the inspector (V1-5-5).
-					onInspect: (nodeId) => openInspector(nodeId, { focus: true }),
-					onNavigateCell: (cellRef) => {
-						if (!graph.sheet(cellRef.sheetId)) return false;
-						workbookOpen = true;
-						pendingWorkbookCell = cellRef;
-						queueMicrotask(() => {
-							if (workbookAdapter?.activateCell(cellRef.sheetId, cellRef.a1)) {
-								pendingWorkbookCell = null;
-							}
-						});
-						return true;
-					},
-					editParameter: (publishedNodeId, text) => {
-						const resolved = resolvePublishedTarget(graph, publishedNodeId);
-						if (!resolved || resolved.targetNode.kind !== 'input') {
-							return { ok: false, message: 'This parameter is read-only.' };
-						}
-						const parsed = parseParameterInput(text, resolved.targetNode.value);
-						if (!parsed.ok) return parsed;
-						const result = workspace?.commit({
-							op: 'setInput',
-							id: resolved.targetNode.id,
-							value: parsed.value
-						});
-						if (!result?.ok) {
-							return {
-								ok: false,
-								message: result && !result.ok ? result.error.message : 'Workspace not ready.'
-							};
-						}
-						return { ok: true };
-					},
-					// Notebook-style insertion slots between blocks and at the end.
-					onInsertBlockAt: insertBlockAt
-				});
-				// The open inspector re-derives its view-model on every settle.
-				session.onSettle(() => (inspectorRevision += 1));
-				exposeCanvasHooks();
+				installWorkingCopy(accountId, content, initialGeneration);
 				phase = 'ready';
+				void refreshReadonlyIfStale();
 			} catch (e) {
 				console.error('failed to load document', e);
 				if (!cancelled) phase = 'failed';
@@ -485,6 +618,8 @@
 		workspace = null;
 		void finalFlush.catch(() => {}).finally(() => {
 			finalController?.dispose();
+			lease?.dispose();
+			lease = null;
 			localRepository.close();
 		});
 	});
@@ -521,43 +656,55 @@
 				{#if titleError}<span id="document-title-error" role="alert">{titleError}</span>{/if}
 			</div>
 		{:else}
-			<button class="title" data-testid="doc-title" type="button" onclick={startTitleEdit}>{title}</button>
+			<button
+				class="title"
+				data-testid="doc-title"
+				type="button"
+				disabled={!canEdit}
+				onclick={startTitleEdit}>{title}</button
+			>
 		{/if}
 		<span class="grow"></span>
 		<button
 			class="tool"
 			data-testid="undo"
-			disabled={phase !== 'ready'}
+			disabled={phase !== 'ready' || !canEdit}
 			onclick={handleUndo}
 			title="Undo (⌘Z)">Undo</button
 		>
 		<button
 			class="tool"
 			data-testid="redo"
-			disabled={phase !== 'ready'}
+			disabled={phase !== 'ready' || !canEdit}
 			onclick={handleRedo}
 			title="Redo (⇧⌘Z)">Redo</button
 		>
 		<button
 			class="tool"
 			data-testid="move-up"
-			disabled={phase !== 'ready'}
+			disabled={phase !== 'ready' || !canEdit}
 			onclick={() => docEditor?.moveSelectedBlock(-1)}
 			title="Move block up (⌥↑)">Move ↑</button
 		>
 		<button
 			class="tool"
 			data-testid="move-down"
-			disabled={phase !== 'ready'}
+			disabled={phase !== 'ready' || !canEdit}
 			onclick={() => docEditor?.moveSelectedBlock(1)}
 			title="Move block down (⌥↓)">Move ↓</button
 		>
-		<label class="tool" data-testid="insert-image-label">
+		<label
+			class="tool"
+			class:disabled={!canEdit}
+			aria-disabled={!canEdit}
+			data-testid="insert-image-label"
+		>
 			Image
 			<input
 				type="file"
 				accept="image/*"
 				data-testid="image-input"
+				disabled={!canEdit}
 				bind:this={imageInputEl}
 				onchange={(e) => void insertImage(e.currentTarget)}
 			/>
@@ -565,7 +712,7 @@
 		<button
 			class="tool"
 			data-testid="insert-sheet"
-			disabled={phase !== 'ready'}
+			disabled={phase !== 'ready' || !canEdit}
 			onclick={insertSheet}
 			title="Insert a calculation sheet">Sheet</button
 		>
@@ -574,6 +721,7 @@
 			type="button"
 			bind:this={parametersButton}
 			aria-expanded={parametersOpen}
+			disabled={phase !== 'ready' || !canEdit}
 			onclick={() => (parametersOpen = !parametersOpen)}>Parameters</button
 		>
 		<span
@@ -588,10 +736,46 @@
 					: 'Opening local copy…'}</span
 		>
 	</div>
+	{#if leaseState === 'unsupported'}
+		<p class="lease-state err" data-testid="lease-status" role="alert">
+			<strong>Read-only.</strong> {leaseMessage}
+		</p>
+	{:else if leaseState === 'readonly' || leaseState === 'taking-over'}
+		<div class="lease-state" data-testid="lease-status" role="status">
+			<p>
+				<strong>Read-only.</strong>
+				{leaseMessage ||
+					`This working copy is open for editing in another tab${activeLeaseTab ? ` (${activeLeaseTab})` : ''}.`}
+			</p>
+			<button
+				class="tool"
+				type="button"
+				disabled={leaseState === 'taking-over'}
+				onclick={() => void requestTakeover()}
+				>{leaseState === 'taking-over' ? 'Waiting for active tab…' : 'Take over editing'}</button
+			>
+		</div>
+	{/if}
 	{#if !online}
 		<p class="offline" role="status">
 			Offline. Changes continue to save on this device.
 		</p>
+	{/if}
+	{#if storageFailure}
+		<section
+			class="storage-recovery"
+			data-testid="storage-recovery"
+			role="alert"
+			aria-labelledby="storage-recovery-title"
+		>
+			<div>
+				<strong id="storage-recovery-title">{storageFailure.title}.</strong>
+				{storageFailure.guidance}
+			</div>
+			<button class="tool" type="button" onclick={() => void retryLocalSave()}>
+				Retry local save
+			</button>
+		</section>
 	{/if}
 
 	{#if phase === 'missing'}
@@ -620,40 +804,46 @@
 
 	<div
 		class="editor"
+		class:read-only={!canEdit}
 		data-testid="editor"
 		data-ready={phase === 'ready' ? 'true' : 'false'}
+		data-editable={phase === 'ready' && canEdit ? 'true' : 'false'}
+		inert={phase === 'ready' && !canEdit}
 		bind:this={editorEl}
 	></div>
 
 	{#if phase === 'ready'}
-		<ParametersRail
-			{session}
-			open={parametersOpen}
-			onclose={() => {
-				parametersOpen = false;
-				queueMicrotask(() => parametersButton?.focus());
-			}}
-			onchanged={() => workspace?.markChanged()}
-			oninsert={(nodeId) => docEditor?.insertChip(nodeId) ?? false}
-		/>
-		<WorkbookDrawer
-			{session}
-			snapshot={restoredWorkbookSnapshot}
-			bind:expanded={workbookOpen}
-			ondirty={() => workspace?.markChanged()}
-			onready={(adapter) => {
-				workbookAdapter = adapter;
-				if (adapter) {
-					exposeCanvasHooks();
-					if (
-						pendingWorkbookCell &&
-						adapter.activateCell(pendingWorkbookCell.sheetId, pendingWorkbookCell.a1)
-					) {
-						pendingWorkbookCell = null;
+		{#key projectionRevision}
+			<ParametersRail
+				{session}
+				open={parametersOpen}
+				onclose={() => {
+					parametersOpen = false;
+					queueMicrotask(() => parametersButton?.focus());
+				}}
+				onchanged={() => workspace?.markChanged()}
+				oninsert={(nodeId) => docEditor?.insertChip(nodeId) ?? false}
+			/>
+			<WorkbookDrawer
+				{session}
+				snapshot={restoredWorkbookSnapshot}
+				readonly={!canEdit}
+				bind:expanded={workbookOpen}
+				ondirty={() => workspace?.markChanged()}
+				onready={(adapter) => {
+					workbookAdapter = adapter;
+					if (adapter) {
+						exposeCanvasHooks();
+						if (
+							pendingWorkbookCell &&
+							adapter.activateCell(pendingWorkbookCell.sheetId, pendingWorkbookCell.a1)
+						) {
+							pendingWorkbookCell = null;
+						}
 					}
-				}
-			}}
-		/>
+				}}
+			/>
+		{/key}
 	{/if}
 
 	{#if inspectorTarget !== null && phase === 'ready'}
@@ -730,6 +920,10 @@
 		color: var(--grey-2);
 		cursor: default;
 	}
+	.tool.disabled {
+		color: var(--grey-2);
+		cursor: default;
+	}
 	.tool input[type='file'] {
 		display: none;
 	}
@@ -748,12 +942,45 @@
 		color: var(--grey-1);
 		margin-bottom: var(--s3);
 	}
+	.lease-state {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--s2);
+		margin: calc(-1 * var(--s2)) 0 var(--s2);
+		padding: 7px 10px;
+		border: 1px solid var(--grey-3);
+		border-radius: var(--radius-chip);
+		color: var(--grey-1);
+		font-size: .82rem;
+	}
+	.lease-state p { margin: 0; }
+	.lease-state.err { border-color: var(--ink); }
+	.storage-recovery {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--s2);
+		margin-bottom: var(--s2);
+		padding: 10px;
+		border: 1px solid var(--ink);
+		border-radius: var(--radius-chip);
+		background: var(--grey-4);
+		color: var(--ink);
+		font-size: .84rem;
+	}
 	.offline { margin: calc(-1 * var(--s2)) 0 var(--s2); padding: 7px 10px; border: 1px solid var(--warning, #9a6b00); border-radius: var(--radius-chip); color: var(--grey-1); font-size: .82rem; }
 
 	/* The document itself — DESIGN.md: paper, hairlines, no shadows. */
 	.editor :global(.tiptap) {
 		min-height: 420px;
 		outline: none;
+	}
+	.editor.read-only :global(.octo-insert-slot),
+	.editor.read-only :global(.octo-block-chrome),
+	.editor.read-only :global(.equation-controls) {
+		pointer-events: none;
+		opacity: .55;
 	}
 	.editor :global(.tiptap > * + *) {
 		margin-top: var(--s2);

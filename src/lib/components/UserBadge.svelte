@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { authClient } from '$lib/auth-client';
+	import { forgetOwnerAccount } from '$lib/workspace';
 
 	const session = authClient.useSession();
 	let open = $state(false);
@@ -21,6 +22,7 @@
 	async function signOut(): Promise<void> {
 		busy = true;
 		await authClient.signOut();
+		forgetOwnerAccount();
 		await goto('/signin');
 	}
 </script>
