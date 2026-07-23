@@ -20,6 +20,8 @@ export interface WorkspaceLeaseOptions {
 	workspaceId: string;
 	flush(): Promise<void>;
 	onStatus?(status: WorkspaceLeaseStatus): void;
+	/** Observe a newer generation only after the editing tab stores it durably. */
+	onStoredGeneration?(generation: number): void;
 }
 
 /** Cooperative edit-lease operations consumed by the workbench. */
@@ -28,6 +30,8 @@ export interface WorkspaceLease {
 	start(): Promise<WorkspaceLeaseStatus>;
 	/** Ask the current editor to flush and release before waiting for ownership. */
 	requestTakeover(): Promise<boolean>;
+	/** Notify read-only peers that this owner stored a newer local generation. */
+	announceStoredGeneration(generation: number): void;
 	/** Release browser resources and any edit lease held by this tab. */
 	dispose(): void;
 	/** Most recent browser-visible lease status. */
@@ -37,6 +41,7 @@ export interface WorkspaceLease {
 type LeaseMessage =
 	| { type: 'owner-query'; senderId: string }
 	| { type: 'owner-active'; senderId: string }
+	| { type: 'generation-stored'; senderId: string; generation: number }
 	| { type: 'takeover-request'; senderId: string; requestId: string }
 	| { type: 'takeover-ready'; senderId: string; requestId: string }
 	| { type: 'takeover-denied'; senderId: string; requestId: string; message: string };
@@ -170,6 +175,15 @@ class BrowserWorkspaceLease implements WorkspaceLease {
 			return;
 		}
 		if (
+			message.type === 'generation-stored' &&
+			this.#status.state !== 'owner' &&
+			Number.isSafeInteger(message.generation) &&
+			message.generation > 0
+		) {
+			this.#options.onStoredGeneration?.(message.generation);
+			return;
+		}
+		if (
 			message.type === 'takeover-request' &&
 			this.#status.state === 'owner' &&
 			!this.#handoffInFlight
@@ -271,6 +285,18 @@ class BrowserWorkspaceLease implements WorkspaceLease {
 			if (!(error instanceof DOMException && error.name === 'AbortError')) throw error;
 		});
 		return result.promise;
+	}
+
+	announceStoredGeneration(generation: number): void {
+		if (
+			this.#disposed ||
+			this.#status.state !== 'owner' ||
+			!Number.isSafeInteger(generation) ||
+			generation < 1
+		) {
+			return;
+		}
+		this.#post({ type: 'generation-stored', senderId: this.#tabId, generation });
 	}
 
 	dispose(): void {

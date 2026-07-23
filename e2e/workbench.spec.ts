@@ -170,6 +170,63 @@ test('a second tab is read-only until cooperative takeover flushes the active ge
 	await secondTab.close();
 });
 
+test('the active tab keeps storing generations after a read-only tab opens', async ({ page }) => {
+	await page.goto('/app');
+	await page.getByTestId('new-doc').click();
+	await expect(page.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	await page.getByTestId('slot-insert-text').last().click();
+	await expect(page.locator('.tiptap')).toBeFocused();
+	await page.keyboard.type('C');
+	await waitSaved(page);
+
+	const secondTab = await page.context().newPage();
+	await secondTab.goto(page.url());
+	await expect(secondTab.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	await expect(secondTab.getByTestId('editor')).toHaveAttribute('data-editable', 'false');
+	await expect(secondTab.locator('.tiptap')).toContainText('C');
+	const readonlyRuntime = await secondTab.evaluate(() => {
+		const marker = crypto.randomUUID();
+		Object.assign(window, { __readonlyRuntimeMarker: marker });
+		return marker;
+	});
+
+	await page.bringToFront();
+	await page.locator('.tiptap').click();
+	await page.keyboard.type('iao');
+	await expect(page.locator('.tiptap')).toContainText('Ciao');
+	await waitSaved(page);
+	await expect(page.getByTestId('storage-recovery')).toHaveCount(0);
+	await expect.poll(async () => (await durableWorkingCopy(page)).content.graph.authored.blocks)
+		.toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					pm: expect.objectContaining({
+						content: expect.arrayContaining([
+							expect.objectContaining({ text: expect.stringContaining('Ciao') })
+						])
+					})
+				})
+			])
+		);
+	await expect(secondTab.locator('.tiptap')).toContainText('Ciao');
+	await expect(secondTab.getByTestId('editor')).toHaveAttribute('data-editable', 'false');
+
+	await page.waitForFunction(() => window.__canvas.sheetsMounted(), null, { timeout: 30_000 });
+	const [sheetId] = await page.evaluate(() => window.__canvas.sheetIds());
+	await page.evaluate(([sheet]) => window.__canvas.setCell(sheet, 'A1', 42), [sheetId]);
+	await waitSaved(page);
+	await expect
+		.poll(() => secondTab.evaluate(([sheet]) => window.__canvas.graphDisplay(sheet, 'A1'), [sheetId]))
+		.toBe(42);
+
+	expect(
+		await secondTab.evaluate(
+			() => (window as typeof window & { __readonlyRuntimeMarker?: string }).__readonlyRuntimeMarker
+		)
+	).toBe(readonlyRuntime);
+	await secondTab.close();
+});
+
 test('takeover stays read-only when the active generation cannot be stored', async ({ page }) => {
 	await page.goto('/app');
 	await page.getByTestId('new-doc').click();

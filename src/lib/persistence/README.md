@@ -47,10 +47,12 @@ healthy live result is copied into a first local generation.
 Each account/document/workspace tuple has one exclusive browser edit lease.
 Additional tabs load the local generation read-only. Cooperative takeover
 flushes the current owner, waits for its transaction, then releases the Web
-Lock; unsupported locking fails safely to read-only. The service worker caches
-shipped assets and previously visited owner routes, while a remembered local
-owner profile reopens only device-local content offline. Reconnect changes
-availability state and never invokes cloud publication.
+Lock; unsupported locking fails safely to read-only. After each successful
+local commit, the owner broadcasts the stored generation so read-only tabs
+refresh from IndexedDB without displaying unsaved keystrokes. The service
+worker caches shipped assets and previously visited owner routes, while a
+remembered local owner profile reopens only device-local content offline.
+Reconnect changes availability state and never invokes cloud publication.
 
 Assets are byte/type/owner validated and cleanup is durable. Reachability
 includes retained undo. Trash/purge cascades every product row and asset.

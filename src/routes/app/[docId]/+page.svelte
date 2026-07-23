@@ -156,6 +156,11 @@
 	let workspace: WorkspaceController | null = null;
 	let lease: WorkspaceLease | null = null;
 	let docEditor: DocEditor | null = null;
+	let ownerAccountId = '';
+	let loadedGeneration = 0;
+	let pendingPeerGeneration = 0;
+	let readonlyRefreshInFlight = false;
+	let projectionRevision = $state(0);
 	const canEdit = $derived(leaseState === 'owner');
 
 	let workbookAdapter: WorkbookAdapter | null = $state(null);
@@ -167,6 +172,36 @@
 		saving: 'Saving locally…',
 		error: 'Device save failed'
 	};
+
+	/** Refresh a read-only projection from a generation already stored by its owner. */
+	async function refreshReadonlyIfStale(): Promise<void> {
+		if (
+			readonlyRefreshInFlight ||
+			phase !== 'ready' ||
+			leaseState !== 'readonly' ||
+			pendingPeerGeneration <= loadedGeneration ||
+			!ownerAccountId
+		) {
+			return;
+		}
+		readonlyRefreshInFlight = true;
+		try {
+			const local = await localRepository.load(ownerAccountId, String(docId), 'main');
+			if (leaseState !== 'readonly') return;
+			if (!local || local.generation <= loadedGeneration) {
+				pendingPeerGeneration = loadedGeneration;
+				return;
+			}
+			installWorkingCopy(ownerAccountId, local.content, local.generation);
+			projectionRevision += 1;
+		} catch (error) {
+			pendingPeerGeneration = loadedGeneration;
+			console.warn('read-only projection refresh failed:', error);
+		} finally {
+			readonlyRefreshInFlight = false;
+			if (pendingPeerGeneration > loadedGeneration) void refreshReadonlyIfStale();
+		}
+	}
 
 	/** The single write path through the framework-neutral workspace controller. */
 	function commitMutation(m: GraphMutation): boolean {
@@ -190,6 +225,121 @@
 			return false;
 		}
 		return true;
+	}
+
+	/** Install one durable working-copy generation into the current route. */
+	function installWorkingCopy(
+		accountId: string,
+		content: LocalWorkingCopyContent,
+		generation: number
+	): void {
+		const { graph: hydrated, mismatches } = hydrateGraph(localGraphRows(content.graph), {
+			registry
+		});
+		if (mismatches.length > 0) {
+			console.warn('reproducibility mismatches on load:', mismatches);
+		}
+
+		docEditor?.destroy();
+		workspace?.dispose();
+		workbookAdapter = null;
+		title = content.title;
+		graph = hydrated;
+		session = createGraphSession({ doc: graph, registry, docId, actor: HUMAN });
+		restoredWorkbookSnapshot = content.workbookSnapshot;
+		loadedGeneration = generation;
+		saveState = 'idle';
+		storageFailure = null;
+
+		workspace = createWorkspaceController({
+			graph: session,
+			title: () => title,
+			local: {
+				initialGeneration: generation,
+				commit: async (expectedGeneration, captured) => {
+					const committed = await localRepository.commit({
+						accountId,
+						documentId: String(docId),
+						workspaceId: 'main',
+						expectedGeneration,
+						content: captured
+					});
+					loadedGeneration = committed.generation;
+					lease?.announceStoredGeneration(committed.generation);
+					return committed.generation;
+				}
+			},
+			projection: {
+				flushPendingChanges: () => docEditor?.flushProse(),
+				renderSettledState: () => docEditor?.renderFromGraph()
+			},
+			workbookSnapshot: () =>
+				workbookAdapter?.saveSnapshot() ?? $state.snapshot(restoredWorkbookSnapshot),
+			activity: persistenceActivity,
+			onSaveState: (state) => (saveState = state),
+			onLocalSaveError: (error) => {
+				storageFailure = error === null ? null : describeLocalStorageFailure(error);
+			}
+		});
+		docEditor = createDocEditor({
+			element: editorEl,
+			editable: canEdit,
+			graph,
+			docId,
+			registry,
+			resolveImageUrl: (storageId) => persistence.fileUrl(storageId),
+			commitMutation: commitProjectionMutation,
+			onChanged: () => workspace?.markChanged(),
+			onUndo: handleUndo,
+			onRedo: handleRedo,
+			onAnnounce: (message) => {
+				blockAnnouncement = '';
+				queueMicrotask(() => (blockAnnouncement = message));
+			},
+			// Chips re-render + flash on every settle (commit/undo/redo).
+			onSettle: (cb) => session.onSettle(() => cb()),
+			// Alt+click / Alt+Enter on a chip opens the inspector (V1-5-5).
+			onInspect: (nodeId) => openInspector(nodeId, { focus: true }),
+			onNavigateCell: (cellRef) => {
+				if (!graph.sheet(cellRef.sheetId)) return false;
+				workbookOpen = true;
+				pendingWorkbookCell = cellRef;
+				queueMicrotask(() => {
+					if (workbookAdapter?.activateCell(cellRef.sheetId, cellRef.a1)) {
+						pendingWorkbookCell = null;
+					}
+				});
+				return true;
+			},
+			editParameter: (publishedNodeId, text) => {
+				if (!canEdit) {
+					return { ok: false, message: 'This working copy is read-only.' };
+				}
+				const resolved = resolvePublishedTarget(graph, publishedNodeId);
+				if (!resolved || resolved.targetNode.kind !== 'input') {
+					return { ok: false, message: 'This parameter is read-only.' };
+				}
+				const parsed = parseParameterInput(text, resolved.targetNode.value);
+				if (!parsed.ok) return parsed;
+				const result = workspace?.commit({
+					op: 'setInput',
+					id: resolved.targetNode.id,
+					value: parsed.value
+				});
+				if (!result?.ok) {
+					return {
+						ok: false,
+						message: result && !result.ok ? result.error.message : 'Workspace not ready.'
+					};
+				}
+				return { ok: true };
+			},
+			// Notebook-style insertion slots between blocks and at the end.
+			onInsertBlockAt: insertBlockAt
+		});
+		// The open inspector re-derives its view-model on every settle.
+		session.onSettle(() => (inspectorRevision += 1));
+		exposeCanvasHooks();
 	}
 
 	/**
@@ -359,6 +509,7 @@
 					!navigator.onLine
 				);
 				if (!accountId) throw new Error('Authenticated account is unavailable.');
+				ownerAccountId = accountId;
 				lease = createWorkspaceLease({
 					accountId,
 					documentId: String(docId),
@@ -376,6 +527,11 @@
 							titleEditing = false;
 							parametersOpen = false;
 						}
+						void refreshReadonlyIfStale();
+					},
+					onStoredGeneration: (generation) => {
+						pendingPeerGeneration = Math.max(pendingPeerGeneration, generation);
+						void refreshReadonlyIfStale();
 					}
 				});
 				await lease.start();
@@ -420,103 +576,9 @@
 					initialGeneration = local.generation;
 				}
 				if (cancelled) return;
-				title = content.title;
-				const { graph: hydrated, mismatches } = hydrateGraph(localGraphRows(content.graph), { registry });
-				if (mismatches.length > 0) {
-					console.warn('reproducibility mismatches on load:', mismatches);
-				}
-				graph = hydrated;
-				session = createGraphSession({ doc: graph, registry, docId, actor: HUMAN });
-				restoredWorkbookSnapshot = content.workbookSnapshot;
-				workspace = createWorkspaceController({
-					graph: session,
-					title: () => title,
-					local: {
-						initialGeneration,
-						commit: async (expectedGeneration, captured) =>
-							(
-								await localRepository.commit({
-									accountId,
-									documentId: String(docId),
-									workspaceId: 'main',
-									expectedGeneration,
-									content: captured
-								})
-							).generation
-					},
-					projection: {
-						flushPendingChanges: () => docEditor?.flushProse(),
-						renderSettledState: () => docEditor?.renderFromGraph()
-					},
-					workbookSnapshot: () =>
-						workbookAdapter?.saveSnapshot() ?? $state.snapshot(restoredWorkbookSnapshot),
-					activity: persistenceActivity,
-					onSaveState: (state) => (saveState = state),
-					onLocalSaveError: (error) => {
-						storageFailure =
-							error === null ? null : describeLocalStorageFailure(error);
-					}
-				});
-				docEditor = createDocEditor({
-					element: editorEl,
-					editable: canEdit,
-					graph,
-					docId,
-					registry,
-					resolveImageUrl: (storageId) => persistence.fileUrl(storageId),
-					commitMutation: commitProjectionMutation,
-					onChanged: () => workspace?.markChanged(),
-					onUndo: handleUndo,
-					onRedo: handleRedo,
-					onAnnounce: (message) => {
-						blockAnnouncement = '';
-						queueMicrotask(() => (blockAnnouncement = message));
-					},
-					// Chips re-render + flash on every settle (commit/undo/redo).
-					onSettle: (cb) => session.onSettle(() => cb()),
-					// Alt+click / Alt+Enter on a chip opens the inspector (V1-5-5).
-					onInspect: (nodeId) => openInspector(nodeId, { focus: true }),
-					onNavigateCell: (cellRef) => {
-						if (!graph.sheet(cellRef.sheetId)) return false;
-						workbookOpen = true;
-						pendingWorkbookCell = cellRef;
-						queueMicrotask(() => {
-							if (workbookAdapter?.activateCell(cellRef.sheetId, cellRef.a1)) {
-								pendingWorkbookCell = null;
-							}
-						});
-						return true;
-					},
-					editParameter: (publishedNodeId, text) => {
-						if (!canEdit) {
-							return { ok: false, message: 'This working copy is read-only.' };
-						}
-						const resolved = resolvePublishedTarget(graph, publishedNodeId);
-						if (!resolved || resolved.targetNode.kind !== 'input') {
-							return { ok: false, message: 'This parameter is read-only.' };
-						}
-						const parsed = parseParameterInput(text, resolved.targetNode.value);
-						if (!parsed.ok) return parsed;
-						const result = workspace?.commit({
-							op: 'setInput',
-							id: resolved.targetNode.id,
-							value: parsed.value
-						});
-						if (!result?.ok) {
-							return {
-								ok: false,
-								message: result && !result.ok ? result.error.message : 'Workspace not ready.'
-							};
-						}
-						return { ok: true };
-					},
-					// Notebook-style insertion slots between blocks and at the end.
-					onInsertBlockAt: insertBlockAt
-				});
-				// The open inspector re-derives its view-model on every settle.
-				session.onSettle(() => (inspectorRevision += 1));
-				exposeCanvasHooks();
+				installWorkingCopy(accountId, content, initialGeneration);
 				phase = 'ready';
+				void refreshReadonlyIfStale();
 			} catch (e) {
 				console.error('failed to load document', e);
 				if (!cancelled) phase = 'failed';
@@ -751,35 +813,37 @@
 	></div>
 
 	{#if phase === 'ready'}
-		<ParametersRail
-			{session}
-			open={parametersOpen}
-			onclose={() => {
-				parametersOpen = false;
-				queueMicrotask(() => parametersButton?.focus());
-			}}
-			onchanged={() => workspace?.markChanged()}
-			oninsert={(nodeId) => docEditor?.insertChip(nodeId) ?? false}
-		/>
-		<WorkbookDrawer
-			{session}
-			snapshot={restoredWorkbookSnapshot}
-			readonly={!canEdit}
-			bind:expanded={workbookOpen}
-			ondirty={() => workspace?.markChanged()}
-			onready={(adapter) => {
-				workbookAdapter = adapter;
-				if (adapter) {
-					exposeCanvasHooks();
-					if (
-						pendingWorkbookCell &&
-						adapter.activateCell(pendingWorkbookCell.sheetId, pendingWorkbookCell.a1)
-					) {
-						pendingWorkbookCell = null;
+		{#key projectionRevision}
+			<ParametersRail
+				{session}
+				open={parametersOpen}
+				onclose={() => {
+					parametersOpen = false;
+					queueMicrotask(() => parametersButton?.focus());
+				}}
+				onchanged={() => workspace?.markChanged()}
+				oninsert={(nodeId) => docEditor?.insertChip(nodeId) ?? false}
+			/>
+			<WorkbookDrawer
+				{session}
+				snapshot={restoredWorkbookSnapshot}
+				readonly={!canEdit}
+				bind:expanded={workbookOpen}
+				ondirty={() => workspace?.markChanged()}
+				onready={(adapter) => {
+					workbookAdapter = adapter;
+					if (adapter) {
+						exposeCanvasHooks();
+						if (
+							pendingWorkbookCell &&
+							adapter.activateCell(pendingWorkbookCell.sheetId, pendingWorkbookCell.a1)
+						) {
+							pendingWorkbookCell = null;
+						}
 					}
-				}
-			}}
-		/>
+				}}
+			/>
+		{/key}
 	{/if}
 
 	{#if inspectorTarget !== null && phase === 'ready'}
