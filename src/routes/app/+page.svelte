@@ -13,6 +13,7 @@
 	} from '$lib/persistence';
 	import {
 		buildDocumentIndex,
+		resolveOwnerAccount,
 		type DocumentAvailability,
 		type IndexedCloudState,
 		type IndexedDocumentBranch,
@@ -70,7 +71,7 @@
 	let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function accountId(): string {
-		const id = $authSession.data?.user.id;
+		const id = resolveOwnerAccount($authSession.data?.user.id, !navigator.onLine);
 		if (!id) throw new Error('Authenticated account is unavailable.');
 		return id;
 	}
@@ -164,10 +165,12 @@
 
 	async function refreshLive(): Promise<void> {
 		try {
-			const [cloudDocuments, localWorkspaces] = await Promise.all([
-				persistence.listDocuments(),
-				localRepository.listWorkspaces(accountId())
-			]);
+			const localWorkspaces = await localRepository.listWorkspaces(accountId());
+			if (!navigator.onLine) {
+				applyLiveDocuments(cloudDocs ?? [], localWorkspaces);
+				return;
+			}
+			const cloudDocuments = await persistence.listDocuments();
 			applyLiveDocuments(cloudDocuments, localWorkspaces);
 		} catch (cause) {
 			reportRefreshError(cause);

@@ -49,26 +49,32 @@ flowchart TB
 
 ## Runtime flow
 
-1. `/app/[docId]` first loads the authenticated account's IndexedDB `main`
+1. `/app/[docId]` first acquires the account/document/workspace Web Lock.
+   A lock holder may edit; another tab and browsers without safe locking load
+   read-only. Cooperative takeover flushes the owner before lock release.
+2. The route loads the authenticated account's IndexedDB `main`
    working copy. A cloud-backed document without a local copy is read once and
    committed locally before the editable surface mounts. That first generation
    records the cloud base revision and hash; later generations make local-change
    state observable without a cloud write.
-2. New documents are application-ID local records; creation sends no Convex
+3. New documents are application-ID local records; creation sends no Convex
    product mutation. Convex still distinguishes live, trashed, missing,
    unauthorized, and integrity-failed states for cloud fallback reads.
-3. `hydrateGraph` reconstructs the graph from the local generation and
+4. `hydrateGraph` reconstructs the graph from the local generation and
    re-evaluates it.
-4. TipTap becomes editable. `WorkbookDrawer` mounts exactly one Univer
+5. TipTap becomes editable only for the lease owner. `WorkbookDrawer` mounts exactly one Univer
    instance and reconciles the typed tab manifest.
-5. A cell/pill/report/tab edit commits one `GraphMutation`; recalc settles the
+6. A cell/pill/report/tab edit commits one `GraphMutation`; recalc settles the
    affected dependency subgraph.
-6. All projections repaint from settled graph values. Local autosave coalesces
+7. All projections repaint from settled graph values. Local autosave coalesces
    for 500 ms, enforces a 2-second maximum dirty interval, and commits authored
    state, workbook snapshot, and unified undo state in one IndexedDB transaction.
-7. Expected-generation compare-and-swap fences stale writers. A failed
+8. Expected-generation compare-and-swap fences stale writers. A failed
    transaction preserves the prior generation and keeps the device-save error
    visible until a later transaction succeeds.
+9. A service worker serves shipped assets and previously visited owner routes
+   during offline reload. A remembered device owner resolves the same
+   account-scoped IndexedDB namespace; reconnect performs no publication.
 
 All sheet callbacks capture the immutable event-time `SheetId`. Active-tab
 state is presentation state only and is never used to infer cell ownership.

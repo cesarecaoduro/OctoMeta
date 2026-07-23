@@ -95,6 +95,8 @@ export interface DocEditorOptions {
 	 * position when a slot button is clicked. Omit to hide the slots entirely.
 	 */
 	onInsertBlockAt?: (type: InsertableBlockType, index: number) => void;
+	/** Whether authored controls accept changes when the editor is created. */
+	editable?: boolean;
 	/** Debounce override for tests. */
 	syncDelayMs?: number;
 	/** Announce structural report changes to assistive technology. */
@@ -121,6 +123,8 @@ export interface DocEditor {
 	insertChip(nodeId: NodeId): boolean;
 	/** Focus the native TeX editor owned by an equation block. */
 	focusEquationEditor(blockId: string): boolean;
+	/** Enable or disable authored document changes without rebuilding the editor. */
+	setEditable(editable: boolean): void;
 	destroy(): void;
 }
 
@@ -188,6 +192,7 @@ export function createDocEditor(opts: DocEditorOptions): DocEditor {
 
 	const editor = new Editor({
 		element: opts.element,
+		editable: opts.editable ?? true,
 		editorProps: {
 			attributes: {
 				'aria-label': 'Report editor'
@@ -516,6 +521,10 @@ export function createDocEditor(opts: DocEditorOptions): DocEditor {
 			source.focus();
 			source.select();
 			return true;
+		},
+
+		setEditable(editable: boolean): void {
+			editor.setEditable(editable);
 		},
 
 		moveSelectedBlock(dir: -1 | 1): boolean {

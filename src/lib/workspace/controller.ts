@@ -46,6 +46,8 @@ export interface WorkspaceControllerOptions {
 	workbookSnapshot(): unknown;
 	activity: PersistenceActivityLog;
 	onSaveState?(state: SaveState): void;
+	/** Present local capture/transaction recovery without changing cloud state. */
+	onLocalSaveError?(error: unknown | null): void;
 	saveDelayMs?: number;
 	maxSaveDelayMs?: number;
 }
@@ -85,7 +87,8 @@ export function createWorkspaceController(
 		},
 		...(options.saveDelayMs !== undefined && { delayMs: options.saveDelayMs }),
 		...(options.maxSaveDelayMs !== undefined && { maxDelayMs: options.maxSaveDelayMs }),
-		onState: options.onSaveState
+		onState: options.onSaveState,
+		onError: options.onLocalSaveError
 	});
 
 	const applyHistory = (direction: 'undo' | 'redo'): boolean => {

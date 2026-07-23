@@ -15,6 +15,8 @@ export interface LocalAutosaveOptions {
 	delayMs?: number;
 	maxDelayMs?: number;
 	onState?(state: SaveState): void;
+	/** Report the current capture/transaction failure, clearing it after success. */
+	onError?(error: unknown | null): void;
 }
 
 /** Autosave lifecycle consumed by the framework-neutral workspace controller. */
@@ -70,12 +72,14 @@ export function createLocalAutosave(options: LocalAutosaveOptions): LocalAutosav
 		while (dirty && !disposed) {
 			dirty = false;
 			setState('saving');
-			const captured = structuredClone(options.capture());
 			try {
+				const captured = structuredClone(options.capture());
 				generation = await options.commit(generation, captured);
 				lastError = null;
+				options.onError?.(null);
 			} catch (error) {
 				lastError = error;
+				options.onError?.(error);
 				dirty = true;
 				clearTimers();
 				setState('error');
