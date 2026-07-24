@@ -153,6 +153,8 @@ test('a second tab is read-only until cooperative takeover flushes the active ge
 	await page.goto('/app');
 	await page.getByTestId('new-doc').click();
 	await expect(page.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	await page.getByTestId('slot-insert-equation').last().click();
+	await waitSaved(page);
 	const documentUrl = page.url();
 
 	const secondTab = await page.context().newPage();
@@ -162,6 +164,9 @@ test('a second tab is read-only until cooperative takeover flushes the active ge
 	await expect(secondTab.getByTestId('lease-status')).toContainText(
 		'open for editing in another tab'
 	);
+	const readonlyEquation = secondTab.locator('[data-equation-block]');
+	await expect(readonlyEquation).toHaveAttribute('data-readonly', '');
+	await expect(readonlyEquation.getByRole('button', { name: 'Insert value' })).toBeDisabled();
 
 	await page.getByTestId('slot-insert-text').last().click();
 	await page.keyboard.type('Flushed before takeover');
@@ -170,6 +175,7 @@ test('a second tab is read-only until cooperative takeover flushes the active ge
 	await expect(secondTab.getByTestId('editor')).toHaveAttribute('data-editable', 'true', {
 		timeout: 30_000
 	});
+	await expect(readonlyEquation).not.toHaveAttribute('data-readonly', '');
 	await expect(secondTab.locator('.tiptap')).toContainText('Flushed before takeover');
 	await expect(page.getByTestId('editor')).toHaveAttribute('data-editable', 'false');
 	await secondTab.close();
@@ -519,7 +525,9 @@ test('the complete owned steel workbench survives edit, error, reload, trash, an
 	await expect(chip(page, 'chip-steel-d')).toHaveText('20 in');
 	await expect(chip(page, 'chip-steel-area')).toHaveText('38.00 in²');
 	await expect(chip(page, 'chip-steel-rt')).toHaveText('2.115 in');
-	await expect(page.locator('[data-equation-block] .katex')).toBeVisible({ timeout: 15_000 });
+	await expect(page.getByRole('textbox', { name: 'Equation', exact: true })).toBeVisible({
+		timeout: 15_000
+	});
 	await expect(page.getByRole('button', { name: /Workbook 3 tabs/ })).toBeVisible();
 
 	const [input, calculation] = await page.evaluate(() => window.__canvas.sheetIds());
@@ -638,21 +646,20 @@ test('route gate redirects signed-out visitors', async ({ browser }) => {
 	await context.close();
 });
 
-test('static equations keep the last safe preview for invalid and untrusted TeX', async ({ page }) => {
+test('visual equations keep the last safe preview for invalid and untrusted TeX', async ({ page }) => {
 	await page.goto('/app');
 	await page.getByTestId('new-doc').click();
 	await expect(page.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
 	await page.getByTestId('slot-insert-equation').last().click();
-	const source = page.getByLabel('TeX source').last();
+	const equation = page.locator('[data-equation-block]').last();
+	await equation.getByRole('button', { name: 'Edit source' }).click();
+	const source = equation.getByRole('textbox', { name: 'Equation source' });
 	await source.fill('x^2');
-	await source.press('Control+Enter');
-	await expect(page.locator('[data-equation-block] .katex')).toContainText('x');
+	await expect(source).toHaveValue('x^2');
 
 	await source.fill('\\href{javascript:alert(1)}{click}');
-	await source.press('Control+Enter');
-	await expect(page.locator('[data-equation-block] a')).toHaveCount(0);
+	await expect(equation.locator('.equation-preview a')).toHaveCount(0);
 	await source.fill('\\notacommand{');
-	await source.press('Control+Enter');
-	await expect(page.locator('[data-equation-block] [role="alert"]')).toBeVisible();
-	await expect(page.locator('[data-equation-block] .katex')).toContainText('click');
+	await expect(equation.getByRole('alert')).toBeVisible();
+	await expect(equation.locator('.equation-preview .katex')).toContainText('click');
 });

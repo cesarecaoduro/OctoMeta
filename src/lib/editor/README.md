@@ -16,7 +16,8 @@ undo/redo spans report and workbook actions.
 | `block-chrome.ts` | Visible, keyboard-operable move/remove controls |
 | `insert-slots.ts` | Between-block text/image/equation insertion |
 | `image-node.ts` | Owned storage-backed image node view |
-| `equation-node.ts` | Static/bound equation UI and guarded KaTeX rendering |
+| `equation-model.ts` | Pure structured-segment ↔ MathLive macro projection |
+| `equation-node.ts` | Focus-safe visual equation editor and guarded KaTeX fallback |
 | `chip-node.ts` | Live parameter/output pills, editing, steps, inspector/error links |
 | `chips.ts` | Pure binding, display, target-resolution, and picker helpers |
 | `inspector.ts` | Pure provenance/dependency view model |
@@ -26,12 +27,29 @@ prose content flushes before save, undo/redo, or structural work. A workbook
 error link carries the exact `CellRef`, opens the drawer after readiness,
 activates/selects that cell, and preserves return focus.
 
-Equation payloads are discriminated:
+Equation payloads are versioned and composable:
 
 ```ts
-{ mode: 'static'; tex: string }
-{ mode: 'bound'; nodeId: string; display: 'symbolic'|'substituted'|'result'|'steps' }
+{
+  version: 1;
+  segments: Array<
+    | { kind: 'latex'; latex: string }
+    | {
+        kind: 'reference';
+        nodeId: string;
+        fallback: { name: string; sheetId?: string; cell?: string };
+      }
+  >;
+}
 ```
 
-KaTeX is trust-disabled and limit-guarded. Invalid TeX leaves the editor usable
-and retains the last valid preview.
+MathLive reference macros are immutable editing atoms whose names exist only
+in the projection; parsing them restores the stored stable IDs. The visual
+formula substitutes the current published value, while the source projection
+uses `\value{name}` so authors see the semantic parameter without internal
+macro names. Published display units accompany both equation substitutions and
+inline value chips. Input commits without Apply, graph repaint updates the
+substituted value without replacing the focused field, Escape restores the
+session start, and Cmd/Ctrl+Enter finishes. Read-only leases disable the field,
+source, and reference controls. KaTeX is trust-disabled and limit-guarded.
+Invalid TeX stays editable and reveals the last valid preview.

@@ -15,6 +15,16 @@ autosave on the device, and the document index presents local-only,
 cloud-backed, and cloud-only documents together without publishing as a side
 effect.
 
+Equations edit visually in place through MathLive. One equation can mix
+authored notation with multiple searchable Published-value references. The
+visual formula substitutes each current value, while source mode keeps the
+readable semantic parameter as `\value{name}` and stable identity remains
+internal. Published display units accompany substituted formula values and
+inline document values without changing source identity. Changes commit locally without Apply, names can change without
+breaking identity, and unpublished values remain visible until explicitly
+repaired. Trust-disabled rendering and bounded payload limits protect read
+surfaces.
+
 ## Local-first document index
 
 The authenticated `/app` index distinguishes storage state explicitly:
@@ -88,8 +98,9 @@ pnpm secret:scan
 
 The Playwright suite creates an isolated owner, verifies local index lifecycle
 actions, view-scoped cloud reads, and zero-cloud-call local actions, exercises
-the desktop demo through reload/trash/restore, verifies route gating and safe
-TeX handling, and runs the narrow layout at `390×844` with axe.
+the desktop demo through reload/trash/restore, reproduces visual-equation focus,
+picker, rollback, broken-reference, repair, and safe-TeX behavior, and runs the
+narrow layout at `390×844` with axe.
 
 ## Development reset
 

@@ -29,7 +29,14 @@ import type {
 	UndoEntry,
 	WorkbookManifest
 } from '../engine';
-import { DocumentGraph, createBuiltinRegistry, evaluateWithDerivations, recalc } from '../engine';
+import {
+	DocumentGraph,
+	createBuiltinRegistry,
+	emptyEquation,
+	evaluateWithDerivations,
+	normalizeEquationPayload,
+	recalc
+} from '../engine';
 import { fromConvexJson, toConvexJson } from './codec';
 
 // ---------------------------------------------------------------------------
@@ -119,6 +126,22 @@ export interface HydrateResult {
 	 * and the engine disagree; the caller decides how loudly to complain.
 	 */
 	mismatches: { nodeId: NodeId; stored: string; derived: string }[];
+}
+
+function normalizeHistoryMutation(
+	value: unknown,
+	resolveName: (nodeId: NodeId) => string | undefined
+): GraphMutation {
+	const mutation = structuredClone(value) as GraphMutation;
+	if (
+		mutation.op === 'blockOp' &&
+		mutation.block &&
+		mutation.block.equation !== undefined
+	) {
+		const equation = normalizeEquationPayload(mutation.block.equation, resolveName);
+		if (equation) mutation.block.equation = equation;
+	}
+	return mutation;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,6 +239,12 @@ export function hydrateGraph(
 	opts?: { registry?: FunctionRegistry }
 ): HydrateResult {
 	const graph = new DocumentGraph(rows.document.workbookManifest);
+	const publishedNames = new Map(
+		rows.nodes
+			.map((row) => fromConvexJson<PersistedNode>(row))
+			.filter((node) => node.name !== undefined)
+			.map((node) => [node.nodeId, node.name!])
+	);
 
 	// Blocks, in canonical blocksOrder (insertBlock renumbers positions to match).
 	const blockRows = new Map(rows.blocks.map((row) => [row.blockId, row]));
@@ -228,6 +257,11 @@ export function hydrateGraph(
 		const row = blockRows.get(blockId);
 		if (!row) continue;
 		const decoded = fromConvexJson<PersistedBlock & { docId?: string }>(row);
+		const equation =
+			decoded.type === 'equation'
+				? normalizeEquationPayload(decoded.equation, (nodeId) => publishedNames.get(nodeId)) ??
+					emptyEquation()
+				: undefined;
 		const block: Block = {
 			id: decoded.blockId,
 			docId: decoded.docId ?? '',
@@ -235,7 +269,7 @@ export function hydrateGraph(
 			position: 0,
 			...(decoded.pm !== undefined && { pm: decoded.pm }),
 			...(decoded.image !== undefined && { image: decoded.image }),
-			...(decoded.equation !== undefined && { equation: decoded.equation })
+			...(equation !== undefined && { equation })
 		};
 		graph.insertBlock(block);
 	}
@@ -284,8 +318,12 @@ export function hydrateGraph(
 			const decoded = fromConvexJson<PersistedUndoEntry>(row);
 			return {
 				seq: decoded.seq,
-				mutation: decoded.mutation as GraphMutation,
-				inverse: decoded.inverse as GraphMutation[],
+				mutation: normalizeHistoryMutation(decoded.mutation, (nodeId) =>
+					publishedNames.get(nodeId)
+				),
+				inverse: decoded.inverse.map((mutation) =>
+					normalizeHistoryMutation(mutation, (nodeId) => publishedNames.get(nodeId))
+				),
 				actor: decoded.actor as Actor,
 				at: decoded.at
 			} satisfies UndoEntry;

@@ -3,8 +3,8 @@ import type { FormulaAST } from './formula';
 import { isNameRef, isRangeRef } from './formula';
 import type { DocumentGraph } from './graph';
 import { resolvePublishedTarget } from './graph';
+import { formatPublishedValue } from './publications';
 import type { DerivationExpression } from './showsteps';
-import { buildDerivation } from './showsteps';
 import { format } from './units';
 import type { TypedValue } from './types';
 
@@ -113,6 +113,13 @@ export function valueToTex(value: TypedValue): string {
 	}
 }
 
+/** Print a published value and its presentation unit as safe TeX. */
+export function publishedValueToTex(value: TypedValue, unit?: string): string {
+	if (value.kind !== 'scalar' && value.kind !== 'quantity') return valueToTex(value);
+	const escaped = escapeTexText(formatPublishedValue(value, unit)).replace(/\s+/g, '\\,');
+	return `\\mathrm{${escaped}}`;
+}
+
 /** Print one structured substitution/intermediate tree as TeX. */
 export function derivationExpressionToTex(expression: DerivationExpression): string {
 	const print = (node: DerivationExpression, parent = -1): string => {
@@ -147,52 +154,32 @@ export function derivationExpressionToTex(expression: DerivationExpression): str
 	return print(expression);
 }
 
+/** Render one stable published-value reference for a read-only TeX surface. */
+function equationReferenceToTex(
+	segment: Extract<EquationPayload['segments'][number], { kind: 'reference' }>,
+	graph: DocumentGraph
+): string {
+	const resolved = resolvePublishedTarget(graph, segment.nodeId);
+	if (!resolved) {
+		return `\\text{Missing: ${escapeTexText(segment.fallback.name)}}`;
+	}
+	return publishedValueToTex(
+		resolved.targetNode.value,
+		resolved.publishedNode.publication?.unit
+	);
+}
+
 /**
- * Render a static or graph-bound equation payload to safe TeX source.
- * Static source is returned exactly; bound modes follow one alias hop.
+ * Render a structured visual equation to safe TeX source.
+ *
+ * Authored segments are returned verbatim for the trust-disabled renderer;
+ * reference segments substitute current values while broken references
+ * retain their authored fallback identity.
  */
 export function equationToTex(payload: EquationPayload, graph: DocumentGraph): string {
-	if (payload.mode === 'static') return payload.tex;
-	const resolved = resolvePublishedTarget(graph, payload.nodeId);
-	const published = resolved?.publishedNode ?? graph.nodes.get(payload.nodeId);
-	const target = resolved?.targetNode ?? published;
-	if (!published || !target) return '\\text{Reference removed}';
-	const name = escapeTexText(published.name ?? target.name ?? target.cellRef?.a1 ?? target.id);
-	const value = valueToTex(target.value);
-	switch (payload.display) {
-		case 'result':
-			return `\\mathrm{${name}} = ${value}`;
-		case 'symbolic':
-			return target.formula
-				? `\\mathrm{${name}} = ${formulaToTex(target.formula)}`
-				: `\\mathrm{${name}} = ${value}`;
-		case 'substituted': {
-			if (!target.formula) return `\\mathrm{${name}} = ${value}`;
-			const substitute = (ast: FormulaAST): FormulaAST => {
-				if (ast.t === 'ref') {
-					const id = graph.resolveRef(ast.ref);
-					const node = id ? graph.nodes.get(id) : undefined;
-					if (node?.value.kind === 'scalar') return { t: 'lit', value: node.value.value };
-					return ast;
-				}
-				if (ast.t === 'un') return { ...ast, arg: substitute(ast.arg) };
-				if (ast.t === 'bin') {
-					return { ...ast, left: substitute(ast.left), right: substitute(ast.right) };
-				}
-				if (ast.t === 'call') return { ...ast, args: ast.args.map(substitute) };
-				return ast;
-			};
-			return `\\mathrm{${name}} = ${formulaToTex(substitute(target.formula))}`;
-		}
-		case 'steps': {
-			const derivation = buildDerivation(target.id, graph);
-			const lines = derivation.steps.map((step) => {
-				if (step.formula) return formulaToTex(step.formula);
-				if (step.expression) return derivationExpressionToTex(step.expression);
-				if (step.value) return valueToTex(step.value);
-				return `\\text{${escapeTexText(step.text)}}`;
-			});
-			return `\\begin{aligned}${lines.join('\\\\')}\\end{aligned}`;
-		}
-	}
+	return payload.segments
+		.map((segment) =>
+			segment.kind === 'latex' ? segment.latex : equationReferenceToTex(segment, graph)
+		)
+		.join('');
 }

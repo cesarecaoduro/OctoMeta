@@ -105,7 +105,8 @@ src/
     editor/
       create-editor.ts            TipTap assembly and one engine history
       block-chrome.ts             uniform move/remove controls
-      equation-node.ts            safe static/bound KaTeX node view
+      equation-model.ts           structured segments ↔ MathLive reference macros
+      equation-node.ts            focus-safe MathLive editor + guarded KaTeX preview
       chip-node.ts                live values, edit, steps, deep-links
     persistence/
       client.ts                   only UI-facing Convex facade
@@ -167,15 +168,34 @@ blocks no longer exist in TipTap. Every top-level node carries a stable
 payload changes are debounced. TipTap history is disabled because engine
 history is the one history shared with workbook edits.
 
-Equation blocks are either:
+Equation blocks store a versioned sequence:
 
 ```ts
-{ mode: 'static'; tex: string }
-{ mode: 'bound'; nodeId: NodeId; display: 'symbolic'|'substituted'|'result'|'steps' }
+{
+  version: 1;
+  segments: Array<
+    | { kind: 'latex'; latex: string }
+    | {
+        kind: 'reference';
+        nodeId: NodeId;
+        fallback: { name: string; sheetId?: SheetId; cell?: string };
+      }
+  >;
+}
 ```
 
-KaTeX runs with trust disabled, strict input/complexity limits, an accessible
-MathML representation, and a last-known-good preview for invalid input.
+MathLive owns direct visual input. Stable reference segments project as
+immutable custom macros, allowing authored notation and multiple references to
+coexist without parsing rendered labels back into identity. The NodeView stops
+TipTap events at its boundary and does not replace active controls during graph
+settlement. Every input commits locally; Escape restores the edit-session
+snapshot, while Cmd/Ctrl+Enter only finishes the session. The visual projection
+substitutes the current value and published display unit; human-authored source
+uses `\value{name}`. Legacy static/bound rows normalize to version 1 during
+hydration, and a read-only document lease makes every equation control
+read-only. KaTeX remains the
+trust-disabled, complexity-limited last-known-good read projection for invalid
+or untrusted input.
 
 ## Persistence and security
 

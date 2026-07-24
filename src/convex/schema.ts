@@ -50,21 +50,12 @@ export const blockFields = {
 	image: v.optional(
 		v.object({ storageId: v.string(), alt: v.optional(v.string()), caption: v.optional(v.string()) })
 	),
-	equation: v.optional(
-		v.union(
-			v.object({
-				mode: v.literal('bound'),
-				nodeId: v.string(),
-				display: v.union(
-					v.literal('symbolic'),
-					v.literal('substituted'),
-					v.literal('result'),
-					v.literal('steps')
-				)
-			}),
-			v.object({ mode: v.literal('static'), tex: v.string() })
-		)
-	)
+	/**
+	 * Engine-owned, versioned equation JSON. Kept schema-open until the guarded
+	 * prototype reset removes legacy rows; every new save is strictly checked
+	 * by validateBundle and the engine mutation boundary.
+	 */
+	equation: v.optional(v.any())
 };
 
 /** One undo-log entry (SCHEMA.md §9), codec-encoded mutation/inverse payloads. */

@@ -1,6 +1,7 @@
 import type { DocumentGraph } from './graph';
 import { resolvePublishedTarget } from './graph';
 import type { NodeId, TypedValue } from './types';
+import { format, normalizeUnitText } from './units';
 
 /** Searchable read model for one published scalar workbook value. */
 export interface PublishedValue {
@@ -24,6 +25,25 @@ export interface PublishedValueUse {
 		| 'graph-dependent';
 	id: string;
 	label: string;
+}
+
+/**
+ * Format a published value with its author-owned display unit.
+ *
+ * Quantity values use the unit as a conversion override. Scalar workbook
+ * values keep their magnitude and treat publication units as presentation
+ * metadata. Non-numeric values ignore unit metadata.
+ */
+export function formatPublishedValue(
+	value: TypedValue,
+	unit?: string,
+	options?: { digits?: number }
+): string {
+	if (!unit || (value.kind !== 'scalar' && value.kind !== 'quantity')) {
+		return format(value, options);
+	}
+	if (value.kind === 'quantity') return format(value, { ...options, unit });
+	return `${format(value, options)} ${normalizeUnitText(unit)}`;
 }
 
 /**
@@ -97,7 +117,13 @@ export function publishedValueUses(
 		});
 	}
 	for (const block of graph.blocks.values()) {
-		if (block.equation?.mode !== 'bound' || block.equation.nodeId !== publicationId) continue;
+		if (
+			!block.equation?.segments.some(
+				(segment) => segment.kind === 'reference' && segment.nodeId === publicationId
+			)
+		) {
+			continue;
+		}
 		uses.push({
 			kind: 'equation-reference',
 			id: block.id,

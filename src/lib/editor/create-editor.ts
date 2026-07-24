@@ -19,7 +19,12 @@
 import { Editor, Extension } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import type { Block, DocumentGraph, FunctionRegistry, NodeId } from '../engine';
-import { resolvePublishedTarget, ulid } from '../engine';
+import {
+	beginEquationSessionHistory,
+	cancelEquationSession,
+	resolvePublishedTarget,
+	ulid
+} from '../engine';
 import type { PMJson } from './blocks';
 import { pmDocFromBlocks } from './blocks';
 import type { BlockSync, SyncHost } from './sync';
@@ -123,7 +128,7 @@ export interface DocEditor {
 	selectedBlockId(): string | null;
 	/** Insert a fresh chip binding at a valid report text caret. */
 	insertChip(nodeId: NodeId): boolean;
-	/** Focus the native TeX editor owned by an equation block. */
+	/** Focus the direct visual math editor owned by an equation block. */
 	focusEquationEditor(blockId: string): boolean;
 	/** Enable or disable authored document changes without rebuilding the editor. */
 	setEditable(editable: boolean): void;
@@ -155,6 +160,7 @@ function editorElForBlock(editor: Editor, blockId: string): HTMLElement | null {
 /** Build the document editor. Call from onMount — TipTap needs the DOM. */
 export function createDocEditor(opts: DocEditorOptions): DocEditor {
 	let sync: BlockSync;
+	let documentEditable = opts.editable ?? true;
 
 	const BlockIdAttribute = Extension.create({
 		name: 'octoBlockId',
@@ -194,7 +200,7 @@ export function createDocEditor(opts: DocEditorOptions): DocEditor {
 
 	const editor = new Editor({
 		element: opts.element,
-		editable: opts.editable ?? true,
+		editable: documentEditable,
 		editorProps: {
 			attributes: {
 				'aria-label': 'Report editor'
@@ -208,6 +214,13 @@ export function createDocEditor(opts: DocEditorOptions): DocEditor {
 			EquationBlock.configure({
 				graph: opts.graph,
 				subscribe: opts.onSettle,
+				editable: () => documentEditable,
+					beginSession: () => beginEquationSessionHistory(opts.graph),
+					cancelSession: (blockId, equation, session) => {
+						const result = cancelEquationSession(opts.graph, blockId, equation, session);
+						if (result.ok) opts.onChanged();
+						return result.ok;
+					},
 				onPublishValue: opts.onPublishValue,
 				commit: (blockId, equation) => {
 					const ok = opts.commitMutation({
@@ -227,7 +240,11 @@ export function createDocEditor(opts: DocEditorOptions): DocEditor {
 						? resolvePublishedTarget(opts.graph, binding.nodeId)
 						: undefined;
 					const node = published
-						? { ...published.targetNode, name: published.publishedNode.name }
+						? {
+								...published.targetNode,
+								name: published.publishedNode.name,
+								publication: published.publishedNode.publication
+							}
 						: binding
 							? opts.graph.nodes.get(binding.nodeId)
 							: undefined;
@@ -243,6 +260,7 @@ export function createDocEditor(opts: DocEditorOptions): DocEditor {
 				...(opts.editParameter !== undefined
 					? {
 							editable: (nodeId: NodeId) =>
+								documentEditable &&
 								resolvePublishedTarget(opts.graph, nodeId)?.targetNode.kind === 'input',
 							edit: opts.editParameter
 						}
@@ -520,15 +538,18 @@ export function createDocEditor(opts: DocEditorOptions): DocEditor {
 
 		focusEquationEditor(blockId: string): boolean {
 			const block = editorElForBlock(editor, blockId);
-			const source = block?.querySelector<HTMLTextAreaElement>('.equation-source');
+			const source = block?.querySelector<HTMLElement>('.equation-mathfield');
 			if (!source) return false;
 			source.focus();
-			source.select();
 			return true;
 		},
 
 		setEditable(editable: boolean): void {
+			documentEditable = editable;
 			editor.setEditable(editable);
+			for (const equation of opts.element.querySelectorAll<HTMLElement>('[data-equation-block]')) {
+				equation.dispatchEvent(new Event('octo-editable-change'));
+			}
 		},
 
 		moveSelectedBlock(dir: -1 | 1): boolean {

@@ -8,7 +8,7 @@
  */
 
 import type { Block } from '../engine';
-import { stableStringify } from '../engine';
+import { emptyEquation, normalizeEquationPayload, stableStringify } from '../engine';
 
 /** Minimal PM node JSON — structurally identical to TipTap's JSONContent. */
 export interface PMJson {
@@ -79,23 +79,16 @@ export function specFromPmNode(node: PMJson): BlockSpec {
 		return { type: 'image', image };
 	}
 	if (node.type === EQUATION_NODE_NAME) {
-		const payload = node.attrs?.equation;
-		if (
-			payload &&
-			typeof payload === 'object' &&
-			'mode' in payload &&
-			(payload.mode === 'static' || payload.mode === 'bound')
-		) {
-			return { type: 'equation', equation: payload as NonNullable<Block['equation']> };
-		}
-		return { type: 'equation', equation: { mode: 'static', tex: '' } };
+		const payload = normalizeEquationPayload(node.attrs?.equation);
+		if (payload) return { type: 'equation', equation: payload };
+		return { type: 'equation', equation: emptyEquation() };
 	}
 	return { type: node.type === 'heading' ? 'heading' : 'text', pm: stripBlockId(node) };
 }
 
 /**
  * Render one graph block as a top-level PM node with its blockId stamped, or
- * null for block types this editor does not render (equation/viewer — V2).
+ * null for a block type this editor does not render.
  */
 export function pmNodeFromBlock(block: Block): PMJson | null {
 	if (block.type === 'image') {
@@ -114,7 +107,7 @@ export function pmNodeFromBlock(block: Block): PMJson | null {
 			type: EQUATION_NODE_NAME,
 			attrs: {
 				blockId: block.id,
-				equation: block.equation ?? { mode: 'static', tex: '' }
+				equation: normalizeEquationPayload(block.equation) ?? emptyEquation()
 			}
 		};
 	}

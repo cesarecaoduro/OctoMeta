@@ -22,16 +22,28 @@ describe('formulaToTex', () => {
 });
 
 describe('equationToTex', () => {
-	it('round-trips static source exactly and handles missing bound nodes', () => {
+	it('round-trips authored source exactly and retains missing-reference intent', () => {
 		const graph = new DocumentGraph();
-		expect(equationToTex({ mode: 'static', tex: String.raw`E = mc^2` }, graph)).toBe(
-			String.raw`E = mc^2`
-		);
 		expect(
 			equationToTex(
-				{ mode: 'bound', nodeId: 'missing', display: 'result' },
+				{ version: 1, segments: [{ kind: 'latex', latex: String.raw`E = mc^2` }] },
 				graph
 			)
-		).toBe('\\text{Reference removed}');
+		).toBe(String.raw`E = mc^2`);
+		expect(
+			equationToTex(
+				{
+					version: 1,
+					segments: [
+						{
+							kind: 'reference',
+							nodeId: 'missing',
+							fallback: { name: 'beam.capacity' }
+						}
+					]
+				},
+				graph
+			)
+		).toBe('\\text{Missing: beam.capacity}');
 	});
 });

@@ -100,7 +100,7 @@ describe('reconcile: structure', () => {
 			block: {
 				docId: 'doc1',
 				type: 'equation',
-				equation: { mode: 'static', tex: 'x = 1' }
+				equation: { version: 1, segments: [{ kind: 'latex', latex: 'x = 1' }] }
 			}
 		});
 		const sync = createBlockSync(host);
@@ -108,7 +108,7 @@ describe('reconcile: structure', () => {
 			type: 'equationBlock',
 			attrs: {
 				blockId,
-				equation: { mode: 'static', tex: 'x = 1' }
+				equation: { version: 1, segments: [{ kind: 'latex', latex: 'x = 1' }] }
 			}
 		});
 		sync.reconcile(doc(equation('blk-equation'), para('a', null), para('b', null)));

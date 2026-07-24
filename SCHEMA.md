@@ -131,13 +131,17 @@ type Block =
     }
   | {
       id: BlockId; docId: string; type: 'equation'; position: number;
-      equation:
-        | { mode: 'static'; tex: string }
-        | {
-            mode: 'bound';
-            nodeId: NodeId;
-            display: 'symbolic' | 'substituted' | 'result' | 'steps';
-          };
+      equation: {
+        version: 1;
+        segments: Array<
+          | { kind: 'latex'; latex: string }
+          | {
+              kind: 'reference';
+              nodeId: NodeId;
+              fallback: { name: string; sheetId?: SheetId; cell?: string };
+            }
+        >;
+      };
     };
 
 interface ChipBinding {
@@ -149,9 +153,19 @@ interface ChipBinding {
 ```
 
 Workbook sheets are no longer report blocks. Block `position` controls reading
-order only and never affects calculation. Chips and bound equations store the
-published alias `NodeId`; deleting and undo-restoring the target heals the same
-binding identity.
+order only and never affects calculation. Chips and equation reference
+segments store the published alias `NodeId`; rendered names, values, and cell
+addresses never become identity. A reference also retains its authored name
+and optional source location so confirmed unpublishing leaves a visible,
+repairable broken reference rather than flattening authored intent to text.
+
+Equation payload version 1 accepts up to 10,000 authored LaTeX characters and
+64 stable references. Invalid or incomplete authored notation remains
+serializable and editable; unsafe rendering and over-complex payloads remain
+bounded at the editor, mutation, and cloud validation boundaries.
+Stored legacy static/bound payloads normalize to version 1 during hydration.
+Published unit metadata is presentation owned by the stable alias: references
+show it with the current value while semantic source remains `\value{name}`.
 
 ## 6. Mutation and history
 

@@ -29,7 +29,7 @@ import type {
 	NodeId,
 	TypedValue
 } from '../engine';
-import { buildDerivation, format } from '../engine';
+import { buildDerivation, formatPublishedValue } from '../engine';
 
 /** The name of the TipTap inline node that renders value chips (chip-node.ts). */
 export const CHIP_NODE_NAME = 'valueChip';
@@ -69,7 +69,7 @@ function nodeLabel(node: GraphNode): string {
 
 /**
  * Map a chip's current binding + bound node to its rendered display.
- * Quantities render bare magnitude (units dormant in V1, decision 19 Jul 2026);
+ * Quantities and published scalar units render through the shared formatter;
  * numbers respect `format.digits`; errors render their code and carry the
  * origin for deep-linking; a missing binding or deleted node renders `#REF!`.
  */
@@ -95,7 +95,7 @@ export function chipDisplay(
 			};
 		case 'scalar':
 		case 'quantity': {
-			const text = format(v, binding.format);
+			const text = formatPublishedValue(v, node.publication?.unit, binding.format);
 			return { state: 'value', text, label: `${name}: ${text}` };
 		}
 		case 'string':

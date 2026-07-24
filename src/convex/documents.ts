@@ -10,6 +10,7 @@ import {
 	documentBundleHash,
 	workbookSnapshotHash
 } from '../lib/persistence/canonical';
+import { isEquationPayload } from '../lib/engine';
 
 /** Server-enforced document and history limits. */
 export const UNDO_CAP = 200;
@@ -382,7 +383,9 @@ export const load = query({
 			return { state: 'integrity-error' as const, reason: 'bundle checksum mismatch' };
 		}
 		try {
-			validateBundle(graph, document.workbookManifest, workbook.snapshot);
+			validateBundle(graph, document.workbookManifest, workbook.snapshot, {
+				allowLegacyEquations: true
+			});
 		} catch (error) {
 			return {
 				state: 'integrity-error' as const,
@@ -414,19 +417,14 @@ export function validateBundle(
 			blockId: string;
 			type: string;
 			position: number;
-			equation?:
-				| { mode: 'static'; tex: string }
-				| {
-						mode: 'bound';
-						nodeId: string;
-						display: 'symbolic' | 'substituted' | 'result' | 'steps';
-				  };
+			equation?: unknown;
 		}>;
 		undoLog: Array<{ seq: number }>;
 		chips: Array<{ chipId: string }>;
 	},
 	manifest: { sheets: Array<{ id: string; name: string; position: number }> },
-	snapshot: unknown
+	snapshot: unknown,
+	options: { allowLegacyEquations?: boolean } = {}
 ): void {
 	if (graph.nodes.length > NODE_CAP) throw new Error('NODE_LIMIT');
 	if (graph.blocks.length > BLOCK_CAP) throw new Error('BLOCK_LIMIT');
@@ -464,11 +462,25 @@ export function validateBundle(
 		}
 		if (block.type === 'equation') {
 			if (!block.equation) throw new Error('MISSING_EQUATION_PAYLOAD');
-			if (block.equation.mode === 'static' && block.equation.tex.length > 10_000) {
-				throw new Error('EQUATION_TOO_LARGE');
+			const equation = block.equation as Record<string, unknown>;
+			if (
+				options.allowLegacyEquations &&
+				((equation.mode === 'static' &&
+					Object.keys(equation).length === 2 &&
+					typeof equation.tex === 'string' &&
+					equation.tex.length <= 10_000) ||
+					(equation.mode === 'bound' &&
+						Object.keys(equation).length === 3 &&
+						typeof equation.nodeId === 'string' &&
+						equation.nodeId.length > 0 &&
+						['symbolic', 'substituted', 'result', 'steps'].includes(
+							String(equation.display)
+						)))
+			) {
+				continue;
 			}
-			if (block.equation.mode === 'bound' && block.equation.nodeId.length === 0) {
-				throw new Error('INVALID_EQUATION_BINDING');
+			if (!isEquationPayload(block.equation)) {
+				throw new Error('INVALID_EQUATION_PAYLOAD');
 			}
 		} else if (block.equation !== undefined) {
 			throw new Error('UNEXPECTED_EQUATION_PAYLOAD');

@@ -92,21 +92,33 @@ describe('serializeGraph → hydrateGraph round trip', () => {
 		});
 	});
 
-	it('preserves exact static and bound equation payloads', () => {
+	it('preserves exact authored and referenced equation segments', () => {
 		const graph = new DocumentGraph();
 		graph.insertBlock({
 			id: 'eq-static',
 			docId: 'doc',
 			type: 'equation',
 			position: 0,
-			equation: { mode: 'static', tex: String.raw`E = mc^2` }
+			equation: {
+				version: 1,
+				segments: [{ kind: 'latex', latex: String.raw`E = mc^2` }]
+			}
 		});
 		graph.insertBlock({
 			id: 'eq-bound',
 			docId: 'doc',
 			type: 'equation',
 			position: 1,
-			equation: { mode: 'bound', nodeId: 'published-area', display: 'substituted' }
+			equation: {
+				version: 1,
+				segments: [
+					{
+						kind: 'reference',
+						nodeId: 'published-area',
+						fallback: { name: 'section.area' }
+					}
+				]
+			}
 		});
 		const payload = serializeGraph(graph);
 		const { graph: hydrated } = hydrateGraph(toRows(payload));
@@ -116,6 +128,76 @@ describe('serializeGraph → hydrateGraph round trip', () => {
 		expect(hydrated.blocks.get('eq-bound')?.equation).toEqual(
 			graph.blocks.get('eq-bound')?.equation
 		);
+	});
+
+	it('normalizes legacy equation rows during hydration', () => {
+		const rows = {
+			document: { blocksOrder: ['legacy'], undoCursor: 0 },
+			nodes: [],
+			blocks: [
+				{
+					blockId: 'legacy',
+					docId: 'doc',
+					type: 'equation',
+					position: 0,
+					equation: { mode: 'static', tex: 'x^2=25' }
+				}
+			],
+			undoLog: [],
+			chips: []
+		} as unknown as LoadedRows;
+		const { graph } = hydrateGraph(rows);
+		expect(graph.blocks.get('legacy')?.equation).toEqual({
+			version: 1,
+			segments: [{ kind: 'latex', latex: 'x^2=25' }]
+		});
+	});
+
+	it('normalizes legacy equation payloads retained in undo history', () => {
+		const rows = {
+			document: { blocksOrder: ['legacy'], undoCursor: 1 },
+			nodes: [],
+			blocks: [
+				{
+					blockId: 'legacy',
+					docId: 'doc',
+					type: 'equation',
+					position: 0,
+					equation: { mode: 'static', tex: 'x+1' }
+				}
+			],
+			undoLog: [
+				{
+					seq: 1,
+					mutation: {
+						op: 'blockOp',
+						action: 'update',
+						blockId: 'legacy',
+						block: { equation: { mode: 'static', tex: 'x+1' } }
+					},
+					inverse: [
+						{
+							op: 'blockOp',
+							action: 'update',
+							blockId: 'legacy',
+							block: { equation: { mode: 'static', tex: 'x' } }
+						}
+					],
+					actor: HUMAN,
+					at: 1
+				}
+			],
+			chips: []
+		} as unknown as LoadedRows;
+
+		const { graph } = hydrateGraph(rows);
+
+		expect(graph.undoLog[0].mutation).toMatchObject({
+			block: { equation: { version: 1, segments: [{ kind: 'latex', latex: 'x+1' }] } }
+		});
+		expect(graph.undoLog[0].inverse[0]).toMatchObject({
+			block: { equation: { version: 1, segments: [{ kind: 'latex', latex: 'x' }] } }
+		});
 	});
 
 	it.each(FIXTURE_BUILDERS.map((build) => [build().title, build] as const))(

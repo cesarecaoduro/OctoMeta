@@ -24,8 +24,8 @@ import type {
 } from './types';
 import { ERR_CODES, errorValue, ulid } from './types';
 import type { GraphNode, Provenance, PublicationMetadata } from './node';
-import type { Block, ChipBinding } from './block';
-import { BLOCK_TYPES } from './block';
+import type { Block, ChipBinding, EquationPayload } from './block';
+import { BLOCK_TYPES, isEquationPayload } from './block';
 import type { FormulaAST } from './formula';
 import { isNameRef } from './formula';
 import { wouldCycle } from './topo';
@@ -211,6 +211,72 @@ export function redo(doc: DocumentGraph): Result<AffectedSet, MutationError> {
 	if (!r.ok) return r;
 	doc.undoCursor++;
 	return { ok: true, value: r.value.affected };
+}
+
+/** Engine-owned history state captured before a live equation edit begins. */
+export interface EquationSessionHistory {
+	afterSequence: number;
+	undoLog: UndoEntry[];
+	undoCursor: number;
+}
+
+/** Capture the complete history state a canceled edit must preserve. */
+export function beginEquationSessionHistory(doc: DocumentGraph): EquationSessionHistory {
+	return {
+		afterSequence: doc.undoLog[doc.undoCursor - 1]?.seq ?? 0,
+		undoLog: structuredClone(doc.undoLog),
+		undoCursor: doc.undoCursor
+	};
+}
+
+/**
+ * Restore an equation and discard only its canceled live updates.
+ *
+ * The rollback uses the validated internal mutation path without appending a
+ * history entry. The complete pre-session history is restored unless another
+ * kind of mutation legitimately replaced it during the session.
+ */
+export function cancelEquationSession(
+	doc: DocumentGraph,
+	blockId: string,
+	equation: EquationPayload,
+	session: EquationSessionHistory
+): Result<AffectedSet, MutationError> {
+	const restored = applyInternal(
+		doc,
+		{ op: 'blockOp', action: 'update', blockId, block: { equation } },
+		{ kind: 'human' },
+		Date.now()
+	);
+	if (!restored.ok) return restored;
+
+	const cursorEntries = doc.undoLog.slice(0, doc.undoCursor);
+	const isSessionUpdate = (entry: UndoEntry): boolean => {
+		const mutation = entry.mutation;
+		return (
+			entry.seq > session.afterSequence &&
+			mutation.op === 'blockOp' &&
+			mutation.action === 'update' &&
+			mutation.blockId === blockId &&
+			mutation.block?.equation !== undefined
+		);
+	};
+	const hasReplacementMutation = cursorEntries.some(
+		(entry) => entry.seq > session.afterSequence && !isSessionUpdate(entry)
+	);
+	if (!hasReplacementMutation) {
+		doc.undoLog = structuredClone(session.undoLog);
+		doc.undoCursor = session.undoCursor;
+		return { ok: true, value: restored.value.affected };
+	}
+
+	const retained = cursorEntries.filter((entry) => {
+		if (entry.seq <= session.afterSequence) return true;
+		return !isSessionUpdate(entry);
+	});
+	doc.undoLog = [...retained, ...doc.undoLog.slice(doc.undoCursor)];
+	doc.undoCursor = retained.length;
+	return { ok: true, value: restored.value.affected };
 }
 
 // ---------------------------------------------------------------------------
@@ -547,6 +613,25 @@ function applyRenameName(
 		affected.push(updated.id);
 	}
 
+	for (const block of doc.blocks.values()) {
+		if (!block.equation) continue;
+		const next = structuredClone(block.equation);
+		let changed = false;
+		for (const segment of next.segments) {
+			if (segment.kind !== 'reference' || segment.nodeId !== renamed.id) continue;
+			segment.fallback.name = m.name;
+			changed = true;
+		}
+		if (!changed) continue;
+		inverse.push({
+			op: 'blockOp',
+			action: 'update',
+			blockId: block.id,
+			block: { equation: structuredClone(block.equation) }
+		});
+		block.equation = next;
+	}
+
 	healWaiters(doc, renamed, inverse, affected);
 	return ok({ affected: [...new Set(affected)], inverse });
 }
@@ -728,28 +813,6 @@ function applyChipOp(doc: DocumentGraph, m: Extract<GraphMutation, { op: 'chipOp
 
 /** Block fields `blockOp update` may never touch (order is owned by add/move/remove). */
 const PROTECTED_BLOCK_KEYS: readonly string[] = ['docId', 'type', 'position'];
-const MAX_TEX_LENGTH = 10_000;
-
-/** Validate the exact equation payload accepted by the R1 engine contract. */
-function validEquationPayload(value: unknown): boolean {
-	if (!value || typeof value !== 'object') return false;
-	const payload = value as Record<string, unknown>;
-	if (payload.mode === 'static') {
-		return (
-			Object.keys(payload).length === 2 &&
-			typeof payload.tex === 'string' &&
-			payload.tex.length <= MAX_TEX_LENGTH
-		);
-	}
-	return (
-		payload.mode === 'bound' &&
-		Object.keys(payload).length === 3 &&
-		typeof payload.nodeId === 'string' &&
-		payload.nodeId.length > 0 &&
-		['symbolic', 'substituted', 'result', 'steps'].includes(String(payload.display))
-	);
-}
-
 function applyBlockOp(
 	doc: DocumentGraph,
 	m: Extract<GraphMutation, { op: 'blockOp' }>,
@@ -770,7 +833,7 @@ function applyBlockOp(
 			if (b.id !== undefined && b.id !== m.blockId) {
 				return fail(`blockOp add: block.id "${b.id}" does not match blockId "${m.blockId}"`);
 			}
-			if (b.type === 'equation' && !validEquationPayload(b.equation)) {
+			if (b.type === 'equation' && !isEquationPayload(b.equation)) {
 				return fail('blockOp add: equation payload is required and must be valid');
 			}
 			if (b.type !== 'equation' && b.equation !== undefined) {
@@ -864,7 +927,7 @@ function applyBlockOp(
 				if (block.type !== 'equation') {
 					return fail('blockOp update: equation payload is only valid on equation blocks');
 				}
-				if (!validEquationPayload(equationUpdate[1])) {
+				if (!isEquationPayload(equationUpdate[1])) {
 					return fail('blockOp update: equation payload must be valid');
 				}
 			}

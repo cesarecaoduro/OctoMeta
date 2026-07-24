@@ -583,7 +583,11 @@
 			blockId,
 			block:
 				type === 'equation'
-					? { docId, type: 'equation', equation: { mode: 'static', tex: '' } }
+					? {
+							docId,
+							type: 'equation',
+							equation: { version: 1, segments: [{ kind: 'latex', latex: '' }] }
+						}
 					: { docId, type: 'text' },
 			position: at
 		});
@@ -1519,46 +1523,189 @@
 	main[data-layout-mode='compact'] .editor :global(.equation-controls) {
 		flex-wrap: wrap;
 	}
-	main[data-layout-mode='compact'] .editor :global(.equation-controls select) {
-		max-width: 100%;
+		main[data-layout-mode='compact'] .editor :global(.equation-reference-picker) {
+			position: fixed;
+			z-index: 80;
+			right: var(--s1);
+			bottom: 0;
+			left: var(--s1);
+			width: auto;
+			max-width: none;
+			max-height: min(72dvh, 560px);
+			margin: 0;
+			padding-bottom: max(var(--s2), env(safe-area-inset-bottom));
+			overflow: hidden;
+			border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+		}
+	.editor :global(.equation-block) {
+		position: relative;
+		min-width: 0;
+		margin: var(--s3) 0;
+		padding: var(--s2);
+		border: 1px solid transparent;
+		border-radius: var(--radius-card);
+		background: var(--surface);
+	}
+	.editor :global(.equation-block:focus-within) {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 3px var(--accent-dim);
 	}
 	.editor :global(.equation-controls) {
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--s1);
-		margin-bottom: var(--s2);
+		justify-content: flex-end;
+		margin-bottom: var(--s1);
 	}
-	.editor :global(.equation-controls select),
-	.editor :global(.equation-source) {
+	.editor :global(.equation-controls button),
+	.editor :global(.equation-reference-token),
+	.editor :global(.equation-reference-remove),
+	.editor :global(.equation-reference-picker button) {
 		min-height: 36px;
+		padding: var(--s1);
 		border: 1px solid var(--grey-3);
 		border-radius: var(--radius-chip);
-		background: var(--paper);
-		color: var(--ink);
+		background: var(--surface);
+		color: var(--grey-1);
 		font: 0.78rem var(--font-mono);
+		cursor: pointer;
 	}
-	.editor :global(.equation-controls select) {
-		padding: 0 var(--s1);
-	}
-	.editor :global(.equation-source) {
+	.editor :global(.equation-mathfield) {
 		display: block;
 		width: 100%;
-		resize: vertical;
-		padding: var(--s1);
+		min-width: 0;
+		min-height: 72px;
 		box-sizing: border-box;
+		overflow-x: auto;
+		padding: var(--s2);
+		border: 1px solid var(--grey-3);
+		border-radius: var(--radius-panel);
+		background: var(--paper);
+		color: var(--ink);
+		font-size: clamp(1.15rem, 2vw, 1.45rem);
+		--caret-color: var(--accent);
+		--selection-background-color: var(--accent-dim);
 	}
-	.editor :global(.equation-source:focus),
-	.editor :global(.equation-controls select:focus-visible) {
+	.editor :global(.equation-raw-source) {
+		display: block;
+		width: 100%;
+		min-height: 72px;
+		resize: vertical;
+		box-sizing: border-box;
+		padding: var(--s2);
+		border: 1px solid var(--grey-3);
+		border-radius: var(--radius-panel);
+		background: var(--paper);
+		color: var(--ink);
+		font: 1rem/1.5 var(--font-mono);
+	}
+	.editor :global(.equation-raw-source[hidden]) {
+		display: none;
+	}
+	.editor :global(.equation-mathfield:focus-visible),
+	.editor :global(.equation-raw-source:focus-visible),
+	.editor :global(.equation-block button:focus-visible),
+	.editor :global(.equation-reference-picker input:focus-visible) {
 		outline: 2px solid var(--accent);
 		outline-offset: 1px;
 	}
+	.editor :global(.equation-reference-tokens) {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--s1);
+		margin-top: var(--s1);
+	}
+	.editor :global(.equation-reference-tokens[hidden]) {
+		display: none;
+	}
+	.editor :global(.equation-reference-item) {
+		display: inline-flex;
+	}
+	.editor :global(.equation-reference-token) {
+		min-height: 32px;
+		border-color: color-mix(in srgb, var(--accent) 30%, var(--grey-3));
+		border-radius: var(--radius-chip) 0 0 var(--radius-chip);
+		background: var(--accent-dim);
+		color: var(--ink);
+	}
+	.editor :global(.equation-reference-token[data-broken]) {
+		border-color: color-mix(in srgb, var(--error) 35%, var(--grey-3));
+		background: var(--error-dim);
+		color: var(--error);
+	}
+	.editor :global(.equation-reference-remove) {
+		min-width: 32px;
+		min-height: 32px;
+		padding: var(--s1);
+		border-left: 0;
+		border-radius: 0 var(--radius-chip) var(--radius-chip) 0;
+	}
+	.editor :global(.equation-reference-picker) {
+		display: grid;
+		gap: var(--s1);
+		width: min(540px, 100%);
+		margin-top: var(--s1);
+		padding: var(--s2);
+		box-sizing: border-box;
+		border: 1px solid var(--grey-3);
+		border-radius: var(--radius-panel);
+		background: var(--material);
+		box-shadow: var(--shadow-floating);
+	}
+	.editor :global(.equation-reference-picker[hidden]) {
+		display: none;
+	}
+	.editor :global(.equation-picker-header) {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--s2);
+	}
+	.editor :global(.equation-reference-picker input) {
+		width: 100%;
+		min-height: 44px;
+		box-sizing: border-box;
+		padding: 0 var(--s2);
+		border: 1px solid var(--grey-3);
+		border-radius: var(--radius-chip);
+		background: var(--surface);
+		color: var(--ink);
+	}
+	.editor :global(.equation-picker-options) {
+		display: grid;
+		gap: var(--s1);
+		max-height: min(320px, 42dvh);
+		overflow-y: auto;
+	}
+	.editor :global(.equation-picker-option) {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: var(--s1) var(--s2);
+		width: 100%;
+		min-height: 52px;
+		text-align: left;
+	}
+	.editor :global(.equation-picker-option strong),
+	.editor :global(.equation-picker-option small) {
+		overflow-wrap: anywhere;
+	}
+	.editor :global(.equation-picker-option small) {
+		grid-column: 1 / -1;
+		color: var(--grey-2);
+	}
+	.editor :global(.equation-picker-empty) {
+		margin: var(--s1) 0;
+		color: var(--grey-1);
+	}
 	.editor :global(.equation-preview) {
 		min-height: 72px;
-		display: grid;
-		align-items: center;
 		overflow-x: auto;
+		margin-top: var(--s1);
 		padding: var(--s2);
+		border: 1px dashed var(--grey-3);
+		border-radius: var(--radius-panel);
 	}
+	.editor :global(.equation-preview[hidden]) { display: none; }
 	.editor :global(.equation-help),
 	.editor :global(.equation-error) {
 		margin: 5px 0 0;

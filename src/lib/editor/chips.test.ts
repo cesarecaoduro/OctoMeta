@@ -75,6 +75,15 @@ describe('chipDisplay', () => {
 		expect(chipDisplay(binding, node(q)).text).toBe('2.5 m');
 	});
 
+	it('renders a published scalar with its presentation unit exactly once', () => {
+		expect(
+			chipDisplay(
+				binding,
+				node(scalar(25), { name: 'bridge.span', publication: { unit: 'm' } })
+			)
+		).toMatchObject({ text: '25 m', label: 'bridge.span: 25 m' });
+	});
+
 	it('renders strings and booleans sensibly', () => {
 		expect(chipDisplay(binding, node(stringValue('S355'))).text).toBe('S355');
 		expect(chipDisplay(binding, node(booleanValue(true))).text).toBe('TRUE');

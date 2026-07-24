@@ -169,7 +169,12 @@
 	}
 </script>
 
-<aside class:expanded={displayed} data-mode={mode} aria-label="Attached workbook">
+<aside
+	class:expanded={displayed}
+	class:manager-open={publishedValuesOpen}
+	data-mode={mode}
+	aria-label="Attached workbook"
+>
 	<header>
 		<button
 			class="toggle"
@@ -404,5 +409,8 @@
 	aside[data-mode='compact'] input,
 	aside[data-mode='compact'] button {
 		min-height: 44px;
+	}
+	aside.manager-open {
+		z-index: 110;
 	}
 </style>

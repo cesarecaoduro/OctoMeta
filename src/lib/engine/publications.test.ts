@@ -97,6 +97,22 @@ describe('published values', () => {
 			type: 'text',
 			position: 0
 		});
+		graph.insertBlock({
+			id: 'equation',
+			docId: 'doc',
+			type: 'equation',
+			position: 1,
+			equation: {
+				version: 1,
+				segments: [
+					{
+						kind: 'reference',
+						nodeId: publicationId,
+						fallback: { name: 'beam.span' }
+					}
+				]
+			}
+		});
 		graph.chips.set('span-chip', {
 			id: 'span-chip',
 			blockId: 'narrative',
@@ -124,6 +140,11 @@ describe('published values', () => {
 
 		expect(graph.resolveRef({ name: 'geometry.clearSpan' })).toBe(publicationId);
 		expect(graph.chips.get('span-chip')?.nodeId).toBe(publicationId);
+		expect(graph.blocks.get('equation')?.equation?.segments[0]).toMatchObject({
+			kind: 'reference',
+			nodeId: publicationId,
+			fallback: { name: 'geometry.clearSpan' }
+		});
 		expect(listPublishedValues(graph)[0]).toMatchObject({
 			id: publicationId,
 			name: 'geometry.clearSpan',
@@ -157,7 +178,16 @@ describe('published values', () => {
 			docId: 'doc',
 			type: 'equation',
 			position: 1,
-			equation: { mode: 'bound', nodeId: publicationId, display: 'result' }
+			equation: {
+				version: 1,
+				segments: [
+					{
+						kind: 'reference',
+						nodeId: publicationId,
+						fallback: { name: 'beam.span', sheetId: SHEET, cell: 'B4' }
+					}
+				]
+			}
 		});
 		graph.chips.set('span-chip', {
 			id: 'span-chip',
@@ -214,7 +244,9 @@ describe('published values', () => {
 
 		must(applyMutation(graph, { op: 'removeNode', id: publicationId }, HUMAN));
 		expect(graph.chips.get('span-chip')?.nodeId).toBe(publicationId);
-		expect(graph.blocks.get('equation')?.equation).toMatchObject({ nodeId: publicationId });
+		expect(graph.blocks.get('equation')?.equation?.segments).toContainEqual(
+			expect.objectContaining({ kind: 'reference', nodeId: publicationId })
+		);
 		expect(graph.nodes.get('cell-double-span')?.inputs).toEqual([]);
 	});
 });

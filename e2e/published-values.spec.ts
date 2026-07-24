@@ -102,6 +102,6 @@ test('empty Document and Equation reference pickers link to the Workbook publica
 	await page.getByRole('button', { name: 'Close published values' }).click();
 
 	await page.getByTestId('slot-insert-equation').last().click();
-	await page.getByLabel('Equation source').last().selectOption('bound');
+	await page.getByRole('button', { name: 'Insert value' }).last().click();
 	await expect(page.getByRole('button', { name: 'Publish a workbook value' })).toBeVisible();
 });

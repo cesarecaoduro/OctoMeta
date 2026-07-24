@@ -10,7 +10,9 @@ viewer/agent surfaces are projections of this layer.
 - `workbookOp` add/rename/remove is validated, projection-capturing, and
   undoable in the same history as cells and report blocks.
 - Published aliases keep their `NodeId` on rename; one-hop target resolution
-  powers parameters and bound equations.
+  powers parameters and structured equation references. Visual equations
+  substitute current values and published units while source retains
+  `\value{name}`.
 - Canonical SI quantities retain authored display units, including the R1
   imperial vocabulary.
 - Spec: SCHEMA.md §2–§6, §9, §11. Conventions: ARCHITECTURE.md "Engine conventions".

@@ -567,9 +567,19 @@ export function buildSteelDemoFixture(): FixtureDocument {
 	addBlock('block-steel-area-equation', {
 		type: 'equation',
 		equation: {
-			mode: 'bound',
-			nodeId: areaCalculationId,
-			display: 'substituted'
+			version: 1,
+			segments: [
+				{ kind: 'latex', latex: 'A=' },
+				{
+					kind: 'reference',
+					nodeId: areaCalculationId,
+					fallback: {
+						name: 'section.area.calculated',
+						sheetId: CALCULATION,
+						cell: 'A1'
+					}
+				}
+			]
 		}
 	});
 	addBlock('block-steel-results-title', {

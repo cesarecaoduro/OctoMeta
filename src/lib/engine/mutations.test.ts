@@ -760,7 +760,10 @@ describe('equation block payloads', () => {
 					block: {
 						docId: 'doc',
 						type: 'equation',
-						equation: { mode: 'static', tex: String.raw`E = mc^2` }
+						equation: {
+							version: 1,
+							segments: [{ kind: 'latex', latex: String.raw`E = mc^2` }]
+						}
 					}
 				},
 				HUMAN
@@ -771,7 +774,18 @@ describe('equation block payloads', () => {
 			op: 'blockOp',
 			action: 'update',
 			blockId: 'eq',
-			block: { equation: { mode: 'bound', nodeId: 'published-area', display: 'result' } }
+			block: {
+				equation: {
+					version: 1,
+					segments: [
+						{
+							kind: 'reference',
+							nodeId: 'published-area',
+							fallback: { name: 'section.area' }
+						}
+					]
+				}
+			}
 		});
 	});
 
@@ -799,7 +813,7 @@ describe('equation block payloads', () => {
 					block: {
 						docId: 'doc',
 						type: 'text',
-						equation: { mode: 'static', tex: 'x' }
+						equation: { version: 1, segments: [{ kind: 'latex', latex: 'x' }] }
 					}
 				},
 				HUMAN
@@ -815,7 +829,10 @@ describe('equation block payloads', () => {
 					block: {
 						docId: 'doc',
 						type: 'equation',
-						equation: { mode: 'static', tex: 'x'.repeat(10_001) }
+						equation: {
+							version: 1,
+							segments: [{ kind: 'latex', latex: 'x'.repeat(10_001) }]
+						}
 					}
 				},
 				HUMAN

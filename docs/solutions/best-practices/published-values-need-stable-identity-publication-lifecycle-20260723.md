@@ -6,6 +6,7 @@ component: service_object
 symptoms:
   - Renaming a published semantic name can break Document and Equation references when consumers bind to display names or cell addresses.
   - Unpublishing can silently delete or freeze dependent content when uses are not disclosed before removal.
+  - Published units can disappear or duplicate when each projection formats values independently.
 root_cause: logic_error
 resolution_type: code_fix
 severity: high
@@ -33,6 +34,7 @@ silently deleting consumers or converting their last value to ordinary text.
 - Renaming a publication breaks consumers that bind to its name or cell address.
 - Unpublishing gives the owner no inventory of affected content.
 - Removed consumers disappear or become frozen text rather than explicit broken references.
+- A published scalar shows `25` in prose or equations even though its alias declares `m`.
 
 ## What didn't work
 
@@ -74,6 +76,19 @@ renameSheetDefinedName(api, oldName, newName);
 return true;
 ```
 
+Use one published-value formatter for every visible projection. The visual formula
+substitutes the current value and unit, while equation source keeps a readable semantic
+token and the stable ID stays out of band:
+
+```ts
+formatPublishedValue(target.value, alias.publication?.unit); // "25 m"
+equationSourceModel(reference); // "\\value{bridge.span}"
+```
+
+Quantity values pass the published unit through typed conversion; scalar values treat
+it as presentation metadata. Never concatenate a unit after a formatter that may have
+already emitted one.
+
 ## Why this works
 
 Stable identity follows ADR 0004: renaming changes presentation without rebinding
@@ -87,6 +102,7 @@ explicitly unresolved, preserving the information needed for a later repair acti
 - Keep Workbook defined names as projections of the graph.
 - Add metadata through an undoable graph mutation and serialize it in local and cloud formats.
 - Test rename and unpublish through public publication/reference APIs.
+- Test scalar and quantity units in Document chips, visual equations, and pickers.
 - Require a use inventory and explicit confirmation before unpublishing.
 
 ## Related issues

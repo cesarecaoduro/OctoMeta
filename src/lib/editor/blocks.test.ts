@@ -64,7 +64,16 @@ describe('specFromPmNode', () => {
 	});
 
 	it('classifies equationBlock nodes with the exact discriminated payload', () => {
-		const equation = { mode: 'bound', nodeId: 'published-area', display: 'steps' } as const;
+		const equation = {
+			version: 1,
+			segments: [
+				{
+					kind: 'reference',
+					nodeId: 'published-area',
+					fallback: { name: 'section.area' }
+				}
+			]
+		} as const;
 		const spec = specFromPmNode({
 			type: 'equationBlock',
 			attrs: { blockId: 'eq1', equation }
@@ -91,8 +100,11 @@ describe('pmNodeFromBlock / pmDocFromBlocks', () => {
 		});
 	});
 
-	it('round-trips static equation source exactly', () => {
-		const equation = { mode: 'static', tex: String.raw`A = b_f t_f + d t_w` } as const;
+	it('round-trips structured equation source exactly', () => {
+		const equation = {
+			version: 1,
+			segments: [{ kind: 'latex', latex: String.raw`A = b_f t_f + d t_w` }]
+		} satisfies NonNullable<Block['equation']>;
 		const node = pmNodeFromBlock(block({ id: 'eq1', type: 'equation', equation }));
 		expect(node).toEqual({
 			type: 'equationBlock',
