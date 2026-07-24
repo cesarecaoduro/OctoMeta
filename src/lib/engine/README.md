@@ -14,7 +14,8 @@ viewer/agent surfaces are projections of this layer.
   substitute current values and published units while source retains
   `\value{name}`.
 - Canonical SI quantities retain authored display units, including the R1
-  imperial vocabulary.
+  imperial vocabulary. Published presentation units come from the searchable
+  canonical catalogue and are rejected at the mutation boundary otherwise.
 - Spec: SCHEMA.md §2–§6, §9, §11. Conventions: ARCHITECTURE.md "Engine conventions".
 - Import from `index.ts`, never from module internals.
 - Tests live next to the code as `*.test.ts` (Vitest); `engine.test.ts` enforces

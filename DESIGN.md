@@ -394,7 +394,9 @@ reference opens the shared searchable picker. Invalid or incomplete intermediate
 remains editable and visibly flagged; Escape restores the edit-session starting state
 and Cmd/Ctrl+Enter finishes editing. Compact layouts keep equation content, the math
 keyboard, and reference sheet usable without page-level horizontal overflow.
-Projection updates never steal focus or replace active controls.
+Projection updates never steal focus or replace active controls. The `*` key authors
+ordinary scalar multiplication as `\times` (×); an explicitly authored `\cdot`
+remains available for intentional dot products.
 
 Image Blocks created through file selection, drag-and-drop, or clipboard paste use the
 same locally owned model and appear immediately after validation. Idle images read as
@@ -414,7 +416,9 @@ generous visible focus treatment and touch-friendly handles without inflating ev
 row. Keep the formula line and sheet tabs persistently reachable. Compact mode gives
 the Workbook the available workspace and moves contextual cell actions into the touch
 dock. Grid zoom or density is adjustable, and both appearances theme the complete grid
-rather than only its surrounding chrome.
+rather than only its surrounding chrome. While the Workbook engine starts, cover its
+formula line, tabs, and grid with one opaque structural skeleton; never mix live cells
+with placeholder marks or place loading copy inside a cell.
 
 ### 7.8 Published values and Inspector
 

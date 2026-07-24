@@ -7,12 +7,14 @@
 	import { AppearanceControl } from '$lib/ui';
 	import { authClient } from '$lib/auth-client';
 	import { rememberOwnerAccount, rememberedOwnerAccount } from '$lib/workspace';
+	import AppShellSkeleton from './AppShellSkeleton.svelte';
 
 	let { children } = $props();
 	const auth = useAuth();
 	const authSession = authClient.useSession();
 	let online = $state(true);
 	let offlineOwner = $state<string | null>(null);
+	let clientReady = $state(false);
 	const canOpenOffline = $derived(!online && offlineOwner !== null);
 
 	$effect(() => {
@@ -33,6 +35,7 @@
 	onMount(() => {
 		online = navigator.onLine;
 		offlineOwner = rememberedOwnerAccount();
+		clientReady = true;
 		const update = (): void => {
 			online = navigator.onLine;
 		};
@@ -60,12 +63,10 @@
 	</header>
 {/if}
 
-{#if auth.isAuthenticated || canOpenOffline}
+{#if clientReady && (auth.isAuthenticated || canOpenOffline)}
 	{@render children()}
-{:else if auth.isLoading}
-	<main class="auth-state" aria-busy="true">
-		<p role="status">Authenticating workspace…</p>
-	</main>
+{:else if !clientReady || auth.isLoading}
+	<AppShellSkeleton documentRoute={page.route.id === '/app/[docId]'} />
 {:else}
 	<main class="auth-state">
 		<p role="alert">Your session has expired. <a href="/signin">Sign in again</a>.</p>

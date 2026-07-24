@@ -28,6 +28,7 @@ import type { Block, ChipBinding, EquationPayload } from './block';
 import { BLOCK_TYPES, isEquationPayload } from './block';
 import type { FormulaAST } from './formula';
 import { isNameRef } from './formula';
+import { isCanonicalUnit } from './units';
 import { wouldCycle } from './topo';
 import type { DocumentGraph } from './graph';
 import { collectRefs, refKey, stableStringify } from './graph';
@@ -652,6 +653,9 @@ function validatePublicationMetadata(metadata: PublicationMetadata | undefined):
 		if (value !== value.trim()) return `${field} must not have surrounding whitespace`;
 		if (value.length === 0 || value.length > limit) {
 			return `${field} must contain 1–${limit} characters`;
+		}
+		if (field === 'unit' && !isCanonicalUnit(value)) {
+			return 'unit must be a canonical catalogue unit';
 		}
 	}
 	return null;

@@ -10,7 +10,7 @@ import {
 	documentBundleHash,
 	workbookSnapshotHash
 } from '../lib/persistence/canonical';
-import { isEquationPayload } from '../lib/engine';
+import { isCanonicalUnit, isEquationPayload } from '../lib/engine';
 
 /** Server-enforced document and history limits. */
 export const UNDO_CAP = 200;
@@ -384,7 +384,8 @@ export const load = query({
 		}
 		try {
 			validateBundle(graph, document.workbookManifest, workbook.snapshot, {
-				allowLegacyEquations: true
+				allowLegacyEquations: true,
+				allowLegacyPublicationUnits: true
 			});
 		} catch (error) {
 			return {
@@ -412,7 +413,11 @@ export function validateBundle(
 	graph: {
 		blocksOrder: string[];
 		undoCursor: number;
-		nodes: Array<{ nodeId: string; cellRef?: { sheetId: string; a1: string } }>;
+		nodes: Array<{
+			nodeId: string;
+			cellRef?: { sheetId: string; a1: string };
+			publication?: { unit?: string };
+		}>;
 		blocks: Array<{
 			blockId: string;
 			type: string;
@@ -424,7 +429,7 @@ export function validateBundle(
 	},
 	manifest: { sheets: Array<{ id: string; name: string; position: number }> },
 	snapshot: unknown,
-	options: { allowLegacyEquations?: boolean } = {}
+	options: { allowLegacyEquations?: boolean; allowLegacyPublicationUnits?: boolean } = {}
 ): void {
 	if (graph.nodes.length > NODE_CAP) throw new Error('NODE_LIMIT');
 	if (graph.blocks.length > BLOCK_CAP) throw new Error('BLOCK_LIMIT');
@@ -451,6 +456,13 @@ export function validateBundle(
 	}
 	const sheetIds = new Set(manifest.sheets.map((sheet) => sheet.id));
 	for (const node of graph.nodes) {
+		if (
+			node.publication?.unit !== undefined &&
+			!options.allowLegacyPublicationUnits &&
+			!isCanonicalUnit(node.publication.unit)
+		) {
+			throw new Error('INVALID_PUBLICATION_UNIT');
+		}
 		if (node.cellRef) {
 			if (!sheetIds.has(node.cellRef.sheetId)) throw new Error('UNKNOWN_CELL_SHEET');
 			if (!/^[A-Z]{1,3}[1-9]\d*$/.test(node.cellRef.a1)) throw new Error('INVALID_A1');

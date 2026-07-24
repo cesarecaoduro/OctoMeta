@@ -802,6 +802,10 @@ export const EquationBlock = Node.create<EquationBlockOptions>({
 				mathfield.smartSuperscript = true;
 				mathfield.mathVirtualKeyboardPolicy = 'auto';
 				mathfield.placeholder = '\\text{Type an equation}';
+				mathfield.inlineShortcuts = {
+					...mathfield.inlineShortcuts,
+					'*': '\\times'
+				};
 				baseMacros = { ...mathfield.macros };
 				resetEditingProjection(false);
 				const sink = mathfield.shadowRoot?.querySelector<HTMLElement>('.ML__keyboard-sink');

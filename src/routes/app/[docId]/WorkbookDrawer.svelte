@@ -193,6 +193,25 @@
 	</header>
 
 	<section id="workbook-panel" aria-hidden={!displayed}>
+		{#if loading}
+			<div
+				class="workbook-skeleton"
+				data-testid="workbook-skeleton"
+				role="status"
+				aria-label="Loading workbook"
+			>
+				<div class="skeleton-formula">
+					<span class="skeleton-label"></span>
+					<span class="skeleton-input"></span>
+					<span class="skeleton-action"></span>
+				</div>
+				<div class="skeleton-tabs">
+					<span class="skeleton-tab"></span>
+					<span class="skeleton-add"></span>
+				</div>
+				<div class="skeleton-sheet" aria-hidden="true"></div>
+			</div>
+		{/if}
 		<div class="formula-line">
 			<span class="cell mono">{selected ? `${session.doc.sheet(selected.sheetId)?.name} · ${selected.a1}` : 'Select a cell'}</span>
 			<input
@@ -265,15 +284,16 @@
 		</div>
 
 		{#if error}<p class="error" role="alert">{error}</p>{/if}
-		{#if loading}<p class="loading mono" aria-live="polite">Starting workbook…</p>{/if}
-		<div
-			class="grid"
-			class:readonly
-			bind:this={gridEl}
-			data-testid="workbook-grid"
-			aria-disabled={readonly}
-			inert={readonly}
-		></div>
+		<div class="grid-stage">
+			<div
+				class="grid"
+				class:readonly
+				bind:this={gridEl}
+				data-testid="workbook-grid"
+				aria-disabled={readonly}
+				inert={readonly}
+			></div>
+		</div>
 	</section>
 	<PublishedValuesManager
 		{session}
@@ -327,6 +347,7 @@
 		color: var(--grey-1);
 	}
 	section {
+		position: relative;
 		height: 0;
 		overflow: hidden;
 		visibility: hidden;
@@ -370,14 +391,83 @@
 	}
 	.rename input { width: 150px; }
 	.danger { color: var(--error); }
-	.grid {
+	.grid-stage {
+		position: relative;
 		height: calc(var(--workbook-panel-height, clamp(280px, 42dvh, 440px)) - 110px);
 		min-height: 170px;
+		overflow: hidden;
+		background: var(--surface);
+	}
+	.grid {
+		height: 100%;
 		background: var(--surface);
 	}
 	.grid.readonly { pointer-events: none; }
-	.loading, .error { position: absolute; z-index: 1; margin: var(--s2); }
-	.error { color: var(--error); }
+	.workbook-skeleton {
+		position: absolute;
+		z-index: 10;
+		inset: 0;
+		overflow: hidden;
+		background-color: var(--surface);
+	}
+	.skeleton-formula,
+	.skeleton-tabs {
+		box-sizing: border-box;
+		display: flex;
+		align-items: center;
+		gap: var(--s1);
+		height: 60px;
+		padding: var(--s1) var(--s2);
+		border-top: 1px solid var(--grey-3);
+		background-color: var(--grey-4);
+	}
+	.skeleton-tabs {
+		height: 50px;
+		background-color: var(--surface);
+	}
+	.skeleton-label,
+	.skeleton-input,
+	.skeleton-action,
+	.skeleton-tab,
+	.skeleton-add {
+		display: block;
+		border-radius: var(--radius-chip);
+		background-color: var(--grey-3);
+	}
+	.skeleton-label { width: 134px; height: 12px; }
+	.skeleton-input { flex: 1; height: 44px; background-color: var(--surface); }
+	.skeleton-action { width: 118px; height: 44px; background-color: var(--surface); }
+	.skeleton-tab { width: 140px; height: 42px; }
+	.skeleton-add { width: 44px; height: 42px; }
+	.skeleton-sheet {
+		height: calc(100% - 110px);
+		background-color: var(--surface);
+		background-image:
+			linear-gradient(var(--grey-3) 1px, transparent 1px),
+			linear-gradient(90deg, var(--grey-3) 1px, transparent 1px);
+		background-position: 0 37px, 44px 0;
+		background-size: 100% 44px, 144px 100%;
+	}
+	.workbook-skeleton::after {
+		position: absolute;
+		inset: 0;
+		content: '';
+		transform: translateX(-100%);
+		background-image: linear-gradient(
+			90deg,
+			transparent,
+			color-mix(in srgb, var(--surface) 72%, transparent),
+			transparent
+		);
+		animation: workbook-shimmer 1.4s ease-in-out infinite;
+	}
+	.error { position: absolute; z-index: 2; margin: var(--s2); color: var(--error); }
+	@keyframes workbook-shimmer {
+		to { transform: translateX(100%); }
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.workbook-skeleton::after { animation: none; }
+	}
 	aside[data-mode='compact'].expanded {
 		z-index: 80;
 		top: 0;
@@ -402,7 +492,7 @@
 		flex: 1;
 		width: auto;
 	}
-	aside[data-mode='compact'] .grid {
+	aside[data-mode='compact'] .grid-stage {
 		height: calc(100dvh - 196px);
 	}
 	aside[data-mode='compact'] .toggle,

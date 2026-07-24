@@ -76,6 +76,47 @@ describe('published values', () => {
 		expect(listPublishedValues(graph, 'unrelated')).toEqual([]);
 	});
 
+	it('accepts only canonical catalogue units at the publication boundary', () => {
+		const graph = setup();
+		expect(
+			applyMutation(
+				graph,
+				{
+					op: 'publishName',
+					cellRef: { sheetId: SHEET, a1: 'B4' },
+					name: 'beam.load',
+					publication: { unit: 'kn' }
+				},
+				HUMAN
+			)
+		).toMatchObject({
+			ok: false,
+			error: { message: expect.stringContaining('canonical catalogue unit') }
+		});
+
+		must(
+			applyMutation(
+				graph,
+				{
+					op: 'publishName',
+					cellRef: { sheetId: SHEET, a1: 'B4' },
+					name: 'beam.load',
+					publication: { unit: 'kN' }
+				},
+				HUMAN
+			)
+		);
+		const publicationId = graph.resolveRef({ name: 'beam.load' })!;
+		expect(
+			applyMutation(
+				graph,
+				{ op: 'updatePublication', nodeId: publicationId, publication: { unit: 'kn' } },
+				HUMAN
+			)
+		).toMatchObject({ ok: false });
+		expect(graph.nodes.get(publicationId)?.publication?.unit).toBe('kN');
+	});
+
 	it('renames metadata without changing identity or existing references', () => {
 		const graph = setup();
 		must(

@@ -166,6 +166,10 @@ bounded at the editor, mutation, and cloud validation boundaries.
 Stored legacy static/bound payloads normalize to version 1 during hydration.
 Published unit metadata is presentation owned by the stable alias: references
 show it with the current value while semantic source remains `\value{name}`.
+New publication writes accept only exact symbols from the shared searchable
+unit catalogue; case-insensitive text is search input, not stored metadata.
+Legacy metadata remains readable so owners can replace it with a canonical
+selection.
 
 ## 6. Mutation and history
 

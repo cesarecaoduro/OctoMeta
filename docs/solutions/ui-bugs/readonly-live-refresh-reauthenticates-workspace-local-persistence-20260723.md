@@ -100,3 +100,5 @@ graph-bound editor and workbook adapters against the new snapshot.
 
 - See also:
   [Svelte proxy breaks takeover flush local persistence](../runtime-errors/svelte-proxy-breaks-takeover-flush-local-persistence-20260723.md)
+- See also:
+  [Partial Workbook and full-page authentication loading states](partial-workbook-and-auth-loading-states-workbench-20260724.md)

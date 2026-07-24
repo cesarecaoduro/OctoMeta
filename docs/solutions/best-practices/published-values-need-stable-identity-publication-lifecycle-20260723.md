@@ -87,7 +87,10 @@ equationSourceModel(reference); // "\\value{bridge.span}"
 
 Quantity values pass the published unit through typed conversion; scalar values treat
 it as presentation metadata. Never concatenate a unit after a formatter that may have
-already emitted one.
+already emitted one. Do not accept publication units as arbitrary strings: search a
+shared catalogue forgivingly, store its exact canonical symbol, and validate the same
+catalogue at the graph mutation boundary. This keeps `kn` useful as a query while only
+persisting the correct `kN` nomenclature.
 
 ## Why this works
 
@@ -103,6 +106,7 @@ explicitly unresolved, preserving the information needed for a later repair acti
 - Add metadata through an undoable graph mutation and serialize it in local and cloud formats.
 - Test rename and unpublish through public publication/reference APIs.
 - Test scalar and quantity units in Document chips, visual equations, and pickers.
+- Require canonical unit selection at both the manager and mutation boundaries.
 - Require a use inventory and explicit confirmation before unpublishing.
 
 ## Related issues

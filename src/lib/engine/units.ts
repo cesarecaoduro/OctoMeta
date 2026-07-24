@@ -138,6 +138,122 @@ const UNITS: Record<string, UnitDef> = {
 	deg: { dim: DIMENSIONLESS, factor: Math.PI / 180 }
 };
 
+/** One canonical unit available for publication presentation metadata. */
+export interface UnitCatalogEntry {
+	readonly symbol: string;
+	readonly name: string;
+	readonly category: string;
+	readonly keywords?: readonly string[];
+}
+
+/** Canonical publication units, ordered for human browsing. */
+export const UNIT_CATALOG: readonly UnitCatalogEntry[] = [
+	{ symbol: 'mm', name: 'Millimetre', category: 'Length', keywords: ['distance'] },
+	{ symbol: 'cm', name: 'Centimetre', category: 'Length', keywords: ['distance'] },
+	{ symbol: 'm', name: 'Metre', category: 'Length', keywords: ['distance'] },
+	{ symbol: 'km', name: 'Kilometre', category: 'Length', keywords: ['distance'] },
+	{ symbol: 'in', name: 'Inch', category: 'Length', keywords: ['imperial', 'distance'] },
+	{ symbol: 'ft', name: 'Foot', category: 'Length', keywords: ['imperial', 'distance'] },
+	{ symbol: 'mm²', name: 'Square millimetre', category: 'Area', keywords: ['section'] },
+	{ symbol: 'cm²', name: 'Square centimetre', category: 'Area', keywords: ['section'] },
+	{ symbol: 'm²', name: 'Square metre', category: 'Area', keywords: ['section'] },
+	{ symbol: 'in²', name: 'Square inch', category: 'Area', keywords: ['imperial', 'section'] },
+	{ symbol: 'ft²', name: 'Square foot', category: 'Area', keywords: ['imperial', 'section'] },
+	{ symbol: 'mm³', name: 'Cubic millimetre', category: 'Volume' },
+	{ symbol: 'cm³', name: 'Cubic centimetre', category: 'Volume' },
+	{ symbol: 'm³', name: 'Cubic metre', category: 'Volume' },
+	{ symbol: 'in³', name: 'Cubic inch', category: 'Volume', keywords: ['imperial'] },
+	{ symbol: 'ft³', name: 'Cubic foot', category: 'Volume', keywords: ['imperial'] },
+	{ symbol: 'g', name: 'Gram', category: 'Mass' },
+	{ symbol: 'kg', name: 'Kilogram', category: 'Mass' },
+	{ symbol: 't', name: 'Tonne', category: 'Mass' },
+	{ symbol: 'ms', name: 'Millisecond', category: 'Time' },
+	{ symbol: 's', name: 'Second', category: 'Time' },
+	{ symbol: 'min', name: 'Minute', category: 'Time' },
+	{ symbol: 'h', name: 'Hour', category: 'Time' },
+	{ symbol: 'K', name: 'Kelvin', category: 'Temperature' },
+	{ symbol: '°C', name: 'Degree Celsius', category: 'Temperature', keywords: ['degC'] },
+	{ symbol: 'N', name: 'Newton', category: 'Force', keywords: ['load'] },
+	{ symbol: 'kN', name: 'Kilonewton', category: 'Force', keywords: ['load'] },
+	{ symbol: 'MN', name: 'Meganewton', category: 'Force', keywords: ['load'] },
+	{ symbol: 'lbf', name: 'Pound-force', category: 'Force', keywords: ['imperial', 'load'] },
+	{ symbol: 'kip', name: 'Kip', category: 'Force', keywords: ['imperial', 'load'] },
+	{ symbol: 'Pa', name: 'Pascal', category: 'Pressure', keywords: ['stress'] },
+	{ symbol: 'kPa', name: 'Kilopascal', category: 'Pressure', keywords: ['stress'] },
+	{ symbol: 'MPa', name: 'Megapascal', category: 'Pressure', keywords: ['stress'] },
+	{ symbol: 'GPa', name: 'Gigapascal', category: 'Pressure', keywords: ['stress'] },
+	{
+		symbol: 'psi',
+		name: 'Pounds per square inch',
+		category: 'Pressure',
+		keywords: ['stress', 'imperial']
+	},
+	{
+		symbol: 'ksi',
+		name: 'Kips per square inch',
+		category: 'Pressure',
+		keywords: ['stress', 'imperial']
+	},
+	{ symbol: 'N·m', name: 'Newton metre', category: 'Moment', keywords: ['torque'] },
+	{ symbol: 'kN·m', name: 'Kilonewton metre', category: 'Moment', keywords: ['torque'] },
+	{
+		symbol: 'N/m',
+		name: 'Newton per metre',
+		category: 'Distributed load',
+		keywords: ['line load']
+	},
+	{
+		symbol: 'kN/m',
+		name: 'Kilonewton per metre',
+		category: 'Distributed load',
+		keywords: ['line load']
+	},
+	{
+		symbol: 'N/m²',
+		name: 'Newton per square metre',
+		category: 'Distributed load',
+		keywords: ['area load']
+	},
+	{
+		symbol: 'kN/m²',
+		name: 'Kilonewton per square metre',
+		category: 'Distributed load',
+		keywords: ['area load']
+	},
+	{ symbol: 'kg/m³', name: 'Kilogram per cubic metre', category: 'Density' },
+	{ symbol: 'm/s', name: 'Metre per second', category: 'Velocity', keywords: ['speed'] },
+	{ symbol: 'm/s²', name: 'Metre per second squared', category: 'Acceleration' },
+	{ symbol: 'J', name: 'Joule', category: 'Energy' },
+	{ symbol: 'kJ', name: 'Kilojoule', category: 'Energy' },
+	{ symbol: 'W', name: 'Watt', category: 'Power' },
+	{ symbol: 'kW', name: 'Kilowatt', category: 'Power' },
+	{ symbol: 'Hz', name: 'Hertz', category: 'Frequency' },
+	{ symbol: 'rad', name: 'Radian', category: 'Angle' },
+	{ symbol: 'deg', name: 'Degree', category: 'Angle', keywords: ['°'] },
+	{ symbol: 'A', name: 'Ampere', category: 'Electric current' },
+	{ symbol: 'mol', name: 'Mole', category: 'Amount of substance' },
+	{ symbol: 'cd', name: 'Candela', category: 'Luminous intensity' }
+];
+
+const CANONICAL_UNIT_SYMBOLS = new Set(UNIT_CATALOG.map((unit) => unit.symbol));
+
+/** True only for exact canonical publication symbols from the unit catalogue. */
+export function isCanonicalUnit(symbol: string): boolean {
+	return CANONICAL_UNIT_SYMBOLS.has(symbol);
+}
+
+/** Search canonical unit symbols and descriptions without relaxing their stored case. */
+export function searchUnitCatalog(query = ''): UnitCatalogEntry[] {
+	const term = query.trim().toLocaleLowerCase();
+	if (!term) return [...UNIT_CATALOG];
+	return UNIT_CATALOG.filter((unit) =>
+		[unit.symbol, unit.name, unit.category, ...(unit.keywords ?? [])]
+			.join(' ')
+			.toLocaleLowerCase()
+			.includes(term)
+	);
+}
+
 /** True when `symbol` is a known unit symbol (exact case). */
 export function isUnitSymbol(symbol: string): boolean {
 	return Object.prototype.hasOwnProperty.call(UNITS, symbol);

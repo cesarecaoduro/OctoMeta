@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 
 declare global {
 	interface Window {
@@ -10,6 +10,14 @@ declare global {
 			activateCell(sheetId: string, a1: string): boolean;
 		};
 	}
+}
+
+async function chooseUnit(manager: Locator, symbol: string): Promise<void> {
+	const picker = manager.getByRole('combobox', { name: /Unit/ });
+	await picker.fill(symbol);
+	await picker.press('ArrowDown');
+	await picker.press('Enter');
+	await expect(picker).toHaveValue(symbol);
 }
 
 test('owner publishes a selected scalar cell with semantic metadata', async ({ page }) => {
@@ -30,8 +38,16 @@ test('owner publishes a selected scalar cell with semantic metadata', async ({ p
 	await expect(manager).toContainText('Sheet 1 · A1');
 	await manager.getByLabel('Semantic name').fill('design.load');
 	await manager.getByLabel(/Label/).fill('Design load');
-	await manager.getByLabel(/Unit/).fill('kN');
+	const unitPicker = manager.getByRole('combobox', { name: /Unit/ });
+	await unitPicker.fill('kn');
 	await manager.getByLabel(/Description/).fill('Serviceability load');
+	await manager.getByRole('button', { name: 'Publish selected cell' }).click();
+	await expect(manager.getByRole('alert')).toContainText('Choose a unit from the catalogue');
+	await expect(manager.getByRole('row', { name: /design\.load/ })).toHaveCount(0);
+
+	await unitPicker.press('ArrowDown');
+	await unitPicker.press('Enter');
+	await expect(unitPicker).toHaveValue('kN');
 	await manager.getByRole('button', { name: 'Publish selected cell' }).click();
 
 	const row = manager.getByRole('row', { name: /design\.load/ });
@@ -63,7 +79,7 @@ test('owner searches, navigates, renames, and safely unpublishes a workbook valu
 
 	await manager.getByLabel('Semantic name').fill('steel.depth');
 	await manager.getByLabel(/Label/).fill('Section depth');
-	await manager.getByLabel(/Unit/).fill('in');
+	await chooseUnit(manager, 'in');
 	await manager.getByLabel(/Description/).fill('Overall section depth');
 	await manager.getByRole('button', { name: 'Save changes' }).click();
 	await expect(manager.getByRole('row', { name: /steel\.depth/ })).toContainText(

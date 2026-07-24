@@ -20,10 +20,11 @@ authored notation with multiple searchable Published-value references. The
 visual formula substitutes each current value, while source mode keeps the
 readable semantic parameter as `\value{name}` and stable identity remains
 internal. Published display units accompany substituted formula values and
-inline document values without changing source identity. Changes commit locally without Apply, names can change without
-breaking identity, and unpublished values remain visible until explicitly
-repaired. Trust-disabled rendering and bounded payload limits protect read
-surfaces.
+inline document values without changing source identity. A searchable unit
+catalogue accepts forgiving queries but stores exact canonical symbols such as
+`kN`. Changes commit locally without Apply, names can change without breaking
+identity, and unpublished values remain visible until explicitly repaired.
+Trust-disabled rendering and bounded payload limits protect read surfaces.
 
 ## Local-first document index
 

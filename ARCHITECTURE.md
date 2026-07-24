@@ -146,7 +146,8 @@ Third-party boundaries are enforced by tests:
 - Published-value label, unit, and description live on the stable alias and
   persist with the graph. Document chips and Equation bindings store the alias
   ID; Workbook defined names are a best-effort projection of authoritative
-  graph mutations.
+  graph mutations. Unit metadata is selected from the engine-owned canonical
+  catalogue, so the manager and mutation boundary enforce the same symbols.
 - Unpublish review derives uses from graph dependents, chip bindings, and
   Equation payloads. Confirmed removal retains those consumer identities so
   they render as explicit, repairable broken references.
@@ -191,11 +192,19 @@ TipTap events at its boundary and does not replace active controls during graph
 settlement. Every input commits locally; Escape restores the edit-session
 snapshot, while Cmd/Ctrl+Enter only finishes the session. The visual projection
 substitutes the current value and published display unit; human-authored source
-uses `\value{name}`. Legacy static/bound rows normalize to version 1 during
+uses `\value{name}`. MathLive's `*` inline shortcut is overridden at the input
+boundary to author `\times`; an explicit `\cdot` is preserved. Legacy
+static/bound rows normalize to version 1 during
 hydration, and a read-only document lease makes every equation control
 read-only. KaTeX remains the
 trust-disabled, complexity-limited last-known-good read projection for invalid
 or untrusted input.
+
+The app layout holds a route-shaped skeleton through client hydration and
+session resolution, so authentication rechecks do not replace the screen with
+status copy. The Workbook adapter remains mounted at its final dimensions while
+one opaque skeleton covers its complete formula/tab/grid body; this lets Univer
+measure correctly without exposing partially rendered cells.
 
 ## Persistence and security
 
@@ -261,5 +270,5 @@ Vercel deployment.
 ## Deferred
 
 Viewer/geometry, charts, PDF/IFC export, templates, sharing/teams/ACLs,
-collaboration, full account settings, unit picker UI, `Sheet!A1`, structural
+collaboration, full account settings, `Sheet!A1`, structural
 spreadsheet commands, and offline reload caching remain outside R1.6.

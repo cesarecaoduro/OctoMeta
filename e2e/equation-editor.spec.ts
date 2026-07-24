@@ -24,7 +24,12 @@ async function createDocumentWithPublishedValue(
 	await page.getByRole('button', { name: 'Published values' }).click();
 	const manager = page.getByRole('dialog', { name: 'Published values' });
 	await manager.getByLabel('Semantic name').fill(name);
-	if (unit) await manager.getByLabel(/Unit/).fill(unit);
+	if (unit) {
+		const unitPicker = manager.getByRole('combobox', { name: /Unit/ });
+		await unitPicker.fill(unit);
+		await unitPicker.press('ArrowDown');
+		await unitPicker.press('Enter');
+	}
 	await manager.getByRole('button', { name: 'Publish selected cell' }).click();
 	await manager.getByRole('button', { name: 'Close published values' }).click();
 }
@@ -96,6 +101,28 @@ test('Escape restores the edit-session start while invalid intermediate math sta
 	await expect(mathfield).not.toBeFocused();
 	await equation.getByRole('button', { name: 'Edit source' }).click();
 	await expect(equation.getByRole('textbox', { name: 'Equation source' })).toHaveValue('');
+});
+
+test('asterisk authors scalar multiplication without changing explicit dot products', async ({
+	page
+}) => {
+	await page.goto('/app');
+	await page.getByTestId('new-doc').click();
+	await expect(page.getByTestId('editor')).toHaveAttribute('data-ready', 'true');
+	await page.getByTestId('slot-insert-equation').last().click();
+
+	const equation = page.locator('[data-equation-block]').last();
+	const mathfield = equation.getByRole('textbox', { name: 'Equation', exact: true });
+	await mathfield.click();
+	await page.keyboard.type('2*3');
+	await equation.getByRole('button', { name: 'Edit source' }).click();
+	const source = equation.getByRole('textbox', { name: 'Equation source' });
+	await expect(source).toHaveValue(/^2\\times\s*3$/);
+
+	await source.fill('2\\cdot 3');
+	await equation.getByRole('button', { name: 'Use visual editor' }).click();
+	await equation.getByRole('button', { name: 'Edit source' }).click();
+	await expect(source).toHaveValue(/^2\\cdot\s*3$/);
 });
 
 test('renaming, unpublishing, and repairing a reference preserve the authored equation', async ({

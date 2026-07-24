@@ -606,9 +606,12 @@ export function createDocEditor(opts: DocEditorOptions): DocEditor {
 			for (let index = 0; index < doc.childCount; index++) {
 				const child = doc.child(index);
 				if (child.attrs.blockId === blockId) {
-					if (child.isAtom) editor.commands.setNodeSelection(pos);
-					else editor.commands.setTextSelection(pos + 1);
-					editor.commands.focus(undefined, { scrollIntoView: true });
+					if (child.isAtom) {
+						editor.commands.setNodeSelection(pos);
+						editor.commands.focus(undefined, { scrollIntoView: true });
+					} else {
+						editor.commands.focus(pos + 1, { scrollIntoView: true });
+					}
 					return true;
 				}
 				pos += child.nodeSize;

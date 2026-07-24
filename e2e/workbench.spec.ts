@@ -169,6 +169,7 @@ test('a second tab is read-only until cooperative takeover flushes the active ge
 	await expect(readonlyEquation.getByRole('button', { name: 'Insert value' })).toBeDisabled();
 
 	await page.getByTestId('slot-insert-text').last().click();
+	await expect(page.locator('.tiptap')).toBeFocused();
 	await page.keyboard.type('Flushed before takeover');
 	await secondTab.getByRole('button', { name: 'Take over editing' }).click();
 

@@ -2,6 +2,7 @@
 	import { ArrowUpRight, Search, X } from '@lucide/svelte';
 	import {
 		format,
+		isCanonicalUnit,
 		listPublishedValues,
 		publishedValueUses,
 		type PublicationMetadata
@@ -12,6 +13,7 @@
 		WorkbookSelection
 	} from '$lib/adapters/univer';
 	import { Icon, IconButton, type AdaptiveMode } from '$lib/ui';
+	import UnitPicker from './UnitPicker.svelte';
 
 	let {
 		session,
@@ -41,9 +43,11 @@
 	let name = $state('');
 	let label = $state('');
 	let unit = $state('');
+	let unitQuery = $state('');
 	let description = $state('');
 	let error = $state('');
 	let confirmingRemoval = $state(false);
+	let formValueId = $state<string | null>(null);
 	let dialogEl = $state<HTMLDivElement>();
 	let returnFocus = $state<HTMLElement | null>(null);
 	let wasOpen = false;
@@ -63,10 +67,16 @@
 
 	$effect(() => session.onSettle(() => (revision += 1)));
 	$effect(() => {
-		if (!selectedValue) return;
+		if (!selectedValue) {
+			formValueId = null;
+			return;
+		}
+		if (formValueId === selectedValue.id) return;
+		formValueId = selectedValue.id;
 		name = selectedValue.name;
 		label = selectedValue.label ?? '';
 		unit = selectedValue.unit ?? '';
+		unitQuery = unit;
 		description = selectedValue.description ?? '';
 		confirmingRemoval = false;
 		error = '';
@@ -96,6 +106,14 @@
 		return next;
 	}
 
+	function hasValidUnitSelection(): boolean {
+		if ((unit && !isCanonicalUnit(unit)) || (unitQuery.trim() && unitQuery !== unit)) {
+			error = 'Choose a unit from the catalogue or clear the unit field.';
+			return false;
+		}
+		return true;
+	}
+
 	function publishSelection(): void {
 		if (!adapter || !selection || readonly) return;
 		const semanticName = name.trim();
@@ -103,6 +121,7 @@
 			error = 'Enter a unique semantic name.';
 			return;
 		}
+		if (!hasValidUnitSelection()) return;
 		if (!adapter.publishValue(selection.sheetId, selection.a1, semanticName, metadata())) {
 			error = 'That name could not be published. Use a unique dotted name such as beam.span.';
 			return;
@@ -111,6 +130,7 @@
 		name = '';
 		label = '';
 		unit = '';
+		unitQuery = '';
 		description = '';
 		onchanged();
 	}
@@ -122,6 +142,7 @@
 			error = 'Enter a unique semantic name.';
 			return;
 		}
+		if (!hasValidUnitSelection()) return;
 		if (
 			semanticName !== selectedValue.name &&
 			!adapter.renameName(selectedValue.name, semanticName)
@@ -277,10 +298,15 @@
 							<span>Label <small>optional</small></span>
 							<input placeholder="Beam span" disabled={readonly} bind:value={label} />
 						</label>
-						<label>
-							<span>Unit <small>optional</small></span>
-							<input class="mono" placeholder="m" disabled={readonly} bind:value={unit} />
-						</label>
+						<UnitPicker
+							value={unit}
+							disabled={readonly}
+							onchange={(value) => {
+								unit = value;
+								error = '';
+							}}
+							onquerychange={(value) => (unitQuery = value)}
+						/>
 						<label>
 							<span>Description <small>optional</small></span>
 							<textarea rows="3" disabled={readonly} bind:value={description}></textarea>

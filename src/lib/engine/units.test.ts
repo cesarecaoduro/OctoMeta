@@ -19,6 +19,7 @@ import {
 	dimMul,
 	dimPow,
 	format,
+	isCanonicalUnit,
 	isDimensionless,
 	isUnitSymbol,
 	parseQuantity,
@@ -31,6 +32,7 @@ import {
 	qNeg,
 	qPow,
 	qSub,
+	searchUnitCatalog,
 	siUnitString
 } from './units';
 
@@ -144,6 +146,27 @@ describe('parseUnit (V1-1-2)', () => {
 		expect(parseUnit('xyz')).toBeNull();
 		expect(parseUnit('kN·')).toBeNull();
 		expect(parseUnit('5m')).toBeNull();
+	});
+});
+
+describe('publication unit catalogue', () => {
+	it('finds the canonical symbol with forgiving case-insensitive search', () => {
+		expect(searchUnitCatalog('kn')[0]).toEqual({
+			symbol: 'kN',
+			name: 'Kilonewton',
+			category: 'Force',
+			keywords: ['load']
+		});
+	});
+
+	it('accepts catalogue symbols exactly and covers common engineering dimensions', () => {
+		expect(isCanonicalUnit('kN')).toBe(true);
+		expect(isCanonicalUnit('kn')).toBe(false);
+		expect(isCanonicalUnit('degC')).toBe(false);
+		expect(isCanonicalUnit('°C')).toBe(true);
+		expect(searchUnitCatalog('area').map((unit) => unit.symbol)).toContain('m²');
+		expect(searchUnitCatalog('line load').map((unit) => unit.symbol)).toContain('kN/m');
+		expect(searchUnitCatalog('stress').map((unit) => unit.symbol)).toContain('MPa');
 	});
 });
 
